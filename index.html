@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevWorkspace - Dashboard</title>
+    <style>
+        :root {
+            /* Palette: Cyberpunk / CLI Dark Mode */
+            --bg-color: #05080f;
+            --card-bg: #0d131f;
+            --card-border: #1e293b;
+            --accent-cyan: #38bdf8;
+            --accent-cyan-glow: rgba(56, 189, 248, 0.15);
+            --accent-violet: #a855f7;
+            --accent-violet-glow: rgba(168, 85, 247, 0.2);
+            --accent-red: #ef4444;    
+            --accent-yellow: #eab308; 
+            --accent-blue: #3b82f6;   
+            --accent-green: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --font-sans: 'Segoe UI', system-ui, sans-serif;
+            --font-mono: 'Fira Code', 'Courier New', monospace;
+            --radius: 8px;
+            --transition: all 0.25s ease-in-out;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            background-color: var(--bg-color); color: var(--text-main); 
+            font-family: var(--font-sans); padding: 20px; 
+            height: 100vh; overflow: hidden; 
+            display: flex; flex-direction: column; 
+        }
+
+        /* --- HEADER --- */
+        header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--card-border);
+            flex-shrink: 0; 
+        }
+        h1 { 
+            color: var(--accent-cyan); font-family: var(--font-mono); font-size: 1.8rem;
+            text-shadow: 0 0 10px var(--accent-cyan-glow); letter-spacing: 1px;
+        }
+        #clock-container { text-align: right; }
+        #time { font-size: 2rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 10px var(--accent-violet-glow); }
+        #date { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* --- LAYOUT GRID --- */
+        .dashboard-container {
+            display: grid; grid-template-columns: 65% 1fr; gap: 20px;
+            flex-grow: 1; min-height: 0; 
+        }
+        
+        .col-left { display: flex; flex-direction: column; gap: 20px; overflow: hidden; min-height: 0; }
+        .col-right { display: flex; flex-direction: column; gap: 20px; overflow-y: auto; overflow-x: hidden; padding-right: 10px; }
+
+        /* Scrollbars Globales */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* --- CARDS --- */
+        .card { 
+            background-color: var(--card-bg); border: 1px solid var(--card-border); 
+            border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; 
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3); position: relative; transition: var(--transition);
+        }
+        .card:hover { border-color: var(--accent-cyan); box-shadow: 0 0 12px var(--accent-cyan-glow); }
+
+        .card h2 { 
+            font-family: var(--font-mono); font-size: 1.05rem; margin-bottom: 12px; 
+            color: var(--accent-cyan); border-bottom: 1px dashed var(--card-border); 
+            padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .tasks-card { flex: 0 0 auto; max-height: 45vh; } 
+        .notes-card { flex: 1; min-height: 0; }
+
+        /* --- INPUTS & BUTTONS --- */
+        input, textarea, select { 
+            width: 100%; background-color: rgba(0,0,0,0.4); border: 1px solid var(--card-border); 
+            color: var(--text-main); padding: 8px 10px; border-radius: 4px; font-family: var(--font-mono); 
+            font-size: 0.85rem; margin-bottom: 10px; outline: none; transition: var(--transition);
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent-cyan); box-shadow: 0 0 5px var(--accent-cyan-glow); }
+        input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+
+        button { 
+            background-color: transparent; border: 1px solid var(--accent-cyan); color: var(--accent-cyan); 
+            padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); 
+            font-weight: bold; transition: var(--transition); font-size: 0.8rem; text-transform: uppercase;
+        }
+        button:hover { background-color: var(--accent-cyan-glow); }
+        .btn-violet { border-color: var(--accent-violet); color: var(--accent-violet); }
+        .btn-violet:hover { background-color: var(--accent-violet-glow); }
+        .btn-danger { border-color: var(--accent-red); color: var(--accent-red); }
+        .btn-danger:hover { background-color: rgba(239, 68, 68, 0.15); }
+        
+        .btn-icon { border: none; padding: 2px 5px; font-size: 1rem; color: var(--text-muted); background: transparent; text-transform: none; }
+        .btn-icon:hover { color: var(--text-main); background: transparent; transform: scale(1.1); }
+        .btn-toggle { border: 1px dashed var(--card-border); color: var(--text-muted); width: 100%; margin-top: 5px; font-size: 0.75rem; padding: 5px; }
+        .btn-toggle:hover { color: var(--text-main); border-color: var(--text-muted); background: rgba(255,255,255,0.05); }
+        
+        .hidden-form { display: none; margin-top: 10px; border-top: 1px dashed var(--card-border); padding-top: 10px; }
+
+        /* --- LISTS --- */
+        ul { list-style: none; overflow-y: auto; padding-right: 5px; flex-grow: 1; }
+        li { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 8px 10px; border-bottom: 1px solid var(--card-border); 
+            background: rgba(255,255,255,0.015); margin-bottom: 4px; border-radius: 3px; transition: var(--transition);
+        }
+        li:last-child { border-bottom: none; }
+        li:hover { background: rgba(255,255,255,0.04); }
+
+        .item-content { display: flex; flex-direction: column; overflow: hidden; flex-grow: 1; }
+        .item-title { font-weight: bold; display: flex; align-items: center; gap: 8px; font-family: var(--font-sans); font-size: 0.9rem;}
+        .item-detail { font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 3px; }
+        .btn-copy { font-size: 0.65rem; padding: 2px 6px; border: 1px solid var(--card-border); color: var(--accent-cyan); border-radius: 3px; text-transform: none; }
+        .empty-state { text-align: center; padding: 15px; color: var(--text-muted); font-family: var(--font-mono); font-style: italic; font-size: 0.8rem; border: 1px dashed var(--card-border); border-radius: 4px; }
+
+        /* --- TASKS --- */
+        .task-filters { display: flex; gap: 8px; margin-bottom: 10px; }
+        .task-filters button { flex-grow: 1; padding: 4px; font-size: 0.75rem; border-color: var(--card-border); color: var(--text-muted); }
+        .task-filters button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        .task-item { cursor: pointer; border-left: 3px solid transparent; }
+        .task-done { opacity: 0.5; }
+        .task-done .item-title { text-decoration: line-through; }
+        .prio-high { border-left-color: var(--accent-red); }
+        .prio-medium { border-left-color: var(--accent-yellow); }
+        .prio-low { border-left-color: var(--accent-blue); }
+        .badge { font-size: 0.6rem; padding: 2px 5px; border-radius: 3px; text-transform: uppercase; font-weight: bold; }
+        .bg-high { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+        .bg-medium { background: rgba(234, 179, 8, 0.15); color: var(--accent-yellow); }
+        .bg-low { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+        .overdue { color: var(--accent-red); font-weight: bold; }
+        .today { color: var(--accent-yellow); font-weight: bold; }
+
+        /* --- SCRATCHPAD --- */
+        .scratchpad-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+        .tabs { display: flex; gap: 5px; }
+        .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 6px 12px; color: var(--text-muted); border-radius: 0; background: transparent; text-transform: none; }
+        .tab-btn:hover { background: rgba(255,255,255,0.05); }
+        .tab-btn.active { color: var(--accent-violet); border-bottom-color: var(--accent-violet); font-weight: bold; }
+        .quick-tools { display: flex; gap: 5px; }
+        .tool-btn { padding: 3px 6px; font-size: 0.65rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
+        .tool-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        .tool-btn-danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: transparent; }
+        .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); height: 100%; }
+        .notes-area:focus { border-color: var(--card-border); }
+
+        /* --- HORARIO ESCOLAR (NUEVO) --- */
+        .schedule-widget { 
+            background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); 
+            border-radius: 4px; padding: 12px; text-align: center;
+            display: flex; flex-direction: column; justify-content: center; min-height: 80px;
+        }
+        .sch-status { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+        .sch-subject { font-size: 1.1rem; font-weight: bold; color: var(--accent-cyan); margin-bottom: 2px; }
+        .sch-room { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-violet); margin-bottom: 8px; }
+        .sch-countdown { font-family: var(--font-mono); font-size: 1.2rem; font-weight: bold; color: var(--accent-yellow); text-shadow: 0 0 5px rgba(234,179,8,0.2); }
+
+        /* Modal para Editar Horario */
+        .modal-overlay { 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+            background: rgba(0,0,0,0.85); z-index: 1000; display: none; 
+            align-items: center; justify-content: center; backdrop-filter: blur(4px); 
+        }
+        .modal-content { 
+            background: var(--bg-color); border: 1px solid var(--accent-cyan); 
+            box-shadow: 0 0 20px var(--accent-cyan-glow); border-radius: var(--radius); 
+            width: 700px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; 
+            padding: 20px; 
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--card-border); }
+        .modal-header h2 { color: var(--accent-cyan); font-family: var(--font-mono); font-size: 1.2rem; }
+        .modal-body { overflow-y: auto; flex-grow: 1; margin-bottom: 15px; }
+        .day-group { margin-bottom: 15px; }
+        .day-title { font-family: var(--font-mono); color: var(--accent-violet); font-size: 0.9rem; margin-bottom: 5px; border-bottom: 1px dashed var(--card-border); padding-bottom: 3px; }
+        .modal-footer { display: flex; justify-content: space-between; padding-top: 15px; border-top: 1px solid var(--card-border); }
+
+        /* --- POMODORO --- */
+        #pomodoro-display { font-size: 3rem; font-family: var(--font-mono); text-align: center; color: var(--accent-cyan); margin: 5px 0 15px 0; font-weight: bold; text-shadow: 0 0 10px var(--accent-cyan-glow); }
+        .pomodoro-controls { display: flex; justify-content: space-between; gap: 8px; }
+        .pomodoro-controls button { flex-grow: 1; }
+
+        /* --- CLOUD SYNC --- */
+        .sync-status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-top: 12px; font-family: var(--font-mono); background: rgba(0,0,0,0.3); padding: 6px 10px; border-radius: 4px; border: 1px solid var(--card-border); }
+        .led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; box-shadow: 0 0 5px currentColor; }
+        .led-green { color: var(--accent-green); background-color: var(--accent-green); }
+        .led-yellow { color: var(--accent-yellow); background-color: var(--accent-yellow); }
+        .led-red { color: var(--accent-red); background-color: var(--accent-red); }
+        .led-off { color: var(--text-muted); background-color: var(--card-border); box-shadow: none; }
+        .sync-row { display: flex; gap: 10px; margin-top: 5px; }
+        .auto-sync-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-main); cursor: pointer; font-family: var(--font-mono); margin-bottom: 5px; }
+        .auto-sync-toggle input { width: auto; margin: 0; accent-color: var(--accent-cyan); cursor: pointer; }
+
+        /* --- FOOTER --- */
+        footer { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border); text-align: center; color: var(--text-muted); font-size: 0.75rem; display: flex; justify-content: space-between; flex-shrink: 0; }
+        
+        @media (max-width: 1024px) {
+            body { overflow: auto; height: auto; }
+            .dashboard-container { grid-template-columns: 1fr; }
+            .col-left, .col-right { overflow: visible; height: auto; }
+            .notes-card { min-height: 400px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>DevWorkspace_</h1>
+        <div id="clock-container">
+            <div id="time">00:00</div>
+            <div id="date">--/--/----</div>
+        </div>
+    </header>
+
+    <div class="dashboard-container">
+        
+        <!-- COLUMNA IZQUIERDA -->
+        <div class="col-left">
+            <!-- TAREAS & ENTREGAS -->
+            <div class="card tasks-card">
+                <h2>📋 Tareas & Entregas</h2>
+                <div class="task-filters">
+                    <button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button>
+                    <button id="filter-pending" onclick="setTaskFilter('pending')">Pendientes</button>
+                    <button id="filter-done" onclick="setTaskFilter('done')">Completadas</button>
+                </div>
+                <ul id="tasks-list"></ul>
+                <div style="display:flex; gap: 8px; margin-top: 10px; border-top: 1px dashed var(--card-border); padding-top:10px;">
+                    <input type="text" id="task-text" placeholder="Nueva tarea..." style="flex-grow: 2; margin-bottom:0;" onkeypress="if(event.key==='Enter') addTask()">
+                    <select id="task-priority" style="flex-grow: 1; margin-bottom:0;">
+                        <option value="medium">🟠 Media</option>
+                        <option value="high">🔴 Alta</option>
+                        <option value="low">🔵 Baja</option>
+                    </select>
+                    <input type="date" id="task-date" style="flex-grow: 1; margin-bottom:0;">
+                    <button onclick="addTask()">✚</button>
+                </div>
+            </div>
+
+            <!-- SCRATCHPAD -->
+            <div class="card notes-card">
+                <h2>📝 Scratchpad <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">Auto-guardado</span></h2>
+                <div class="scratchpad-header">
+                    <div class="tabs">
+                        <button class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button>
+                        <button class="tab-btn" id="tab-comandos" onclick="setNotesTab('comandos')">Comandos</button>
+                        <button class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button>
+                    </div>
+                    <div class="quick-tools">
+                        <button class="tool-btn" onclick="toolCopy()">Copiar</button>
+                        <button class="tool-btn" onclick="toolDownload()">Descargar .txt</button>
+                        <button class="tool-btn tool-btn-danger" onclick="toolClear()">Limpiar</button>
+                    </div>
+                </div>
+                <textarea id="scratchpad" class="notes-area" placeholder="Terminal/Notas..."></textarea>
+            </div>
+        </div>
+
+        <!-- COLUMNA DERECHA -->
+        <div class="col-right">
+            
+            <!-- HORARIO ESCOLAR (NUEVO) -->
+            <div class="card">
+                <h2>📅 Clases / Horario <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button></h2>
+                <div class="schedule-widget" id="schedule-widget">
+                    <div class="sch-status">Calculando...</div>
+                </div>
+            </div>
+
+            <!-- POMODORO -->
+            <div class="card">
+                <h2>⏱️ Pomodoro</h2>
+                <div id="pomodoro-display">25:00</div>
+                <div class="pomodoro-controls">
+                    <button onclick="startPomodoro(25)">25m Foco</button>
+                    <button onclick="startPomodoro(5)" class="btn-violet">5m Break</button>
+                    <button onclick="stopPomodoro()" style="color: var(--text-muted); border-color: var(--card-border); flex-grow:0;">◼</button>
+                </div>
+            </div>
+
+            <!-- CLOUD SYNC -->
+            <div class="card">
+                <h2>☁️ GitHub Sync <button class="btn-icon" onclick="toggleForm('gist-settings')" title="Configuración">⚙️</button></h2>
+                <div id="gist-settings" class="hidden-form">
+                    <input type="password" id="sync-token" placeholder="GitHub Personal Access Token">
+                    <input type="text" id="sync-gist" placeholder="Gist ID">
+                </div>
+                <label class="auto-sync-toggle" title="Sincroniza 2s después de teclear.">
+                    <input type="checkbox" id="auto-sync-check" onchange="toggleAutoSync()"> Auto-Sincronización
+                </label>
+                <div class="sync-row">
+                    <button onclick="pushToCloud(false)" style="flex-grow: 1;">⬆️ Subir</button>
+                    <button onclick="pullFromCloud()" class="btn-violet" style="flex-grow: 1;">⬇️ Bajar</button>
+                </div>
+                <div class="sync-status-bar">
+                    <span id="cloud-log"><span class="led led-off" id="sync-led"></span> Listo</span>
+                    <span id="last-sync-time">Última sinc: Nunca</span>
+                </div>
+            </div>
+
+            <!-- ENLACES -->
+            <div class="card">
+                <h2>🔖 Enlaces</h2>
+                <ul id="bookmarks-list"></ul>
+                <button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
+                <div id="form-bookmarks" class="hidden-form">
+                    <input type="text" id="bm-name" placeholder="Nombre">
+                    <input type="url" id="bm-url" placeholder="URL">
+                    <button onclick="addBookmark()" style="width:100%">Guardar</button>
+                </div>
+            </div>
+
+            <!-- SERVIDORES -->
+            <div class="card">
+                <h2>🖥️ Servidores</h2>
+                <ul id="servers-list"></ul>
+                <button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
+                <div id="form-servers" class="hidden-form">
+                    <input type="text" id="srv-name" placeholder="Nombre">
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="srv-ip" placeholder="IP / Dominio" style="flex-grow: 1;">
+                        <input type="text" id="srv-creds" placeholder="Credenciales" style="width: 100px;">
+                    </div>
+                    <button onclick="addServer()" class="btn-violet" style="width:100%">Guardar</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL EDITOR DE HORARIO -->
+    <div class="modal-overlay" id="schedule-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Editor de Horario Semanal</h2>
+                <button class="btn-icon" onclick="closeScheduleModal()" style="font-size: 1.2rem;">✖</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex; gap: 8px; margin-bottom: 20px; align-items: flex-end; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; border: 1px solid var(--card-border);">
+                    <div style="flex-grow:1;">
+                        <label style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">Día</label>
+                        <select id="sch-add-day" style="margin-bottom:0;">
+                            <option value="1">Lunes</option>
+                            <option value="2">Martes</option>
+                            <option value="3">Miércoles</option>
+                            <option value="4">Jueves</option>
+                            <option value="5">Viernes</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">Inicio</label>
+                        <input type="time" id="sch-add-start" style="margin-bottom:0; width:90px;">
+                    </div>
+                    <div>
+                        <label style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">Fin</label>
+                        <input type="time" id="sch-add-end" style="margin-bottom:0; width:90px;">
+                    </div>
+                    <div style="flex-grow:2;">
+                        <label style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">Asignatura</label>
+                        <input type="text" id="sch-add-subject" placeholder="Ej: Programación" style="margin-bottom:0;">
+                    </div>
+                    <div style="flex-grow:1;">
+                        <label style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">Aula</label>
+                        <input type="text" id="sch-add-room" placeholder="Ej: Lab 1" style="margin-bottom:0;">
+                    </div>
+                    <button onclick="addScheduleClass()" class="btn-violet" style="height: 35px;">✚ Añadir</button>
+                </div>
+                <div id="schedule-list-editor">
+                    <!-- Lista agrupada renderizada por JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-danger" onclick="clearSchedule()">Limpiar Horario Completo</button>
+                <button class="btn-violet" onclick="closeScheduleModal()">Guardar / Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div>DevWorkspace v2.2 &bull; Student CLI Mode</div>
+        <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON local]</a>
+    </footer>
+
+    <script>
+        // --- ESTADO INICIAL ---
+        const defaultData = { 
+            bookmarks: [], tasks: [], servers: [], schedule: [],
+            notes: { general: "", comandos: "", clases: "" }, 
+            settings: { autoSync: false, lastSync: null } 
+        };
+        let appData = JSON.parse(localStorage.getItem('devWorkspaceData')) || defaultData;
+        if(!appData.notes) appData.notes = { general: "", comandos: "", clases: "" };
+        if(!appData.settings) appData.settings = { autoSync: false, lastSync: null };
+        if(!appData.schedule) appData.schedule = [];
+
+        let currentTaskFilter = 'all';
+        let currentNotesTab = 'general';
+        let autoSyncTimer = null;
+
+        document.getElementById('sync-token').value = localStorage.getItem('gistToken') || '';
+        document.getElementById('sync-gist').value = localStorage.getItem('gistId') || '';
+        document.getElementById('auto-sync-check').checked = appData.settings.autoSync;
+        if(appData.settings.lastSync) document.getElementById('last-sync-time').textContent = `Última sinc: ${appData.settings.lastSync}`;
+
+        function saveData() { localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); renderAll(); triggerAutoSync(); }
+
+        // --- RELOJ Y WIDGET HORARIO ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('time').textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('date').textContent = now.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+            updateScheduleWidget(now);
+        }, 1000);
+
+        // --- HORARIO ESCOLAR LOGIC ---
+        function updateScheduleWidget(now) {
+            const widget = document.getElementById('schedule-widget');
+            const day = now.getDay(); // 0(Sun) - 6(Sat)
+            
+            if(day === 0 || day === 6 || appData.schedule.length === 0) {
+                widget.innerHTML = `<div class="sch-status" style="margin:0;">${appData.schedule.length === 0 ? 'Horario Vacío (Pulsa ⚙️ para editar)' : 'Fin de semana libre 🎉'}</div>`;
+                return;
+            }
+
+            const todayClasses = appData.schedule.filter(c => parseInt(c.day) === day);
+            if(todayClasses.length === 0) {
+                widget.innerHTML = `<div class="sch-status" style="margin:0;">Sin clases programadas para hoy</div>`;
+                return;
+            }
+
+            const nowMins = now.getHours() * 60 + now.getMinutes();
+            const nowSecs = now.getSeconds();
+            
+            let current = null;
+            let next = null;
+
+            for(let c of todayClasses) {
+                const startMins = parseInt(c.start.split(':')[0])*60 + parseInt(c.start.split(':')[1]);
+                const endMins = parseInt(c.end.split(':')[0])*60 + parseInt(c.end.split(':')[1]);
+                
+                if(nowMins >= startMins && nowMins < endMins) { current = c; break; }
+                if(nowMins < startMins && (!next || startMins < (parseInt(next.start.split(':')[0])*60 + parseInt(next.start.split(':')[1])))) { next = c; }
+            }
+
+            const formatTimeDiff = (totalSecs) => {
+                const h = Math.floor(totalSecs / 3600);
+                const m = Math.floor((totalSecs % 3600) / 60);
+                const s = totalSecs % 60;
+                return `${h>0?h+'h ':''}${m.toString().padStart(2,'0')}m ${s.toString().padStart(2,'0')}s`;
+            };
+
+            if(current) {
+                const endMins = parseInt(current.end.split(':')[0])*60 + parseInt(current.end.split(':')[1]);
+                const diffSecs = (endMins * 60) - (nowMins * 60 + nowSecs);
+                widget.innerHTML = `
+                    <div class="sch-status" style="color:var(--accent-cyan);">🟢 En curso</div>
+                    <div class="sch-subject">${current.subject}</div>
+                    <div class="sch-room">📍 ${current.room || 'Sin aula'} | Termina a las ${current.end}</div>
+                    <div class="sch-countdown">${formatTimeDiff(diffSecs)}</div>
+                `;
+            } else if(next) {
+                const startMins = parseInt(next.start.split(':')[0])*60 + parseInt(next.start.split(':')[1]);
+                const diffSecs = (startMins * 60) - (nowMins * 60 + nowSecs);
+                widget.innerHTML = `
+                    <div class="sch-status" style="color:var(--accent-yellow);">⏳ Siguiente Clase</div>
+                    <div class="sch-subject">${next.subject}</div>
+                    <div class="sch-room">📍 ${next.room || 'Sin aula'} | Empieza a las ${next.start}</div>
+                    <div class="sch-countdown">${formatTimeDiff(diffSecs)}</div>
+                `;
+            } else {
+                widget.innerHTML = `<div class="sch-status" style="margin:0;">Jornada finalizada por hoy 🍻</div>`;
+            }
+        }
+
+        // --- EDITOR DE HORARIO MODAL ---
+        const dayNames = {1:'Lunes', 2:'Martes', 3:'Miércoles', 4:'Jueves', 5:'Viernes'};
+        function openScheduleModal() { document.getElementById('schedule-modal').style.display = 'flex'; renderScheduleEditor(); }
+        function closeScheduleModal() { document.getElementById('schedule-modal').style.display = 'none'; updateScheduleWidget(new Date()); }
+        
+        function renderScheduleEditor() {
+            const list = document.getElementById('schedule-list-editor');
+            if(appData.schedule.length === 0) { list.innerHTML = `<div class="empty-state">No hay clases configuradas.</div>`; return; }
+            
+            let html = '';
+            for(let d=1; d<=5; d++) {
+                const dayClasses = appData.schedule.filter(c => parseInt(c.day) === d).sort((a,b) => a.start.localeCompare(b.start));
+                if(dayClasses.length > 0) {
+                    html += `<div class="day-group"><div class="day-title">${dayNames[d]}</div><ul>`;
+                    html += dayClasses.map(c => `
+                        <li style="padding: 5px 10px;">
+                            <div class="item-content" style="flex-direction:row; justify-content:flex-start; gap:15px; align-items:center;">
+                                <span style="font-family:var(--font-mono); color:var(--accent-yellow); font-size:0.85rem;">${c.start} - ${c.end}</span>
+                                <span style="font-weight:bold; color:var(--text-main); font-size:0.9rem;">${c.subject}</span>
+                                <span style="font-family:var(--font-mono); color:var(--text-muted); font-size:0.8rem;">${c.room}</span>
+                            </div>
+                            <button onclick="deleteScheduleClass(${c.id})" class="btn-icon">✖</button>
+                        </li>
+                    `).join('');
+                    html += `</ul></div>`;
+                }
+            }
+            list.innerHTML = html;
+        }
+
+        function addScheduleClass() {
+            const day = document.getElementById('sch-add-day').value;
+            const start = document.getElementById('sch-add-start').value;
+            const end = document.getElementById('sch-add-end').value;
+            const subject = document.getElementById('sch-add-subject').value;
+            const room = document.getElementById('sch-add-room').value;
+            
+            if(day && start && end && subject) {
+                appData.schedule.push({ id: Date.now(), day, start, end, subject, room });
+                document.getElementById('sch-add-subject').value = '';
+                document.getElementById('sch-add-room').value = '';
+                saveData();
+                renderScheduleEditor();
+            } else {
+                alert("Completa hora de inicio, fin y asignatura.");
+            }
+        }
+        function deleteScheduleClass(id) { appData.schedule = appData.schedule.filter(c => c.id !== id); saveData(); renderScheduleEditor(); }
+        function clearSchedule() { if(confirm("¿Borrar todo el horario semanal?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
+
+        function toggleForm(id) { const el = document.getElementById(id); el.style.display = el.style.display === 'block' ? 'none' : 'block'; }
+
+        // --- TAREAS ---
+        function setTaskFilter(filter) { currentTaskFilter = filter; ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f).classList.remove('active')); document.getElementById('filter-' + filter).classList.add('active'); renderTasks(); }
+        function getPriorityClass(prio) { return prio === 'high' ? 'prio-high' : prio === 'low' ? 'prio-low' : 'prio-medium'; }
+        function getPriorityBadge(prio) { return prio === 'high' ? `<span class="badge bg-high">Alta</span>` : prio === 'medium' ? `<span class="badge bg-medium">Med</span>` : prio === 'low' ? `<span class="badge bg-low">Baja</span>` : ''; }
+        function checkDateStatus(d) { if(!d) return ""; const t = new Date(); t.setHours(0,0,0,0); const diff = Math.ceil((new Date(d) - t) / (1000 * 60 * 60 * 24)); if (diff < 0) return `<span class="overdue">Vencida (${d})</span>`; if (diff === 0) return `<span class="today">¡Hoy!</span>`; return `<span>${d}</span>`; }
+        function renderTasks() {
+            let tasks = [...appData.tasks];
+            if(currentTaskFilter === 'pending') tasks = tasks.filter(t => !t.done);
+            if(currentTaskFilter === 'done') tasks = tasks.filter(t => t.done);
+            tasks.sort((a,b) => (a.done !== b.done) ? (a.done ? 1 : -1) : ((a.date ? new Date(a.date).getTime() : Infinity) - (b.date ? new Date(b.date).getTime() : Infinity)));
+            const list = document.getElementById('tasks-list');
+            if(tasks.length === 0) { list.innerHTML = `<div class="empty-state">No hay tareas ✌️</div>`; return; }
+            list.innerHTML = tasks.map(t => `
+                <li class="task-item ${t.done ? 'task-done' : ''} ${getPriorityClass(t.priority)}">
+                    <div class="item-content" onclick="toggleTask(${t.id})" style="cursor:pointer">
+                        <span class="item-title">${t.done ? '✅' : '⬜'} ${t.text} ${getPriorityBadge(t.priority)}</span>
+                        <span class="item-detail">${checkDateStatus(t.date)}</span>
+                    </div>
+                    <button onclick="deleteTask(${t.id})" class="btn-icon">✖</button>
+                </li>`).join('');
+        }
+        function addTask() { const text = document.getElementById('task-text').value, date = document.getElementById('task-date').value, priority = document.getElementById('task-priority').value; if (text) { appData.tasks.push({ id: Date.now(), text, date, priority, done: false }); document.getElementById('task-text').value=''; document.getElementById('task-date').value=''; saveData(); } }
+        function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
+        function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
+
+        // --- SCRATCHPAD ---
+        function setNotesTab(tab) { currentNotesTab = tab; ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); document.getElementById('tab-' + tab).classList.add('active'); document.getElementById('scratchpad').value = appData.notes[tab] || ""; }
+        document.getElementById('scratchpad').addEventListener('input', e => { appData.notes[currentNotesTab] = e.target.value; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); triggerAutoSync(); });
+        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado al portapapeles."); }
+        function toolDownload() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([appData.notes[currentNotesTab] || ""], { type: "text/plain" })); a.download = `notas_${currentNotesTab}_${Date.now()}.txt`; a.click(); }
+        function toolClear() { if(confirm(`¿Borrar [${currentNotesTab}]?`)) { appData.notes[currentNotesTab] = ""; document.getElementById('scratchpad').value = ""; saveData(); } }
+
+        // --- POMODORO ---
+        let pomoInterval;
+        function startPomodoro(m) { clearInterval(pomoInterval); let t = m * 60; const d = document.getElementById('pomodoro-display'); pomoInterval = setInterval(() => { d.textContent = `${Math.floor(t/60).toString().padStart(2,'0')}:${(t%60).toString().padStart(2,'0')}`; if (t-- <= 0) { clearInterval(pomoInterval); d.textContent = "00:00"; alert(m === 25 ? '🎯 Foco terminado.' : '☕ Break terminado.'); } }, 1000); }
+        function stopPomodoro() { clearInterval(pomoInterval); document.getElementById('pomodoro-display').textContent = "25:00"; }
+
+        // --- ENLACES Y SERVIDORES ---
+        function renderBookmarks() {
+            const list = document.getElementById('bookmarks-list');
+            if(appData.bookmarks.length === 0) { list.innerHTML = `<div class="empty-state">Sin enlaces guardados</div>`; return; }
+            list.innerHTML = appData.bookmarks.map(bm => `<li><div class="item-content"><a href="${bm.url}" target="_blank" class="item-title" style="color:var(--text-main); text-decoration:none;">🔗 ${bm.name}</a><span class="item-detail">${bm.url}</span></div><button onclick="appData.bookmarks=appData.bookmarks.filter(x=>x.id!==${bm.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
+        }
+        function addBookmark() { const n = document.getElementById('bm-name').value, u = document.getElementById('bm-url').value; if (n && u) { appData.bookmarks.push({ id: Date.now(), name:n, url:u }); document.getElementById('bm-name').value=''; document.getElementById('bm-url').value=''; document.getElementById('form-bookmarks').style.display = 'none'; saveData(); } }
+
+        function renderServers() {
+            const list = document.getElementById('servers-list');
+            if(appData.servers.length === 0) { list.innerHTML = `<div class="empty-state">Sin servidores registrados</div>`; return; }
+            list.innerHTML = appData.servers.map(srv => `<li><div class="item-content"><span class="item-title" style="color: var(--accent-cyan)">🖥️ ${srv.name}</span><div style="display:flex; align-items:center; gap:8px; margin-top:3px;"><span class="item-detail" style="margin-top:0;">${srv.ip} <span style="color:var(--text-muted)">${srv.creds ? '['+srv.creds+']' : ''}</span></span><button class="btn-copy" onclick="navigator.clipboard.writeText('${srv.ip}${srv.creds ? ' (' + srv.creds + ')' : ''}'); this.textContent='¡Copiado!'; setTimeout(()=>this.textContent='Copiar', 1500);">Copiar</button></div></div><button onclick="appData.servers=appData.servers.filter(x=>x.id!==${srv.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
+        }
+        function addServer() { const n = document.getElementById('srv-name').value, i = document.getElementById('srv-ip').value, c = document.getElementById('srv-creds').value; if (n && i) { appData.servers.push({ id: Date.now(), name:n, ip:i, creds:c }); document.getElementById('srv-name').value=''; document.getElementById('srv-ip').value=''; document.getElementById('srv-creds').value=''; document.getElementById('form-servers').style.display = 'none'; saveData(); } }
+
+        // --- CLOUD SYNC ---
+        function setLog(msg, color, ledClass) { const log = document.getElementById('cloud-log'); log.innerHTML = `<span class="led ${ledClass}" id="sync-led"></span> ${msg}`; log.style.color = color; }
+        function toggleAutoSync() { appData.settings.autoSync = document.getElementById('auto-sync-check').checked; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); }
+        function triggerAutoSync() { if(!appData.settings.autoSync) return; clearTimeout(autoSyncTimer); setLog("Sincronizando en 2s...", "var(--text-muted)", "led-yellow"); autoSyncTimer = setTimeout(() => { pushToCloud(true); }, 2000); }
+        function updateLastSyncTime() { const timeStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); appData.settings.lastSync = timeStr; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); document.getElementById('last-sync-time').textContent = `Última sinc: ${timeStr}`; }
+        
+        async function pushToCloud(isAuto = false) {
+            const token = document.getElementById('sync-token').value, gistId = document.getElementById('sync-gist').value;
+            if(!token || !gistId) { if(!isAuto) setLog("Faltan Credenciales", "var(--accent-red)", "led-red"); return; }
+            localStorage.setItem('gistToken', token); localStorage.setItem('gistId', gistId);
+            setLog(isAuto ? "Auto-guardando..." : "Subiendo...", "var(--text-main)", "led-yellow");
+            try {
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify({ files: { 'devworkspace.json': { content: JSON.stringify(appData) } } }) });
+                if(res.ok) { setLog("Sincronizado", "var(--text-muted)", "led-green"); updateLastSyncTime(); } else setLog("Error de API", "var(--accent-red)", "led-red");
+            } catch(e) { setLog("Error de Red", "var(--accent-red)", "led-red"); }
+        }
+
+        async function pullFromCloud() {
+            const token = document.getElementById('sync-token').value, gistId = document.getElementById('sync-gist').value;
+            if(!token || !gistId) return setLog("Faltan Credenciales", "var(--accent-red)", "led-red");
+            localStorage.setItem('gistToken', token); localStorage.setItem('gistId', gistId);
+            setLog("Descargando...", "var(--text-main)", "led-yellow");
+            try {
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' } });
+                if(res.ok) {
+                    const data = await res.json();
+                    appData = { ...defaultData, ...JSON.parse(data.files['devworkspace.json'].content) };
+                    appData.settings.autoSync = document.getElementById('auto-sync-check').checked;
+                    saveData(); setNotesTab(currentNotesTab); setLog("Descargado", "var(--text-muted)", "led-green"); updateLastSyncTime();
+                } else setLog("Error de API", "var(--accent-red)", "led-red");
+            } catch(e) { setLog("Error de Red/JSON", "var(--accent-red)", "led-red"); }
+        }
+
+        function exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(appData)], { type: "application/json" })); a.download = `backup_${Date.now()}.json`; a.click(); }
+        function renderAll() { renderTasks(); renderBookmarks(); renderServers(); updateScheduleWidget(new Date()); }
+        
+        renderAll(); setNotesTab('general');
+    </script>
+</body>
+</html>
