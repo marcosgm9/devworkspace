@@ -66,40 +66,114 @@
             display: flex; flex-direction: column; gap: 15px;
         }
 
+        /* --- HEADER CORREGIDO Y ALINEADO --- */
         header { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding-bottom: 12px; border-bottom: 1px solid var(--card-border);
-            flex-shrink: 0; gap: 15px;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding-bottom: 12px; 
+            border-bottom: 1px solid var(--card-border);
+            flex-shrink: 0; 
+            gap: 15px;
         }
-        .header-title-zone { display: flex; align-items: center; gap: 12px; }
+
+        .header-title-zone { 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+        }
+
         h1 { 
-            color: var(--accent-cyan); font-family: var(--font-mono); font-size: 1.5rem;
-            text-shadow: 0 0 8px var(--accent-cyan-glow); letter-spacing: 0.5px;
+            color: var(--accent-cyan); 
+            font-family: var(--font-mono); 
+            font-size: 1.6rem;
+            text-shadow: 0 0 8px var(--accent-cyan-glow); 
+            letter-spacing: 0.5px;
+            margin: 0;
         }
-        .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        #clock-container { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-        #time { font-size: 1.6rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 8px var(--accent-violet-glow); line-height: 1; }
-        #date { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
-        .net-status { font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-muted); }
-        
+
+        .header-controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+            flex-wrap: nowrap; 
+        }
+
+        #clock-container { 
+            text-align: right; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: flex-end; 
+            justify-content: center;
+            line-height: 1.1;
+        }
+
+        #time { 
+            font-size: 1.5rem; 
+            font-family: var(--font-mono); 
+            color: var(--accent-violet); 
+            font-weight: bold; 
+            text-shadow: 0 0 8px var(--accent-violet-glow); 
+            line-height: 1; 
+        }
+
+        #date { 
+            color: var(--text-muted); 
+            font-size: 0.7rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            margin-top: 2px; 
+        }
+
+        .net-status { 
+            font-size: 0.6rem; 
+            font-family: var(--font-mono); 
+            color: var(--text-muted); 
+        }
+
         .tz-select, .theme-select {
-            background: rgba(0,0,0,0.4); border: 1px solid var(--card-border);
-            color: var(--accent-cyan); font-family: var(--font-mono); font-size: 0.75rem;
-            padding: 5px 8px; border-radius: 4px; cursor: pointer; outline: none;
+            background: rgba(0,0,0,0.4); 
+            border: 1px solid var(--card-border);
+            color: var(--accent-cyan); 
+            font-family: var(--font-mono); 
+            font-size: 0.75rem;
+            padding: 6px 10px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            outline: none;
+            height: 34px;
+            margin-bottom: 0;
         }
 
         .btn-quick-search {
-            background: rgba(0,0,0,0.4); border: 1px solid var(--card-border);
-            color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem;
-            padding: 5px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+            background: rgba(0,0,0,0.4); 
+            border: 1px solid var(--card-border);
+            color: var(--text-muted); 
+            font-family: var(--font-mono); 
+            font-size: 0.75rem;
+            padding: 0 10px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px;
+            height: 34px;
         }
-        .btn-quick-search:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        .btn-quick-search:hover { 
+            border-color: var(--accent-cyan); 
+            color: var(--accent-cyan); 
+        }
         kbd { background: rgba(255,255,255,0.1); border-radius: 3px; padding: 1px 4px; font-size: 0.65rem; }
 
         .custom-theme-panel {
-            display: none; align-items: center; gap: 6px; 
-            background: rgba(0,0,0,0.4); padding: 4px 8px; 
-            border: 1px dashed var(--accent-cyan); border-radius: var(--radius);
+            display: none; 
+            align-items: center; 
+            gap: 6px; 
+            background: rgba(0,0,0,0.4); 
+            padding: 4px 8px; 
+            border: 1px dashed var(--accent-cyan); 
+            border-radius: var(--radius);
+            height: 34px;
         }
         .custom-theme-panel input[type="color"] {
             width: 22px; height: 22px; padding: 0; border: none; 
@@ -109,6 +183,7 @@
             width: 100px; margin-bottom: 0; font-size: 0.75rem; padding: 2px 6px;
         }
 
+        /* --- LAYOUT GRID DRAGGABLE --- */
         .dashboard-container {
             display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
             flex-grow: 1; min-height: 0; height: calc(100vh - 120px);
@@ -275,6 +350,7 @@
         </div>
         <div class="header-controls">
             <button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
+            
             <select id="theme-select" class="theme-select">
                 <option value="cyberpunk">🎨 Cyberpunk</option>
                 <option value="dracula">🧛 Dracula</option>
@@ -294,11 +370,6 @@
                 <input type="color" id="cp-violet" title="Acento Violeta">
             </div>
 
-            <div id="clock-container">
-                <div id="time">00:00</div>
-                <div id="date">--/--/----</div>
-                <div id="net-status" class="net-status">🌐 Sincronizando...</div>
-            </div>
             <select id="timezone-select" class="tz-select">
                 <option value="local">Local (Sistema)</option>
                 <option value="UTC">UTC (GMT+0)</option>
@@ -309,6 +380,12 @@
                 <option value="America/Los_Angeles">Los Ángeles (PST/PDT)</option>
                 <option value="Asia/Tokyo">Tokio (JST)</option>
             </select>
+
+            <div id="clock-container">
+                <div id="time">00:00</div>
+                <div id="date">--/--/----</div>
+                <div id="net-status" class="net-status">🌐 Sincronizando...</div>
+            </div>
         </div>
     </header>
 
@@ -364,7 +441,6 @@
 
         <!-- COLUMNA DERECHA -->
         <div class="col-right" id="col-right">
-            <!-- NUEVO: METRICAS Y METAS -->
             <div class="card" id="card-stats" draggable="true" style="min-height: 100px;">
                 <h2>📊 Estadísticas del Workspace <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
                 <div class="stats-grid">
@@ -756,7 +832,6 @@
             layout.colRight.forEach(id => { const card = document.getElementById(id); if(card) colRightEl.appendChild(card); });
         }
 
-        // --- STATS WIDGET ---
         function updateStats() {
             const tasks = appData.tasks || [];
             const done = tasks.filter(t => t.done).length;
@@ -767,7 +842,6 @@
             document.getElementById('stat-srv').textContent = (appData.servers || []).length;
         }
 
-        // --- HORARIO ---
         function toggleScheduleViewMode() { appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table'; saveData(); }
 
         function updateScheduleWidget(now) {
@@ -848,7 +922,6 @@
         function deleteScheduleClass(id) { appData.schedule = appData.schedule.filter(c => c.id !== id); saveData(); renderScheduleEditor(); }
         function clearSchedule() { if(confirm("¿Limpiar todo el horario?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
 
-        // --- TAREAS ---
         function setTaskFilter(filter) { currentTaskFilter = filter; ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f).classList.remove('active')); document.getElementById('filter-' + filter).classList.add('active'); renderTasks(); }
         function renderTasks() {
             let tasks = [...appData.tasks];
@@ -871,7 +944,6 @@
         function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
         function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
 
-        // --- SCRATCHPAD & GIST ---
         function setNotesTab(tab) { 
             currentNotesTab = tab; 
             ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); 
@@ -955,7 +1027,6 @@
             saveData();
         }
 
-        // --- POMODORO CON NOTIFICACIONES NATIVAS ---
         let pomoInterval;
         function notifyPomodoro(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
@@ -981,7 +1052,6 @@
         }
         function stopPomodoro() { clearInterval(pomoInterval); document.getElementById('pomodoro-display').textContent = "25:00"; }
 
-        // --- ENLACES Y SERVIDORES ---
         function renderBookmarks() {
             const filter = (document.getElementById('bm-search-filter')?.value || '').toLowerCase();
             const list = document.getElementById('bookmarks-list');
@@ -1004,7 +1074,6 @@
         }
         function addServer() { const n = document.getElementById('srv-name').value, i = document.getElementById('srv-ip').value, c = document.getElementById('srv-creds').value; if (n && i) { appData.servers.push({ id: Date.now(), name:n, ip:i, creds:c }); document.getElementById('srv-name').value=''; document.getElementById('srv-ip').value=''; document.getElementById('srv-creds').value=''; toggleForm('form-servers'); saveData(); } }
 
-        // --- BUSCADOR GLOBAL (CTRL + K) ---
         function openGlobalSearch() { document.getElementById('global-search-modal').style.display = 'flex'; document.getElementById('global-search-input').focus(); }
         function closeGlobalSearch() { document.getElementById('global-search-modal').style.display = 'none'; }
         
@@ -1029,7 +1098,6 @@
             resultsEl.innerHTML = results.map(r => `<li><b>${r.type}:</b> ${r.text}</li>`).join('');
         }
 
-        // --- CLOUD SYNC & IMPORT/EXPORT ---
         function setLog(msg, color, ledClass) { const log = document.getElementById('cloud-log'); log.innerHTML = `<span class="led ${ledClass}"></span> ${msg}`; log.style.color = color; }
         function toggleAutoSync() { appData.settings.autoSync = document.getElementById('auto-sync-check').checked; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); }
         function triggerAutoSync() { if(!appData.settings.autoSync) return; clearTimeout(autoSyncTimer); setLog("Auto-sync...", "var(--text-muted)", "led-yellow"); autoSyncTimer = setTimeout(() => pushToCloud(true), 2000); }
