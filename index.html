@@ -26,7 +26,7 @@
             --transition: border-color 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
         }
 
-        /* TEMAS VISUALES */
+        /* TEMAS VISUALES PREDEFINIDOS */
         html[data-theme="minecraft"] {
             --bg-color: #1a120c;
             --card-bg: #2d1e18;
@@ -98,13 +98,13 @@
         header { 
             display: flex; justify-content: space-between; align-items: center; 
             margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--card-border);
-            flex-shrink: 0; 
+            flex-shrink: 0; flex-wrap: wrap; gap: 10px;
         }
         h1 { 
             color: var(--accent-cyan); font-family: var(--font-mono); font-size: 1.8rem;
             text-shadow: 0 0 10px var(--accent-cyan-glow); letter-spacing: 1px;
         }
-        .header-controls { display: flex; align-items: center; gap: 15px; }
+        .header-controls { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         #clock-container { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         #time { font-size: 2rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 10px var(--accent-violet-glow); line-height: 1; }
         #date { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
@@ -119,6 +119,20 @@
             padding: 4px 8px;
             border-radius: 4px;
             cursor: pointer;
+        }
+
+        /* --- EDITOR TEMA PERSONALIZADO --- */
+        .custom-theme-panel {
+            display: none; align-items: center; gap: 8px; 
+            background: rgba(0,0,0,0.4); padding: 6px 10px; 
+            border: 1px dashed var(--accent-cyan); border-radius: var(--radius);
+        }
+        .custom-theme-panel input[type="color"] {
+            width: 25px; height: 25px; padding: 0; border: none; 
+            background: transparent; cursor: pointer; border-radius: 3px;
+        }
+        .custom-theme-panel input[type="text"] {
+            width: 120px; margin-bottom: 0; font-size: 0.75rem; padding: 3px 6px;
         }
 
         /* --- LAYOUT GRID DRAGGABLE --- */
@@ -137,7 +151,7 @@
         ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-        /* --- CARDS RESIZABLES Y AJUSTABLES --- */
+        /* --- CARDS RESIZABLES --- */
         .card { 
             background-color: var(--card-bg); border: 1px solid var(--card-border); 
             border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; 
@@ -311,7 +325,20 @@
                 <option value="minecraft">⛏️ Minecraft</option>
                 <option value="valorant">🎯 Valorant</option>
                 <option value="retro">📻 Retro CRT</option>
+                <option value="custom">🛠️ Personalizado</option>
             </select>
+
+            <!-- PANEL DE CONFIGURACIÓN DEL TEMA PERSONALIZADO -->
+            <div id="custom-theme-panel" class="custom-theme-panel">
+                <input type="text" id="custom-theme-name" placeholder="Nombre Tema" onchange="updateCustomThemeParams()" title="Nombre de tu tema">
+                <input type="color" id="cp-bg" onchange="updateCustomThemeParams()" title="Fondo Principal">
+                <input type="color" id="cp-card" onchange="updateCustomThemeParams()" title="Fondo Tarjeta">
+                <input type="color" id="cp-border" onchange="updateCustomThemeParams()" title="Bordes">
+                <input type="color" id="cp-text" onchange="updateCustomThemeParams()" title="Texto Principal">
+                <input type="color" id="cp-cyan" onchange="updateCustomThemeParams()" title="Acento Cyan/Principal">
+                <input type="color" id="cp-violet" onchange="updateCustomThemeParams()" title="Acento Violeta/Secundario">
+            </div>
+
             <div id="clock-container">
                 <div id="time">00:00</div>
                 <div id="date">--/--/----</div>
@@ -518,7 +545,7 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v3.0 &bull; Full Grid Flexibility & Clock Fix</div>
+        <div>DevWorkspace v3.1 &bull; Custom Themes & Cloud Persistence</div>
         <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON local]</a>
     </footer>
 
@@ -531,6 +558,15 @@
                 lastSync: null, 
                 timezone: 'local', 
                 theme: 'cyberpunk',
+                customTheme: {
+                    name: 'Mi Tema',
+                    bg: '#05080f',
+                    card: '#0d131f',
+                    border: '#1e293b',
+                    text: '#f8fafc',
+                    cyan: '#38bdf8',
+                    violet: '#a855f7'
+                },
                 scheduleViewMode: 'widget',
                 layout: {
                     colLeft: ['card-tasks', 'card-notes'],
@@ -544,6 +580,7 @@
         if(!appData.settings) appData.settings = defaultData.settings;
         if(!appData.settings.timezone) appData.settings.timezone = 'local';
         if(!appData.settings.theme) appData.settings.theme = 'cyberpunk';
+        if(!appData.settings.customTheme) appData.settings.customTheme = defaultData.settings.customTheme;
         if(!appData.settings.scheduleViewMode) appData.settings.scheduleViewMode = 'widget';
         if(!appData.settings.layout) appData.settings.layout = defaultData.settings.layout;
         if(!appData.schedule) appData.schedule = [];
@@ -591,13 +628,74 @@
             el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
         }
 
+        // --- SISTEMA DE TEMAS Y TEMA PERSONALIZADO ---
         function changeTheme(themeName) {
             appData.settings.theme = themeName;
-            document.documentElement.setAttribute('data-theme', themeName);
+            const panel = document.getElementById('custom-theme-panel');
+            
+            if (themeName === 'custom') {
+                panel.style.display = 'flex';
+                applyCustomThemeStyles();
+            } else {
+                panel.style.display = 'none';
+                clearCustomInlineStyles();
+                document.documentElement.setAttribute('data-theme', themeName);
+            }
             saveData();
         }
 
-        // --- SISTEMA DE RELOJ Y ZONA HORARIA ROBUSTO ---
+        function applyCustomThemeStyles() {
+            const ct = appData.settings.customTheme;
+            document.documentElement.setAttribute('data-theme', 'custom');
+            
+            // Inyectamos variables CSS dinámicamente al root
+            const root = document.documentElement.style;
+            root.setProperty('--bg-color', ct.bg);
+            root.setProperty('--card-bg', ct.card);
+            root.setProperty('--card-border', ct.border);
+            root.setProperty('--text-main', ct.text);
+            root.setProperty('--accent-cyan', ct.cyan);
+            root.setProperty('--accent-cyan-glow', ct.cyan + '33');
+            root.setProperty('--accent-violet', ct.violet);
+            root.setProperty('--accent-violet-glow', ct.violet + '33');
+
+            // Actualizar campos del editor de temas
+            document.getElementById('custom-theme-name').value = ct.name || 'Mi Tema';
+            document.getElementById('cp-bg').value = ct.bg;
+            document.getElementById('cp-card').value = ct.card;
+            document.getElementById('cp-border').value = ct.border;
+            document.getElementById('cp-text').value = ct.text;
+            document.getElementById('cp-cyan').value = ct.cyan;
+            document.getElementById('cp-violet').value = ct.violet;
+        }
+
+        function clearCustomInlineStyles() {
+            const root = document.documentElement.style;
+            root.removeProperty('--bg-color');
+            root.removeProperty('--card-bg');
+            root.removeProperty('--card-border');
+            root.removeProperty('--text-main');
+            root.removeProperty('--accent-cyan');
+            root.removeProperty('--accent-cyan-glow');
+            root.removeProperty('--accent-violet');
+            root.removeProperty('--accent-violet-glow');
+        }
+
+        function updateCustomThemeParams() {
+            appData.settings.customTheme = {
+                name: document.getElementById('custom-theme-name').value || 'Mi Tema',
+                bg: document.getElementById('cp-bg').value,
+                card: document.getElementById('cp-card').value,
+                border: document.getElementById('cp-border').value,
+                text: document.getElementById('cp-text').value,
+                cyan: document.getElementById('cp-cyan').value,
+                violet: document.getElementById('cp-violet').value
+            };
+            applyCustomThemeStyles();
+            saveData();
+        }
+
+        // --- SISTEMA DE RELOJ Y ZONA HORARIA ---
         function changeTimezone(tzVal) {
             appData.settings.timezone = tzVal;
             saveData();
@@ -1076,10 +1174,10 @@
                     appData = { ...defaultData, ...JSON.parse(data.files['devworkspace.json'].content) };
                     appData.settings.autoSync = document.getElementById('auto-sync-check').checked;
                     
-                    document.documentElement.setAttribute('data-theme', appData.settings.theme || 'cyberpunk');
                     document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
                     document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
                     
+                    changeTheme(appData.settings.theme || 'cyberpunk');
                     applyLayoutState();
                     saveData(); 
                     setNotesTab(currentNotesTab); 
@@ -1105,7 +1203,8 @@
         document.getElementById('auto-sync-check').checked = appData.settings.autoSync;
         document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
         document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
-        document.documentElement.setAttribute('data-theme', appData.settings.theme || 'cyberpunk');
+        
+        changeTheme(appData.settings.theme || 'cyberpunk');
 
         if(appData.settings.lastSync) document.getElementById('last-sync-time').textContent = `Última sinc: ${appData.settings.lastSync}`;
 
