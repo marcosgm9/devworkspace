@@ -108,6 +108,7 @@
         #clock-container { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         #time { font-size: 2rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 10px var(--accent-violet-glow); line-height: 1; }
         #date { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+        .net-status { font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-muted); margin-top: 2px; }
         
         .tz-select, .theme-select {
             background: rgba(0,0,0,0.5);
@@ -231,7 +232,7 @@
         .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); height: 100%; }
         .notes-area:focus { border-color: var(--card-border); }
 
-        /* --- HORARIO ESCOLAR --- */
+        /* --- HORARIO ESCOLAR & TABLA DE DIA --- */
         .schedule-widget { 
             background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); 
             border-radius: 4px; padding: 12px; text-align: center;
@@ -241,6 +242,16 @@
         .sch-subject { font-size: 1.1rem; font-weight: bold; color: var(--accent-cyan); margin-bottom: 2px; }
         .sch-room { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-violet); margin-bottom: 8px; }
         .sch-countdown { font-family: var(--font-mono); font-size: 1.2rem; font-weight: bold; color: var(--accent-yellow); text-shadow: 0 0 5px rgba(234,179,8,0.2); }
+
+        .schedule-table-view { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.75rem; }
+        .schedule-table-view th { text-align: left; padding: 6px; border-bottom: 1px solid var(--card-border); color: var(--text-muted); font-size: 0.7rem; }
+        .schedule-table-view td { padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .schedule-table-view tr.current-class { 
+            background: var(--accent-cyan-glow); 
+            border-left: 3px solid var(--accent-cyan); 
+            box-shadow: 0 0 10px var(--accent-cyan-glow);
+        }
+        .schedule-table-view tr.current-class td { color: var(--accent-cyan); font-weight: bold; }
 
         /* Modal para Editar Horario */
         .modal-overlay { 
@@ -303,6 +314,7 @@
             <div id="clock-container">
                 <div id="time">00:00</div>
                 <div id="date">--/--/----</div>
+                <div id="net-status" class="net-status">🌐 Sincronizando...</div>
                 <select id="timezone-select" class="tz-select" onchange="changeTimezone(this.value)">
                     <option value="local">Local (Sistema)</option>
                     <option value="UTC">UTC (GMT+0)</option>
@@ -353,7 +365,7 @@
                     </div>
                     <div class="quick-tools">
                         <select id="gist-file-selector" class="gist-file-select" onchange="loadSelectedGistFile(this.value)">
-                            <option value="">📂 Archivos Gist...</option>
+                            <option value="">📂 Archivos .txt Gist...</option>
                         </select>
                         <button class="tool-btn btn-violet" onclick="saveCurrentNoteToGist()" title="Guardar como {fecha}{categoria}.txt en Gist">☁️ Gist</button>
                         <button class="tool-btn" onclick="toolCopy()">Copiar</button>
@@ -370,7 +382,13 @@
             
             <!-- HORARIO ESCOLAR -->
             <div class="card" id="card-schedule" draggable="true">
-                <h2>📅 Clases / Horario <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button></h2>
+                <h2>
+                    <span>📅 Clases / Horario</span>
+                    <div>
+                        <button class="btn-icon" onclick="toggleScheduleViewMode()" title="Cambiar Vista (Widget / Tabla Día)">📊</button>
+                        <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button>
+                    </div>
+                </h2>
                 <div class="schedule-widget" id="schedule-widget">
                     <div class="sch-status">Calculando...</div>
                 </div>
@@ -499,7 +517,7 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v2.5 &bull; Custom Layout & Themes</div>
+        <div>DevWorkspace v2.7 &bull; Table Schedule View & Strict .txt Filter</div>
         <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON local]</a>
     </footer>
 
@@ -513,6 +531,7 @@
                 lastSync: null, 
                 timezone: 'local', 
                 theme: 'cyberpunk',
+                scheduleViewMode: 'widget', // 'widget' | 'table'
                 layout: {
                     colLeft: ['card-tasks', 'card-notes'],
                     colRight: ['card-schedule', 'card-pomodoro', 'card-sync', 'card-bookmarks', 'card-servers']
@@ -525,6 +544,7 @@
         if(!appData.settings) appData.settings = defaultData.settings;
         if(!appData.settings.timezone) appData.settings.timezone = 'local';
         if(!appData.settings.theme) appData.settings.theme = 'cyberpunk';
+        if(!appData.settings.scheduleViewMode) appData.settings.scheduleViewMode = 'widget';
         if(!appData.settings.layout) appData.settings.layout = defaultData.settings.layout;
         if(!appData.schedule) appData.schedule = [];
         if(!appData.bookmarks) appData.bookmarks = [];
@@ -535,6 +555,30 @@
         let currentNotesTab = 'general';
         let autoSyncTimer = null;
         let gistFilesCache = {};
+        let networkTimeOffset = 0;
+
+        async function syncNetworkTime() {
+            const statusEl = document.getElementById('net-status');
+            try {
+                const startTime = Date.now();
+                const res = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
+                if(res.ok) {
+                    const data = await res.json();
+                    const serverUtcMs = new Date(data.utc_datetime).getTime();
+                    const roundTripTime = (Date.now() - startTime) / 2;
+                    const accurateServerTime = serverUtcMs + roundTripTime;
+                    
+                    networkTimeOffset = accurateServerTime - Date.now();
+                    statusEl.textContent = "🌐 UTC Sincronizado";
+                    statusEl.style.color = "var(--accent-green)";
+                } else {
+                    throw new Error("Respuesta no OK");
+                }
+            } catch(e) {
+                statusEl.textContent = "⚠️ UTC Reloj Local";
+                statusEl.style.color = "var(--accent-yellow)";
+            }
+        }
 
         function saveData() { 
             localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); 
@@ -561,15 +605,16 @@
         }
 
         function getClockDate() {
-            const now = new Date();
+            const accurateNow = new Date(Date.now() + networkTimeOffset);
             const tz = appData.settings.timezone;
-            if(!tz || tz === 'local') return now;
+            
+            if(!tz || tz === 'local') return accurateNow;
             
             try {
-                const str = now.toLocaleString('en-US', { timeZone: tz });
+                const str = accurateNow.toLocaleString('en-US', { timeZone: tz });
                 return new Date(str);
             } catch(e) {
-                return now;
+                return accurateNow;
             }
         }
 
@@ -580,7 +625,7 @@
             updateScheduleWidget(dateObj);
         }, 1000);
 
-        // --- DRAG AND DROP / ORGANIZACIÓN PERSONALIZADA ---
+        // --- DRAG AND DROP ---
         function setupDragAndDrop() {
             const cards = document.querySelectorAll('.card');
             const columns = document.querySelectorAll('.col-left, .col-right');
@@ -650,7 +695,12 @@
             });
         }
 
-        // --- HORARIO ESCOLAR LOGIC ---
+        // --- HORARIO ESCOLAR LOGIC (WIDGET VS TABLA DEL DIA) ---
+        function toggleScheduleViewMode() {
+            appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table';
+            saveData();
+        }
+
         function updateScheduleWidget(now) {
             const widget = document.getElementById('schedule-widget');
             const day = now.getDay();
@@ -660,7 +710,7 @@
                 return;
             }
 
-            const todayClasses = appData.schedule.filter(c => parseInt(c.day) === day);
+            const todayClasses = appData.schedule.filter(c => parseInt(c.day) === day).sort((a,b) => a.start.localeCompare(b.start));
             if(todayClasses.length === 0) {
                 widget.innerHTML = `<div class="sch-status" style="margin:0;">Sin clases programadas para hoy</div>`;
                 return;
@@ -687,6 +737,40 @@
                 return `${h>0?h+'h ':''}${m.toString().padStart(2,'0')}m ${s.toString().padStart(2,'0')}s`;
             };
 
+            // MODO TABLA DE DIA COMPLETA CON LINEA DE HORA ACTUAL
+            if(appData.settings.scheduleViewMode === 'table') {
+                let html = `
+                    <table class="schedule-table-view">
+                        <thead>
+                            <tr>
+                                <th>HORA</th>
+                                <th>ASIGNATURA</th>
+                                <th>AULA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                todayClasses.forEach(c => {
+                    const startMins = parseInt(c.start.split(':')[0])*60 + parseInt(c.start.split(':')[1]);
+                    const endMins = parseInt(c.end.split(':')[0])*60 + parseInt(c.end.split(':')[1]);
+                    const isCurrent = (nowMins >= startMins && nowMins < endMins);
+
+                    html += `
+                        <tr class="${isCurrent ? 'current-class' : ''}">
+                            <td style="width:90px;">${c.start} - ${c.end}</td>
+                            <td>${c.subject} ${isCurrent ? '🟢' : ''}</td>
+                            <td style="color:var(--accent-violet);">${c.room || '-'}</td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table>`;
+                widget.innerHTML = html;
+                return;
+            }
+
+            // MODO WIDGET CLÁSICO (SUMMARY/COUNTDOWN)
             if(current) {
                 const endMins = parseInt(current.end.split(':')[0])*60 + parseInt(current.end.split(':')[1]);
                 const diffSecs = (endMins * 60) - (nowMins * 60 + nowSecs);
@@ -785,7 +869,7 @@
         function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
         function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
 
-        // --- SCRATCHPAD Y GIST SYNC NOTAS ---
+        // --- SCRATCHPAD Y GIST SYNC NOTAS (FILTRADO SOLO .TXT) ---
         function setNotesTab(tab) { 
             currentNotesTab = tab; 
             ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); 
@@ -802,7 +886,7 @@
         function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado al portapapeles."); }
         
         function getFormattedFilename(category) {
-            const now = new Date();
+            const now = getClockDate();
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             const dd = String(now.getDate()).padStart(2, '0');
@@ -882,10 +966,14 @@
 
                 if(res.ok) {
                     const data = await res.json();
-                    gistFilesCache = data.files;
-                    select.innerHTML = `<option value="">📂 Archivos Gist (${Object.keys(data.files).length})</option>`;
                     
-                    Object.keys(data.files).forEach(filename => {
+                    // FILTRADO ESTRICTO: Solo archivos terminados en .txt
+                    const txtFiles = Object.keys(data.files).filter(f => /\.txt$/i.test(f));
+                    
+                    gistFilesCache = data.files;
+                    select.innerHTML = `<option value="">📂 Archivos .txt (${txtFiles.length})</option>`;
+                    
+                    txtFiles.forEach(filename => {
                         const option = document.createElement('option');
                         option.value = filename;
                         option.textContent = filename;
@@ -1009,6 +1097,7 @@
 
         if(appData.settings.lastSync) document.getElementById('last-sync-time').textContent = `Última sinc: ${appData.settings.lastSync}`;
 
+        syncNetworkTime();
         applyLayoutState();
         setupDragAndDrop();
         renderAll(); 
