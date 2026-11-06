@@ -23,7 +23,7 @@
             --font-sans: 'Segoe UI', system-ui, sans-serif;
             --font-mono: 'Fira Code', 'Courier New', monospace;
             --radius: 8px;
-            --transition: all 0.25s ease-in-out;
+            --transition: border-color 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
         }
 
         /* TEMAS VISUALES */
@@ -129,21 +129,23 @@
         
         .col-left, .col-right { 
             display: flex; flex-direction: column; gap: 20px; min-height: 0; 
+            overflow-y: auto; overflow-x: hidden; padding-right: 5px;
         }
-        .col-left { overflow: hidden; }
-        .col-right { overflow-y: auto; overflow-x: hidden; padding-right: 10px; }
 
-        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-        /* --- CARDS & DRAG DROP --- */
+        /* --- CARDS RESIZABLES Y CON SCROLL PROPIO --- */
         .card { 
             background-color: var(--card-bg); border: 1px solid var(--card-border); 
             border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; 
             box-shadow: 0 8px 16px rgba(0,0,0,0.3); position: relative; transition: var(--transition);
             cursor: grab;
+            resize: vertical;
+            overflow: auto;
+            min-height: 150px;
         }
         .card:active { cursor: grabbing; }
         .card.dragging { opacity: 0.4; border: 2px dashed var(--accent-cyan); }
@@ -153,10 +155,13 @@
             font-family: var(--font-mono); font-size: 1.05rem; margin-bottom: 12px; 
             color: var(--accent-cyan); border-bottom: 1px dashed var(--card-border); 
             padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
+            flex-shrink: 0;
         }
-        
-        .tasks-card { flex: 0 0 auto; max-height: 45vh; } 
-        .notes-card { flex: 1; min-height: 0; }
+
+        .tasks-card, .notes-card { 
+            flex: none; 
+            max-height: none; 
+        }
 
         /* --- INPUTS & BUTTONS --- */
         input, textarea, select { 
@@ -202,7 +207,7 @@
         .empty-state { text-align: center; padding: 15px; color: var(--text-muted); font-family: var(--font-mono); font-style: italic; font-size: 0.8rem; border: 1px dashed var(--card-border); border-radius: 4px; }
 
         /* --- TASKS --- */
-        .task-filters { display: flex; gap: 8px; margin-bottom: 10px; }
+        .task-filters { display: flex; gap: 8px; margin-bottom: 10px; flex-shrink: 0; }
         .task-filters button { flex-grow: 1; padding: 4px; font-size: 0.75rem; border-color: var(--card-border); color: var(--text-muted); }
         .task-filters button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); }
         .task-item { cursor: pointer; border-left: 3px solid transparent; }
@@ -219,7 +224,7 @@
         .today { color: var(--accent-yellow); font-weight: bold; }
 
         /* --- SCRATCHPAD --- */
-        .scratchpad-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
+        .scratchpad-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
         .tabs { display: flex; gap: 5px; }
         .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 6px 12px; color: var(--text-muted); border-radius: 0; background: transparent; text-transform: none; }
         .tab-btn:hover { background: rgba(255,255,255,0.05); }
@@ -229,7 +234,7 @@
         .tool-btn { padding: 4px 8px; font-size: 0.7rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
         .tool-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
         .tool-btn-danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: transparent; }
-        .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); height: 100%; }
+        .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); min-height: 120px; }
         .notes-area:focus { border-color: var(--card-border); }
 
         /* --- HORARIO ESCOLAR & TABLA DE DIA --- */
@@ -296,7 +301,6 @@
             body { overflow: auto; height: auto; }
             .dashboard-container { grid-template-columns: 1fr; }
             .col-left, .col-right { overflow: visible; height: auto; }
-            .notes-card { min-height: 400px; }
         }
     </style>
 </head>
@@ -318,12 +322,12 @@
                 <select id="timezone-select" class="tz-select" onchange="changeTimezone(this.value)">
                     <option value="local">Local (Sistema)</option>
                     <option value="UTC">UTC (GMT+0)</option>
-                    <option value="Etc/GMT-1">UTC+1 (CET)</option>
-                    <option value="Etc/GMT-2">UTC+2 (EET)</option>
-                    <option value="Etc/GMT+4">UTC-4 (AST)</option>
-                    <option value="Etc/GMT+5">UTC-5 (EST)</option>
-                    <option value="Etc/GMT+6">UTC-6 (CST)</option>
-                    <option value="Etc/GMT+8">UTC-8 (PST)</option>
+                    <option value="Europe/Madrid">Madrid (CET/CEST)</option>
+                    <option value="Europe/London">Londres (GMT/BST)</option>
+                    <option value="America/New_York">Nueva York (EST/EDT)</option>
+                    <option value="America/Chicago">Chicago (CST/CDT)</option>
+                    <option value="America/Los_Angeles">Los Ángeles (PST/PDT)</option>
+                    <option value="Asia/Tokyo">Tokio (JST)</option>
                 </select>
             </div>
         </div>
@@ -342,7 +346,7 @@
                     <button id="filter-done" onclick="setTaskFilter('done')">Completadas</button>
                 </div>
                 <ul id="tasks-list"></ul>
-                <div style="display:flex; gap: 8px; margin-top: 10px; border-top: 1px dashed var(--card-border); padding-top:10px;">
+                <div style="display:flex; gap: 8px; margin-top: 10px; border-top: 1px dashed var(--card-border); padding-top:10px; flex-shrink: 0;">
                     <input type="text" id="task-text" placeholder="Nueva tarea..." style="flex-grow: 2; margin-bottom:0;" onkeypress="if(event.key==='Enter') addTask()">
                     <select id="task-priority" style="flex-grow: 1; margin-bottom:0;">
                         <option value="medium">🟠 Media</option>
@@ -517,7 +521,7 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v2.7 &bull; Table Schedule View & Strict .txt Filter</div>
+        <div>DevWorkspace v2.9 &bull; Fix Intl Timezone & Resizable Cards</div>
         <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON local]</a>
     </footer>
 
@@ -531,7 +535,7 @@
                 lastSync: null, 
                 timezone: 'local', 
                 theme: 'cyberpunk',
-                scheduleViewMode: 'widget', // 'widget' | 'table'
+                scheduleViewMode: 'widget',
                 layout: {
                     colLeft: ['card-tasks', 'card-notes'],
                     colRight: ['card-schedule', 'card-pomodoro', 'card-sync', 'card-bookmarks', 'card-servers']
@@ -598,7 +602,7 @@
             saveData();
         }
 
-        // --- MANEJO DE ZONA HORARIA Y RELOJ ---
+        // --- MANEJO DE ZONA HORARIA Y RELOJ (ROBUSTO CON INTL) ---
         function changeTimezone(tzVal) {
             appData.settings.timezone = tzVal;
             saveData();
@@ -608,12 +612,29 @@
             const accurateNow = new Date(Date.now() + networkTimeOffset);
             const tz = appData.settings.timezone;
             
-            if(!tz || tz === 'local') return accurateNow;
+            if (!tz || tz === 'local') return accurateNow;
             
             try {
-                const str = accurateNow.toLocaleString('en-US', { timeZone: tz });
-                return new Date(str);
-            } catch(e) {
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: tz,
+                    year: 'numeric',
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    second: 'numeric',
+                    hour12: false
+                });
+
+                const parts = formatter.formatToParts(accurateNow);
+                const map = {};
+                parts.forEach(p => { if (p.type !== 'literal') map[p.type] = parseInt(p.value, 10); });
+
+                if (map.hour === 24) map.hour = 0;
+
+                return new Date(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
+            } catch (e) {
+                console.error("Error calculando zona horaria:", e);
                 return accurateNow;
             }
         }
@@ -695,7 +716,7 @@
             });
         }
 
-        // --- HORARIO ESCOLAR LOGIC (WIDGET VS TABLA DEL DIA) ---
+        // --- HORARIO ESCOLAR LOGIC ---
         function toggleScheduleViewMode() {
             appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table';
             saveData();
@@ -737,7 +758,6 @@
                 return `${h>0?h+'h ':''}${m.toString().padStart(2,'0')}m ${s.toString().padStart(2,'0')}s`;
             };
 
-            // MODO TABLA DE DIA COMPLETA CON LINEA DE HORA ACTUAL
             if(appData.settings.scheduleViewMode === 'table') {
                 let html = `
                     <table class="schedule-table-view">
@@ -770,7 +790,6 @@
                 return;
             }
 
-            // MODO WIDGET CLÁSICO (SUMMARY/COUNTDOWN)
             if(current) {
                 const endMins = parseInt(current.end.split(':')[0])*60 + parseInt(current.end.split(':')[1]);
                 const diffSecs = (endMins * 60) - (nowMins * 60 + nowSecs);
@@ -869,7 +888,7 @@
         function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
         function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
 
-        // --- SCRATCHPAD Y GIST SYNC NOTAS (FILTRADO SOLO .TXT) ---
+        // --- SCRATCHPAD Y GIST SYNC NOTAS ---
         function setNotesTab(tab) { 
             currentNotesTab = tab; 
             ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); 
@@ -967,7 +986,6 @@
                 if(res.ok) {
                     const data = await res.json();
                     
-                    // FILTRADO ESTRICTO: Solo archivos terminados en .txt
                     const txtFiles = Object.keys(data.files).filter(f => /\.txt$/i.test(f));
                     
                     gistFilesCache = data.files;
