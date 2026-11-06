@@ -123,7 +123,7 @@
 
         /* --- LAYOUT GRID DRAGGABLE --- */
         .dashboard-container {
-            display: grid; grid-template-columns: 65% 1fr; gap: 20px;
+            display: grid; grid-template-columns: 60% 1fr; gap: 20px;
             flex-grow: 1; min-height: 0; 
         }
         
@@ -137,7 +137,7 @@
         ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-        /* --- CARDS RESIZABLES Y CON SCROLL PROPIO --- */
+        /* --- CARDS RESIZABLES Y AJUSTABLES --- */
         .card { 
             background-color: var(--card-bg); border: 1px solid var(--card-border); 
             border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; 
@@ -145,7 +145,9 @@
             cursor: grab;
             resize: vertical;
             overflow: auto;
-            min-height: 150px;
+            min-height: 180px;
+            width: 100%;
+            flex-shrink: 0;
         }
         .card:active { cursor: grabbing; }
         .card.dragging { opacity: 0.4; border: 2px dashed var(--accent-cyan); }
@@ -156,11 +158,6 @@
             color: var(--accent-cyan); border-bottom: 1px dashed var(--card-border); 
             padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
             flex-shrink: 0;
-        }
-
-        .tasks-card, .notes-card { 
-            flex: none; 
-            max-height: none; 
         }
 
         /* --- INPUTS & BUTTONS --- */
@@ -241,7 +238,7 @@
         .schedule-widget { 
             background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); 
             border-radius: 4px; padding: 12px; text-align: center;
-            display: flex; flex-direction: column; justify-content: center; min-height: 80px;
+            display: flex; flex-direction: column; justify-content: center; flex: 1; min-height: 80px;
         }
         .sch-status { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
         .sch-subject { font-size: 1.1rem; font-weight: bold; color: var(--accent-cyan); margin-bottom: 2px; }
@@ -338,7 +335,7 @@
         <!-- COLUMNA IZQUIERDA -->
         <div class="col-left" id="col-left">
             <!-- TAREAS & ENTREGAS -->
-            <div class="card tasks-card" id="card-tasks" draggable="true">
+            <div class="card" id="card-tasks" draggable="true">
                 <h2>📋 Tareas & Entregas <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
                 <div class="task-filters">
                     <button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button>
@@ -359,7 +356,7 @@
             </div>
 
             <!-- SCRATCHPAD -->
-            <div class="card notes-card" id="card-notes" draggable="true">
+            <div class="card" id="card-notes" draggable="true">
                 <h2>📝 Scratchpad <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
                 <div class="scratchpad-header">
                     <div class="tabs">
@@ -521,12 +518,11 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v2.9 &bull; Fix Intl Timezone & Resizable Cards</div>
+        <div>DevWorkspace v3.0 &bull; Full Grid Flexibility & Clock Fix</div>
         <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON local]</a>
     </footer>
 
     <script>
-        // --- ESTADO INICIAL COMPLETO Y SEGURO ---
         const defaultData = { 
             bookmarks: [], tasks: [], servers: [], schedule: [],
             notes: { general: "", comandos: "", clases: "" }, 
@@ -595,17 +591,17 @@
             el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
         }
 
-        // --- MANEJO DE TEMAS VISUALES ---
         function changeTheme(themeName) {
             appData.settings.theme = themeName;
             document.documentElement.setAttribute('data-theme', themeName);
             saveData();
         }
 
-        // --- MANEJO DE ZONA HORARIA Y RELOJ (ROBUSTO CON INTL) ---
+        // --- SISTEMA DE RELOJ Y ZONA HORARIA ROBUSTO ---
         function changeTimezone(tzVal) {
             appData.settings.timezone = tzVal;
             saveData();
+            updateClockDisplay();
         }
 
         function getClockDate() {
@@ -617,12 +613,8 @@
             try {
                 const formatter = new Intl.DateTimeFormat('en-US', {
                     timeZone: tz,
-                    year: 'numeric',
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: 'numeric',
-                    second: 'numeric',
+                    year: 'numeric', month: 'numeric', day: 'numeric',
+                    hour: 'numeric', minute: 'numeric', second: 'numeric',
                     hour12: false
                 });
 
@@ -634,17 +626,19 @@
 
                 return new Date(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
             } catch (e) {
-                console.error("Error calculando zona horaria:", e);
+                console.error("Error al calcular zona horaria:", e);
                 return accurateNow;
             }
         }
 
-        setInterval(() => {
+        function updateClockDisplay() {
             const dateObj = getClockDate();
             document.getElementById('time').textContent = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
             document.getElementById('date').textContent = dateObj.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
             updateScheduleWidget(dateObj);
-        }, 1000);
+        }
+
+        setInterval(updateClockDisplay, 1000);
 
         // --- DRAG AND DROP ---
         function setupDragAndDrop() {
@@ -1102,7 +1096,7 @@
             renderTasks(); 
             renderBookmarks(); 
             renderServers(); 
-            updateScheduleWidget(getClockDate()); 
+            updateClockDisplay();
         }
 
         // --- INICIALIZACIÓN ---
