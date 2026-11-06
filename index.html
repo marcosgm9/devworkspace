@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace - Dashboard Ultimate v4.0</title>
+    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.0</title>
     <style>
         :root {
             --bg-color: #05080f;
@@ -21,7 +21,7 @@
             --text-muted: #64748b;
             --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
             --font-mono: 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
-            --radius: 8px;
+            --radius: 6px;
             --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
@@ -61,42 +61,110 @@
         
         body { 
             background-color: var(--bg-color); color: var(--text-main); 
-            font-family: var(--font-sans); padding: 15px 20px; 
-            height: 100vh; overflow: hidden; 
-            display: flex; flex-direction: column; gap: 15px;
+            font-family: var(--font-sans); padding: 8px 14px; 
+            height: 100vh; overflow: hidden;
+            display: flex; flex-direction: column; gap: 8px;
         }
 
-        /* --- HEADER CORREGIDO Y ALINEADO --- */
+        /* --- HEADER ULTRA-COMPACTO & SIN DESBORDAMIENTOS --- */
         header { 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            padding-bottom: 12px; 
+            padding-bottom: 6px; 
             border-bottom: 1px solid var(--card-border);
             flex-shrink: 0; 
-            gap: 15px;
+            gap: 10px;
+            flex-wrap: nowrap;
+            height: 42px;
         }
 
         .header-title-zone { 
             display: flex; 
             align-items: center; 
-            gap: 12px; 
+            gap: 8px; 
+            flex-shrink: 0;
         }
 
         h1 { 
             color: var(--accent-cyan); 
             font-family: var(--font-mono); 
-            font-size: 1.6rem;
+            font-size: 1.25rem;
             text-shadow: 0 0 8px var(--accent-cyan-glow); 
             letter-spacing: 0.5px;
             margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .badge-version {
+            font-size: 0.62rem;
+            background: var(--accent-violet-glow);
+            color: var(--accent-violet);
+            border: 1px solid var(--accent-violet);
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-weight: normal;
         }
 
         .header-controls { 
             display: flex; 
             align-items: center; 
-            gap: 12px; 
+            gap: 6px; 
             flex-wrap: nowrap; 
+            flex-shrink: 0;
+        }
+
+        .header-controls select,
+        .header-controls button {
+            width: auto !important;
+            height: 30px;
+            margin-bottom: 0 !important;
+        }
+
+        .btn-quick-search {
+            background: rgba(0,0,0,0.4); 
+            border: 1px solid var(--card-border);
+            color: var(--text-muted); 
+            font-family: var(--font-mono); 
+            font-size: 0.72rem;
+            padding: 0 8px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .btn-quick-search:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        kbd { background: rgba(255,255,255,0.1); border-radius: 3px; padding: 1px 4px; font-size: 0.6rem; }
+
+        .theme-select {
+            width: 125px !important;
+            background: rgba(0,0,0,0.4); 
+            border: 1px solid var(--card-border);
+            color: var(--accent-cyan); 
+            font-family: var(--font-mono); 
+            font-size: 0.72rem;
+            padding: 3px 6px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            outline: none;
+        }
+
+        .tz-select {
+            width: 135px !important;
+            background: rgba(0,0,0,0.4); 
+            border: 1px solid var(--card-border);
+            color: var(--accent-cyan); 
+            font-family: var(--font-mono); 
+            font-size: 0.72rem;
+            padding: 3px 6px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            outline: none;
         }
 
         #clock-container { 
@@ -105,11 +173,15 @@
             flex-direction: column; 
             align-items: flex-end; 
             justify-content: center;
-            line-height: 1.1;
+            line-height: 1.05;
+            padding-left: 8px;
+            border-left: 1px solid var(--card-border);
+            min-width: 85px;
+            flex-shrink: 0;
         }
 
         #time { 
-            font-size: 1.5rem; 
+            font-size: 1.15rem; 
             font-family: var(--font-mono); 
             color: var(--accent-violet); 
             font-weight: bold; 
@@ -119,79 +191,83 @@
 
         #date { 
             color: var(--text-muted); 
-            font-size: 0.7rem; 
+            font-size: 0.58rem; 
             text-transform: uppercase; 
             letter-spacing: 0.5px; 
-            margin-top: 2px; 
+            margin-top: 1px; 
         }
 
         .net-status { 
-            font-size: 0.6rem; 
+            font-size: 0.55rem; 
             font-family: var(--font-mono); 
             color: var(--text-muted); 
         }
-
-        .tz-select, .theme-select {
-            background: rgba(0,0,0,0.4); 
-            border: 1px solid var(--card-border);
-            color: var(--accent-cyan); 
-            font-family: var(--font-mono); 
-            font-size: 0.75rem;
-            padding: 6px 10px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            outline: none;
-            height: 34px;
-            margin-bottom: 0;
-        }
-
-        .btn-quick-search {
-            background: rgba(0,0,0,0.4); 
-            border: 1px solid var(--card-border);
-            color: var(--text-muted); 
-            font-family: var(--font-mono); 
-            font-size: 0.75rem;
-            padding: 0 10px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            display: flex; 
-            align-items: center; 
-            gap: 6px;
-            height: 34px;
-        }
-        .btn-quick-search:hover { 
-            border-color: var(--accent-cyan); 
-            color: var(--accent-cyan); 
-        }
-        kbd { background: rgba(255,255,255,0.1); border-radius: 3px; padding: 1px 4px; font-size: 0.65rem; }
 
         .custom-theme-panel {
             display: none; 
             align-items: center; 
-            gap: 6px; 
+            gap: 4px; 
             background: rgba(0,0,0,0.4); 
-            padding: 4px 8px; 
+            padding: 2px 5px; 
             border: 1px dashed var(--accent-cyan); 
             border-radius: var(--radius);
-            height: 34px;
+            height: 30px;
         }
         .custom-theme-panel input[type="color"] {
-            width: 22px; height: 22px; padding: 0; border: none; 
+            width: 18px; height: 18px; padding: 0; border: none; 
             background: transparent; cursor: pointer; border-radius: 3px;
         }
         .custom-theme-panel input[type="text"] {
-            width: 100px; margin-bottom: 0; font-size: 0.75rem; padding: 2px 6px;
+            width: 75px; margin-bottom: 0; font-size: 0.7rem; padding: 1px 4px;
         }
 
-        /* --- LAYOUT GRID DRAGGABLE --- */
+        /* --- BARRA DE FILTROS --- */
+        .view-filter-bar {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            overflow-x: auto;
+            padding: 0;
+            flex-shrink: 0;
+            height: 28px;
+        }
+        .view-pill {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--card-border);
+            color: var(--text-muted);
+            padding: 3px 8px;
+            border-radius: 14px;
+            font-size: 0.68rem;
+            font-family: var(--font-mono);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: var(--transition);
+        }
+        .view-pill:hover { border-color: var(--accent-cyan); color: var(--text-main); }
+        .view-pill.active {
+            background: var(--accent-cyan-glow);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            font-weight: bold;
+        }
+
+        /* --- GRID AJUSTADO A 100VH CON SCROLL INTERNO --- */
         .dashboard-container {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
-            flex-grow: 1; min-height: 0; height: calc(100vh - 120px);
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 10px;
+            flex: 1 1 0; 
+            min-height: 0;
+            overflow: hidden;
         }
         
         .col-left, .col-right { 
-            display: flex; flex-direction: column; gap: 15px; min-height: 0; 
-            overflow-y: auto; padding-right: 4px;
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            min-height: 0;
+            overflow-y: auto;
+            padding-right: 4px;
         }
 
         ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -200,126 +276,291 @@
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
         .card { 
-            background-color: var(--card-bg); border: 1px solid var(--card-border); 
-            border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25); position: relative;
-            cursor: grab; resize: vertical; overflow: hidden;
-            min-height: 140px; width: 100%; flex-shrink: 0;
+            background-color: var(--card-bg); 
+            border: 1px solid var(--card-border); 
+            border-radius: var(--radius); 
+            padding: 8px 12px; 
+            display: flex; 
+            flex-direction: column; 
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25); 
+            position: relative;
+            overflow: hidden;
+            width: 100%; 
+            flex-shrink: 0;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .card:active { cursor: grabbing; }
-        .card.dragging { opacity: 0.3; border: 2px dashed var(--accent-cyan); }
-        .card:hover { border-color: var(--accent-cyan); }
+        .card:hover { border-color: rgba(56, 189, 248, 0.4); }
+        .card.dragging { opacity: 0.35; border: 2px dashed var(--accent-cyan); }
+        .card.collapsed .card-body { display: none !important; }
+        .card.collapsed { padding-bottom: 6px; }
 
-        .card h2 { 
-            font-family: var(--font-mono); font-size: 0.95rem; margin-bottom: 10px; 
-            color: var(--accent-cyan); border-bottom: 1px dashed var(--card-border); 
-            padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
-            flex-shrink: 0; user-select: none;
+        .card-header { 
+            font-family: var(--font-mono); 
+            font-size: 0.82rem; 
+            margin-bottom: 6px; 
+            color: var(--accent-cyan); 
+            border-bottom: 1px dashed var(--card-border); 
+            padding-bottom: 4px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            flex-shrink: 0; 
+            user-select: none;
+        }
+        .card-title-text { display: flex; align-items: center; gap: 5px; font-weight: 600; }
+        .card-actions { display: flex; align-items: center; gap: 3px; }
+        .drag-handle { cursor: grab; color: var(--text-muted); font-size: 0.72rem; padding: 1px 3px; border-radius: 3px; }
+        .drag-handle:active { cursor: grabbing; }
+
+        .card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
         }
 
         input, textarea, select { 
-            width: 100%; background-color: rgba(0,0,0,0.3); border: 1px solid var(--card-border); 
-            color: var(--text-main); padding: 6px 8px; border-radius: 4px; font-family: var(--font-mono); 
-            font-size: 0.8rem; margin-bottom: 8px; outline: none; transition: var(--transition);
+            width: 100%; background-color: rgba(0,0,0,0.35); border: 1px solid var(--card-border); 
+            color: var(--text-main); padding: 4px 7px; border-radius: 4px; font-family: var(--font-mono); 
+            font-size: 0.75rem; outline: none; transition: var(--transition);
         }
-        input:focus, textarea:focus, select:focus { border-color: var(--accent-cyan); box-shadow: 0 0 5px var(--accent-cyan-glow); }
+        input:focus, textarea:focus, select:focus { 
+            border-color: var(--accent-cyan); 
+            box-shadow: 0 0 5px var(--accent-cyan-glow); 
+        }
 
         button { 
             background-color: transparent; border: 1px solid var(--accent-cyan); color: var(--accent-cyan); 
-            padding: 5px 8px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); 
-            font-weight: bold; transition: var(--transition); font-size: 0.75rem; text-transform: uppercase;
+            padding: 3px 7px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); 
+            font-weight: bold; transition: var(--transition); font-size: 0.7rem; text-transform: uppercase;
         }
         button:hover { background-color: var(--accent-cyan-glow); }
         .btn-violet { border-color: var(--accent-violet); color: var(--accent-violet); }
         .btn-violet:hover { background-color: var(--accent-violet-glow); }
         .btn-danger { border-color: var(--accent-red); color: var(--accent-red); }
         .btn-danger:hover { background-color: rgba(239, 68, 68, 0.15); }
+        .btn-green { border-color: var(--accent-green); color: var(--accent-green); }
+        .btn-green:hover { background-color: rgba(16, 185, 129, 0.15); }
         
-        .btn-icon { border: none; padding: 2px 4px; font-size: 0.9rem; color: var(--text-muted); background: transparent; }
+        .btn-icon { border: none; padding: 1px 3px; font-size: 0.8rem; color: var(--text-muted); background: transparent; }
         .btn-icon:hover { color: var(--text-main); background: transparent; transform: scale(1.1); }
-        .btn-toggle { border: 1px dashed var(--card-border); color: var(--text-muted); width: 100%; margin-top: 4px; font-size: 0.75rem; padding: 4px; }
+        .btn-toggle { border: 1px dashed var(--card-border); color: var(--text-muted); width: 100%; font-size: 0.7rem; padding: 3px; }
         .btn-toggle:hover { color: var(--text-main); border-color: var(--text-muted); background: rgba(255,255,255,0.03); }
         
-        .hidden-form { display: none; margin-top: 8px; border-top: 1px dashed var(--card-border); padding-top: 8px; }
+        .hidden-form { display: none; margin-top: 4px; border-top: 1px dashed var(--card-border); padding-top: 4px; }
 
-        ul { list-style: none; overflow-y: auto; padding-right: 4px; flex: 1; }
+        ul { list-style: none; overflow-y: auto; padding-right: 2px; flex: 1; }
         li { 
             display: flex; justify-content: space-between; align-items: center; 
-            padding: 6px 8px; border-bottom: 1px solid var(--card-border); 
-            background: rgba(255,255,255,0.01); margin-bottom: 3px; border-radius: 3px;
+            padding: 4px 6px; border-bottom: 1px solid var(--card-border); 
+            background: rgba(255,255,255,0.015); margin-bottom: 2px; border-radius: 3px;
+            font-size: 0.76rem;
         }
         li:last-child { border-bottom: none; }
-        li:hover { background: rgba(255,255,255,0.03); }
+        li:hover { background: rgba(255,255,255,0.04); }
 
         .item-content { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
-        .item-title { font-weight: 600; display: flex; align-items: center; gap: 6px; font-size: 0.85rem;}
-        .item-detail { font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
-        .btn-copy { font-size: 0.6rem; padding: 1px 4px; border: 1px solid var(--card-border); color: var(--accent-cyan); border-radius: 3px; }
-        .empty-state { text-align: center; padding: 10px; color: var(--text-muted); font-family: var(--font-mono); font-style: italic; font-size: 0.75rem; border: 1px dashed var(--card-border); border-radius: 4px; }
+        .item-title { font-weight: 600; display: flex; align-items: center; gap: 5px; font-size: 0.78rem;}
+        .item-detail { font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 1px; }
+        .btn-copy { font-size: 0.6rem; padding: 1px 4px; border: 1px solid var(--card-border); color: var(--accent-cyan); border-radius: 3px; background: rgba(0,0,0,0.3); }
+        .btn-copy:hover { border-color: var(--accent-cyan); }
+        .empty-state { text-align: center; padding: 8px; color: var(--text-muted); font-family: var(--font-mono); font-style: italic; font-size: 0.72rem; border: 1px dashed var(--card-border); border-radius: 4px; }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
-        .stat-box { background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 4px; padding: 6px 4px; }
-        .stat-val { font-size: 1.1rem; font-family: var(--font-mono); font-weight: bold; color: var(--accent-cyan); }
-        .stat-lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-family: var(--font-mono); }
+        /* --- STATS GRID --- */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; text-align: center; }
+        .stat-box { background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 4px; padding: 4px 2px; }
+        .stat-val { font-size: 1.05rem; font-family: var(--font-mono); font-weight: bold; color: var(--accent-cyan); }
+        .stat-lbl { font-size: 0.58rem; color: var(--text-muted); text-transform: uppercase; font-family: var(--font-mono); margin-top: 1px; }
 
-        .task-filters { display: flex; gap: 6px; margin-bottom: 8px; flex-shrink: 0; }
-        .task-filters button { flex: 1; padding: 3px; font-size: 0.7rem; border-color: var(--card-border); color: var(--text-muted); }
-        .task-filters button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        /* --- TASK FILTERS & BADGES --- */
+        .task-filters { display: flex; gap: 3px; margin-bottom: 2px; flex-shrink: 0; }
+        .task-filters button { flex: 1; padding: 2px; font-size: 0.65rem; border-color: var(--card-border); color: var(--text-muted); }
+        .task-filters button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: var(--accent-cyan-glow); }
         .task-item { cursor: pointer; border-left: 3px solid transparent; }
         .task-done { opacity: 0.45; }
         .task-done .item-title { text-decoration: line-through; }
         .prio-high { border-left-color: var(--accent-red); }
         .prio-medium { border-left-color: var(--accent-yellow); }
         .prio-low { border-left-color: var(--accent-blue); }
-        .badge { font-size: 0.55rem; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; font-weight: bold; }
+        .badge { font-size: 0.52rem; padding: 1px 3px; border-radius: 3px; text-transform: uppercase; font-weight: bold; }
         .bg-high { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
         .bg-medium { background: rgba(234, 179, 8, 0.15); color: var(--accent-yellow); }
         .bg-low { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
 
-        .scratchpad-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
-        .tabs { display: flex; gap: 4px; }
-        .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 4px 8px; color: var(--text-muted); background: transparent; text-transform: none; }
+        /* --- SCRATCHPAD & APUNTES --- */
+        .scratchpad-header { display: flex; justify-content: space-between; align-items: center; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+        .tabs { display: flex; gap: 2px; }
+        .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 2px 5px; color: var(--text-muted); background: transparent; text-transform: none; font-size: 0.7rem; }
         .tab-btn.active { color: var(--accent-violet); border-bottom-color: var(--accent-violet); font-weight: bold; }
-        .quick-tools { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-        .gist-file-select { width: auto; margin-bottom: 0; font-size: 0.7rem; padding: 3px 6px; color: var(--accent-cyan); border-color: var(--card-border); background: rgba(0,0,0,0.4); }
-        .tool-btn { padding: 3px 6px; font-size: 0.68rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
+        .quick-tools { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+        .gist-file-select { width: auto; margin-bottom: 0; font-size: 0.65rem; padding: 1px 4px; color: var(--accent-cyan); border-color: var(--card-border); background: rgba(0,0,0,0.4); }
+        .tool-btn { padding: 1px 4px; font-size: 0.62rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
         .tool-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
         .tool-btn-danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: transparent; }
-        .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); min-height: 100px; font-size: 0.8rem; }
+        .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); min-height: 80px; font-size: 0.75rem; }
 
+        /* --- HORARIO & POMODORO --- */
         .schedule-widget { 
             background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); 
-            border-radius: 4px; padding: 10px; text-align: center;
-            display: flex; flex-direction: column; justify-content: center; flex: 1; min-height: 70px;
+            border-radius: 4px; padding: 6px; text-align: center;
+            display: flex; flex-direction: column; justify-content: center; flex: 1; min-height: 50px;
         }
-        .sch-status { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
-        .sch-subject { font-size: 1rem; font-weight: bold; color: var(--accent-cyan); margin-bottom: 2px; }
-        .sch-room { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-violet); margin-bottom: 6px; }
-        .sch-countdown { font-family: var(--font-mono); font-size: 1.1rem; font-weight: bold; color: var(--accent-yellow); }
+        .sch-status { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 1px; }
+        .sch-subject { font-size: 0.9rem; font-weight: bold; color: var(--accent-cyan); margin-bottom: 1px; }
+        .sch-room { font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent-violet); margin-bottom: 3px; }
+        .sch-countdown { font-family: var(--font-mono); font-size: 0.95rem; font-weight: bold; color: var(--accent-yellow); }
 
-        .schedule-table-view { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.72rem; }
-        .schedule-table-view th { text-align: left; padding: 4px; border-bottom: 1px solid var(--card-border); color: var(--text-muted); }
-        .schedule-table-view td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.02); }
+        .schedule-table-view { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.68rem; }
+        .schedule-table-view th { text-align: left; padding: 3px; border-bottom: 1px solid var(--card-border); color: var(--text-muted); }
+        .schedule-table-view td { padding: 3px; border-bottom: 1px solid rgba(255,255,255,0.02); }
         .schedule-table-view tr.current-class td { color: var(--accent-cyan); font-weight: bold; }
 
-        #pomodoro-display { font-size: 2.2rem; font-family: var(--font-mono); text-align: center; color: var(--accent-cyan); margin: 2px 0 6px 0; font-weight: bold; }
-        .pomodoro-controls { display: flex; flex-direction: column; gap: 6px; }
+        #pomodoro-display { font-size: 1.6rem; font-family: var(--font-mono); text-align: center; color: var(--accent-cyan); margin: 0; font-weight: bold; line-height: 1.1; }
+        .pomodoro-controls { display: flex; flex-direction: column; gap: 4px; }
         .pomo-preset-row { display: flex; gap: 4px; justify-content: center; }
-        .pomo-preset-row select { width: 48%; margin-bottom: 0; font-size: 0.7rem; }
+        .pomo-preset-row select { width: 48%; margin-bottom: 0; font-size: 0.68rem; padding: 2px 4px; }
+        .pomo-target-info { font-size: 0.68rem; color: var(--accent-violet); text-align: center; font-family: var(--font-mono); min-height: 14px; }
 
-        .sync-status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--text-muted); margin-top: 8px; font-family: var(--font-mono); background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; }
-        .led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+        /* --- CLOUD SYNC & STATUS --- */
+        .sync-status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); background: rgba(0,0,0,0.2); padding: 3px 6px; border-radius: 4px; }
+        .led { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
         .led-green { background-color: var(--accent-green); box-shadow: 0 0 4px var(--accent-green); }
         .led-yellow { background-color: var(--accent-yellow); box-shadow: 0 0 4px var(--accent-yellow); }
         .led-red { background-color: var(--accent-red); box-shadow: 0 0 4px var(--accent-red); }
         .led-off { background-color: var(--card-border); }
-        .sync-row { display: flex; gap: 8px; margin-top: 4px; }
-        .auto-sync-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-main); cursor: pointer; font-family: var(--font-mono); }
+        .sync-row { display: flex; gap: 5px; }
+        .auto-sync-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; color: var(--text-main); cursor: pointer; font-family: var(--font-mono); }
 
-        .search-filter-input {
-            margin-bottom: 6px; font-size: 0.75rem; padding: 4px 6px; border-color: var(--card-border);
+        /* --- CALCULADORA DE CALIFICACIONES --- */
+        .grade-calc-subject {
+            background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
+            border-radius: 4px; padding: 6px; margin-bottom: 6px;
+        }
+        .grade-calc-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px dashed var(--card-border); padding-bottom: 3px; margin-bottom: 4px;
+        }
+        .grade-summary-badge { font-family: var(--font-mono); font-size: 0.68rem; padding: 1px 5px; border-radius: 3px; font-weight: bold; }
+        .badge-pass { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .badge-warn { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+        .badge-fail { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .eval-item-row { display: flex; gap: 4px; align-items: center; margin-bottom: 3px; font-size: 0.68rem; }
+        .eval-item-row input { margin-bottom: 0; padding: 2px 4px; }
+
+        /* --- GESTOR DE ENTREGAS --- */
+        .deadline-card-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 5px 7px; border-radius: 4px; margin-bottom: 3px;
+            background: rgba(0,0,0,0.25); border: 1px solid var(--card-border);
+            transition: var(--transition);
+        }
+        .deadline-card-item:hover { border-color: var(--accent-cyan); }
+        .urgent-pulse {
+            animation: pulseUrgent 1.6s infinite ease-in-out;
+            border-color: var(--accent-red) !important;
+            background: rgba(239, 68, 68, 0.1) !important;
+        }
+        @keyframes pulseUrgent {
+            0%, 100% { box-shadow: 0 0 0px var(--accent-red); }
+            50% { box-shadow: 0 0 6px rgba(239, 68, 68, 0.45); }
+        }
+        .urgent-warn {
+            border-color: var(--accent-yellow) !important;
+            background: rgba(234, 179, 8, 0.08) !important;
+        }
+        .countdown-pill {
+            font-family: var(--font-mono); font-size: 0.66rem; font-weight: bold;
+            padding: 1px 5px; border-radius: 3px; display: inline-flex; align-items: center; gap: 3px;
         }
 
+        /* --- SNIPPET & COMMAND LAB --- */
+        .snippet-grid {
+            display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; padding-right: 2px;
+        }
+        .snippet-box {
+            background: rgba(0,0,0,0.35); border: 1px solid var(--card-border);
+            border-radius: 4px; padding: 5px 7px; display: flex; flex-direction: column; gap: 3px;
+        }
+        .snippet-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; }
+        .snippet-tag {
+            font-size: 0.55rem; font-family: var(--font-mono); padding: 1px 3px; border-radius: 3px;
+            background: var(--accent-cyan-glow); color: var(--accent-cyan); border: 1px solid var(--accent-cyan);
+        }
+        .snippet-code {
+            font-family: var(--font-mono); font-size: 0.68rem; color: #a5f3fc;
+            background: rgba(0,0,0,0.4); padding: 3px 5px; border-radius: 3px;
+            white-space: pre-wrap; word-break: break-all; user-select: all;
+        }
+
+        /* --- SINTETIZADOR WEB AUDIO API --- */
+        .audio-player-widget {
+            display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.25);
+            border: 1px solid var(--card-border); border-radius: 4px; padding: 8px 10px;
+        }
+        .audio-controls-row {
+            display: flex; gap: 6px; align-items: center; justify-content: space-between;
+        }
+        .audio-wave-visualizer {
+            display: flex; align-items: center; justify-content: center; gap: 2px; height: 18px;
+        }
+        .audio-bar {
+            width: 3px; height: 5px; background: var(--card-border); border-radius: 2px;
+            transition: height 0.15s ease, background-color 0.2s;
+        }
+        .audio-playing .audio-bar {
+            background: var(--accent-cyan);
+            animation: soundWave 1.2s infinite ease-in-out alternate;
+        }
+        .audio-playing .audio-bar:nth-child(1) { animation-delay: 0.1s; }
+        .audio-playing .audio-bar:nth-child(2) { animation-delay: 0.3s; }
+        .audio-playing .audio-bar:nth-child(3) { animation-delay: 0.5s; }
+        .audio-playing .audio-bar:nth-child(4) { animation-delay: 0.2s; }
+        .audio-playing .audio-bar:nth-child(5) { animation-delay: 0.4s; }
+        @keyframes soundWave {
+            0% { height: 3px; }
+            100% { height: 16px; }
+        }
+
+        /* --- KANBAN --- */
+        .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+        .kanban-col {
+            background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
+            border-radius: 4px; padding: 5px; display: flex; flex-direction: column; min-height: 130px;
+        }
+        .kanban-col-title {
+            font-size: 0.68rem; font-family: var(--font-mono); color: var(--text-muted);
+            border-bottom: 1px solid var(--card-border); padding-bottom: 3px; margin-bottom: 4px;
+            display: flex; justify-content: space-between; align-items: center; font-weight: bold;
+        }
+        .kanban-card {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 3px; padding: 5px; margin-bottom: 3px; font-size: 0.68rem;
+            display: flex; flex-direction: column; gap: 2px; cursor: pointer;
+        }
+        .kanban-card:hover { border-color: var(--accent-cyan); }
+        .kanban-card-title { font-weight: 600; color: var(--text-main); }
+        .kanban-card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.58rem; color: var(--text-muted); font-family: var(--font-mono); }
+        .kanban-card-actions { display: flex; gap: 2px; justify-content: flex-end; margin-top: 2px; }
+
+        /* --- ESTADÍSTICAS --- */
+        .chart-container {
+            background: rgba(0,0,0,0.25); border: 1px solid var(--card-border);
+            border-radius: 4px; padding: 6px; display: flex; flex-direction: column; gap: 4px;
+        }
+        .svg-chart-bars {
+            display: flex; align-items: flex-end; justify-content: space-between; gap: 5px; height: 46px;
+            padding-top: 4px; border-bottom: 1px solid var(--card-border);
+        }
+        .chart-bar-col {
+            flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; gap: 1px;
+        }
+        .bar-fill {
+            width: 100%; max-width: 18px; background: var(--accent-cyan); border-radius: 2px 2px 0 0;
+            transition: height 0.3s ease; min-height: 2px;
+        }
+        .bar-label { font-size: 0.55rem; font-family: var(--font-mono); color: var(--text-muted); }
+
+        /* --- MODALES --- */
         .modal-overlay { 
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
             background: rgba(0,0,0,0.85); z-index: 1000; display: none; 
@@ -327,26 +568,34 @@
         }
         .modal-content { 
             background: var(--bg-color); border: 1px solid var(--accent-cyan); 
-            border-radius: var(--radius); width: 650px; max-width: 92vw; max-height: 85vh; 
-            display: flex; flex-direction: column; padding: 16px; 
+            border-radius: var(--radius); width: 660px; max-width: 94vw; max-height: 88vh; 
+            display: flex; flex-direction: column; padding: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.6);
         }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--card-border); }
-        .modal-body { overflow-y: auto; flex: 1; margin-bottom: 12px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--card-border); }
+        .modal-body { overflow-y: auto; flex: 1; margin-bottom: 8px; }
 
-        footer { padding-top: 8px; border-top: 1px solid var(--card-border); text-align: center; color: var(--text-muted); font-size: 0.7rem; display: flex; justify-content: space-between; flex-shrink: 0; }
+        footer { 
+            padding-top: 4px; border-top: 1px solid var(--card-border); 
+            text-align: center; color: var(--text-muted); font-size: 0.65rem; 
+            display: flex; justify-content: space-between; flex-shrink: 0; flex-wrap: wrap; gap: 6px;
+            height: 20px; align-items: center;
+        }
         
         @media (max-width: 900px) {
-            body { overflow: auto; height: auto; }
-            .dashboard-container { grid-template-columns: 1fr; height: auto; }
+            body { height: auto; min-height: 100vh; overflow-y: auto; }
+            header { flex-wrap: wrap; height: auto; }
+            .header-controls { flex-wrap: wrap; }
+            .dashboard-container { grid-template-columns: 1fr; overflow: visible; height: auto; }
             .col-left, .col-right { overflow: visible; }
         }
     </style>
 </head>
 <body>
 
+    <!-- HEADER ULTRA-COMPACTO -->
     <header>
         <div class="header-title-zone">
-            <h1>DevWorkspace_</h1>
+            <h1>DevWorkspace_ <span class="badge-version">v5.0 DAM/SMR</span></h1>
         </div>
         <div class="header-controls">
             <button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
@@ -361,214 +610,522 @@
             </select>
 
             <div id="custom-theme-panel" class="custom-theme-panel">
-                <input type="text" id="custom-theme-name" placeholder="Nombre Tema" title="Nombre de tu tema">
-                <input type="color" id="cp-bg" title="Fondo Principal">
-                <input type="color" id="cp-card" title="Fondo Tarjeta">
-                <input type="color" id="cp-border" title="Bordes">
-                <input type="color" id="cp-text" title="Texto Principal">
-                <input type="color" id="cp-cyan" title="Acento Cyan">
-                <input type="color" id="cp-violet" title="Acento Violeta">
+                <input type="text" id="custom-theme-name" placeholder="Nombre" title="Nombre del tema">
+                <input type="color" id="cp-bg" title="Fondo">
+                <input type="color" id="cp-card" title="Tarjeta">
+                <input type="color" id="cp-border" title="Borde">
+                <input type="color" id="cp-text" title="Texto">
+                <input type="color" id="cp-cyan" title="Cyan">
+                <input type="color" id="cp-violet" title="Violeta">
             </div>
 
             <select id="timezone-select" class="tz-select">
                 <option value="local">Local (Sistema)</option>
                 <option value="UTC">UTC (GMT+0)</option>
-                <option value="Europe/Madrid">Madrid (CET/CEST)</option>
-                <option value="Europe/London">Londres (GMT/BST)</option>
-                <option value="America/New_York">Nueva York (EST/EDT)</option>
-                <option value="America/Chicago">Chicago (CST/CDT)</option>
-                <option value="America/Los_Angeles">Los Ángeles (PST/PDT)</option>
+                <option value="Europe/Madrid">Madrid (CET)</option>
+                <option value="Europe/London">Londres (GMT)</option>
+                <option value="America/New_York">Nueva York (EST)</option>
+                <option value="America/Chicago">Chicago (CST)</option>
+                <option value="America/Los_Angeles">Los Ángeles (PST)</option>
                 <option value="Asia/Tokyo">Tokio (JST)</option>
             </select>
 
             <div id="clock-container">
-                <div id="time">00:00</div>
+                <div id="time">00:00:00</div>
                 <div id="date">--/--/----</div>
-                <div id="net-status" class="net-status">🌐 Sincronizando...</div>
+                <div id="net-status" class="net-status">🌐 Sincronizado</div>
             </div>
         </div>
     </header>
 
+    <!-- BARRA DE FILTRADO POR ÁREAS -->
+    <div class="view-filter-bar">
+        <span style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono); margin-right:2px;">Vistas:</span>
+        <button class="view-pill active" onclick="setDashboardView('all')">🚀 Todo</button>
+        <button class="view-pill" onclick="setDashboardView('study')">🎓 Academia & Estudio</button>
+        <button class="view-pill" onclick="setDashboardView('dev')">💻 Dev & SysAdmin Lab</button>
+        <button class="view-pill" onclick="setDashboardView('focus')">⚡ Foco & Productividad</button>
+        <div style="flex:1;"></div>
+        <button class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕ Colapsar/Expandir</button>
+    </div>
+
+    <!-- CONTENEDOR GRID CON COLUMNAS INDEPENDIENTES -->
     <div class="dashboard-container" id="dashboard-container">
+        
         <!-- COLUMNA IZQUIERDA -->
         <div class="col-left" id="col-left">
-            <div class="card" id="card-tasks" draggable="true">
-                <h2>📋 Tareas & Entregas <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
-                <div class="task-filters">
-                    <button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button>
-                    <button id="filter-pending" onclick="setTaskFilter('pending')">Pendientes</button>
-                    <button id="filter-done" onclick="setTaskFilter('done')">Completadas</button>
+
+            <!-- TARJETA: PLANIFICADOR KANBAN DE ESTUDIO -->
+            <div class="card" id="card-kanban" data-category="study">
+                <div class="card-header">
+                    <span class="card-title-text">📅 Kanban de Estudio</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-kanban')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-kanban')">⋮⋮</span>
+                    </div>
                 </div>
-                <ul id="tasks-list"></ul>
-                <div style="display:flex; gap: 6px; margin-top: 8px; border-top: 1px dashed var(--card-border); padding-top:8px; flex-shrink: 0;">
-                    <input type="text" id="task-text" placeholder="Nueva tarea..." style="flex: 2; margin-bottom:0;" onkeypress="if(event.key==='Enter') addTask()">
-                    <select id="task-priority" style="flex: 1; margin-bottom:0;">
-                        <option value="medium">🟠 Media</option>
-                        <option value="high">🔴 Alta</option>
-                        <option value="low">🔵 Baja</option>
-                    </select>
-                    <input type="date" id="task-date" style="flex: 1; margin-bottom:0;">
-                    <button onclick="addTask()">✚</button>
+                <div class="card-body">
+                    <div class="kanban-board">
+                        <div class="kanban-col">
+                            <div class="kanban-col-title">
+                                <span>📋 Por Estudiar</span>
+                                <span id="kanban-count-todo" style="color:var(--accent-cyan);">0</span>
+                            </div>
+                            <div id="kanban-list-todo" class="kanban-items-box"></div>
+                        </div>
+                        <div class="kanban-col">
+                            <div class="kanban-col-title">
+                                <span>⏳ En Proceso</span>
+                                <span id="kanban-count-doing" style="color:var(--accent-yellow);">0</span>
+                            </div>
+                            <div id="kanban-list-doing" class="kanban-items-box"></div>
+                        </div>
+                        <div class="kanban-col">
+                            <div class="kanban-col-title">
+                                <span>✅ Repasado</span>
+                                <span id="kanban-count-done" style="color:var(--accent-green);">0</span>
+                            </div>
+                            <div id="kanban-list-done" class="kanban-items-box"></div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn-toggle" onclick="toggleForm('form-kanban-add')">✚ Añadir Tema de Estudio</button>
+                    <div id="form-kanban-add" class="hidden-form">
+                        <input type="text" id="kanban-new-title" placeholder="Tema (ej: Polimorfismo y Clases Abstractas)">
+                        <div style="display:flex; gap:4px; margin-top:3px;">
+                            <input type="text" id="kanban-new-subject" placeholder="Asignatura (ej: PROG)" style="flex:1;">
+                            <select id="kanban-new-prio" style="width:95px;">
+                                <option value="high">🔴 Alta</option>
+                                <option value="medium" selected>🟠 Media</option>
+                                <option value="low">🔵 Baja</option>
+                            </select>
+                            <input type="number" id="kanban-new-pomos" min="1" max="10" value="2" title="Pomodoros estimados" style="width:55px;">
+                        </div>
+                        <button onclick="addKanbanTask()" class="btn-violet" style="width:100%; margin-top:4px;">Guardar Tarjeta</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="card" id="card-notes" draggable="true">
-                <h2>📝 Scratchpad <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
-                <div class="scratchpad-header">
-                    <div class="tabs">
-                        <button class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button>
-                        <button class="tab-btn" id="tab-comandos" onclick="setNotesTab('comandos')">Comandos</button>
-                        <button class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button>
+            <!-- TARJETA: CALCULADORA DE CALIFICACIONES PONDERADAS -->
+            <div class="card" id="card-grades" data-category="study">
+                <div class="card-header">
+                    <span class="card-title-text">🧮 Calculadora de Calificaciones Ponderadas</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-grades')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-grades')">⋮⋮</span>
                     </div>
-                    <div class="quick-tools">
-                        <select id="gist-file-selector" class="gist-file-select" onchange="loadSelectedGistFile(this.value)">
-                            <option value="">📂 Archivos Gist...</option>
+                </div>
+                <div class="card-body">
+                    <div id="grades-subjects-container" style="max-height: 240px; overflow-y:auto; padding-right:2px;"></div>
+                    
+                    <button class="btn-toggle" onclick="toggleForm('form-add-grade-subject')">✚ Añadir Módulo / Asignatura</button>
+                    <div id="form-add-grade-subject" class="hidden-form">
+                        <input type="text" id="new-grade-subj-name" placeholder="Nombre (ej: Programación / BBDD / Sistemas)">
+                        <div style="display:flex; gap:4px; margin-top:3px;">
+                            <input type="number" id="new-grade-subj-target" min="1" max="10" step="0.1" value="5.0" placeholder="Nota Deseada" style="flex:1;">
+                            <button onclick="addGradeSubject()" class="btn-green" style="flex:1;">Crear Módulo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA: GESTOR DE ENTREGAS Y EXÁMENES -->
+            <div class="card" id="card-deliveries" data-category="study">
+                <div class="card-header">
+                    <span class="card-title-text">⏳ Entregas & Exámenes con Cuenta Regresiva</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-deliveries')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-deliveries')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="task-filters">
+                        <button id="deliv-filter-all" class="active" onclick="setDeliveriesFilter('all')">Todos</button>
+                        <button id="deliv-filter-exam" onclick="setDeliveriesFilter('exam')">Exámenes</button>
+                        <button id="deliv-filter-practice" onclick="setDeliveriesFilter('practice')">Prácticas</button>
+                        <button id="deliv-filter-pending" onclick="setDeliveriesFilter('pending')">Pendientes</button>
+                    </div>
+
+                    <div id="deliveries-list" style="max-height: 210px; overflow-y:auto; padding-right:2px;"></div>
+
+                    <button class="btn-toggle" onclick="toggleForm('form-add-delivery')">✚ Añadir Fecha Límite</button>
+                    <div id="form-add-delivery" class="hidden-form">
+                        <input type="text" id="deliv-title" placeholder="Título (ej: Entrega Proyecto Trimestral)">
+                        <div style="display:flex; gap:4px; margin-top:3px;">
+                            <input type="text" id="deliv-subject" placeholder="Asignatura" style="flex:1;">
+                            <select id="deliv-type" style="width:105px;">
+                                <option value="Examen">📝 Examen</option>
+                                <option value="Práctica" selected>💻 Práctica</option>
+                                <option value="Proyecto">🚀 Proyecto</option>
+                                <option value="Tarea">📄 Tarea</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:4px; margin-top:3px;">
+                            <input type="datetime-local" id="deliv-datetime" style="flex:2;">
+                            <button onclick="addDelivery()" class="btn-violet" style="flex:1;">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA: TAREAS GENERALES -->
+            <div class="card" id="card-tasks" data-category="focus">
+                <div class="card-header">
+                    <span class="card-title-text">📋 Tareas Generales</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-tasks')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-tasks')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="task-filters">
+                        <button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button>
+                        <button id="filter-pending" onclick="setTaskFilter('pending')">Pendientes</button>
+                        <button id="filter-done" onclick="setTaskFilter('done')">Completadas</button>
+                    </div>
+                    <ul id="tasks-list" style="max-height: 140px;"></ul>
+                    <div style="display:flex; gap: 4px; margin-top: 3px; border-top: 1px dashed var(--card-border); padding-top:4px; flex-shrink: 0;">
+                        <input type="text" id="task-text" placeholder="Nueva tarea rápida..." style="flex: 2; margin-bottom:0;" onkeypress="if(event.key==='Enter') addTask()">
+                        <select id="task-priority" style="width:90px; margin-bottom:0;">
+                            <option value="medium">🟠 Media</option>
+                            <option value="high">🔴 Alta</option>
+                            <option value="low">🔵 Baja</option>
                         </select>
-                        <button class="tool-btn btn-violet" onclick="saveCurrentNoteToGist()" title="Subir / Guardar en Gist">☁️ Guardar Gist</button>
-                        <button class="tool-btn tool-btn-danger" onclick="deleteSelectedGistFile()" title="Eliminar archivo del Gist remoto">🗑️ Borrar Gist</button>
-                        <button class="tool-btn" onclick="toolCopy()">Copiar</button>
-                        <button class="tool-btn" onclick="toolDownload()">Descargar</button>
+                        <input type="date" id="task-date" style="width:105px; margin-bottom:0;">
+                        <button onclick="addTask()">✚</button>
                     </div>
                 </div>
-                <textarea id="scratchpad" class="notes-area" placeholder="Escribe notas rápidas aquí..."></textarea>
             </div>
 
-            <div class="card" id="card-sticky" draggable="true" style="min-height: 110px;">
-                <h2>📌 Sticky Note / Buffer Rápido <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
-                <textarea id="sticky-note-input" class="notes-area" style="min-height: 60px; background: rgba(255,255,255,0.015);" placeholder="Cosas temporales sin guardar (pegar IP, comandos sueltos, etc.)..."></textarea>
+            <!-- TARJETA: SCRATCHPAD & APUNTES -->
+            <div class="card" id="card-notes" data-category="dev">
+                <div class="card-header">
+                    <span class="card-title-text">📝 Scratchpad & Apuntes</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-notes')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-notes')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="scratchpad-header">
+                        <div class="tabs">
+                            <button class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button>
+                            <button class="tab-btn" id="tab-comandos" onclick="setNotesTab('comandos')">Comandos</button>
+                            <button class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button>
+                        </div>
+                        <div class="quick-tools">
+                            <select id="gist-file-selector" class="gist-file-select" onchange="loadSelectedGistFile(this.value)">
+                                <option value="">📂 Gist...</option>
+                            </select>
+                            <button class="tool-btn btn-violet" onclick="saveCurrentNoteToGist()" title="Subir a Gist">☁️ Guardar</button>
+                            <button class="tool-btn tool-btn-danger" onclick="deleteSelectedGistFile()" title="Borrar de Gist">🗑️ Borrar</button>
+                            <button class="tool-btn" onclick="toolCopy()">Copiar</button>
+                            <button class="tool-btn" onclick="toolDownload()">Descargar</button>
+                        </div>
+                    </div>
+                    <textarea id="scratchpad" class="notes-area" placeholder="Escribe apuntes, dudas o snippets rápidos aquí..."></textarea>
+                </div>
             </div>
+
+            <!-- TARJETA: STICKY BUFFER -->
+            <div class="card" id="card-sticky" data-category="dev" style="min-height: 75px;">
+                <div class="card-header">
+                    <span class="card-title-text">📌 Sticky Note / Buffer Temporal</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-sticky')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-sticky')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <textarea id="sticky-note-input" class="notes-area" style="min-height: 50px; background: rgba(255,255,255,0.015);" placeholder="Pegar IPs temporales, tokens o credenciales de laboratorio..."></textarea>
+                </div>
+            </div>
+
         </div>
 
         <!-- COLUMNA DERECHA -->
         <div class="col-right" id="col-right">
-            <div class="card" id="card-stats" draggable="true" style="min-height: 100px;">
-                <h2>📊 Estadísticas del Workspace <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <div id="stat-tasks" class="stat-val">0%</div>
-                        <div class="stat-lbl">Tareas Hechas</div>
+
+            <!-- TARJETA: ESTADÍSTICAS AVANZADAS DEL ESTUDIANTE -->
+            <div class="card" id="card-study-stats" data-category="focus">
+                <div class="card-header">
+                    <span class="card-title-text">📈 Métricas & Progreso del Estudiante</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="resetStudyStats()" title="Reiniciar Métricas a 0">🔄</button>
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-study-stats')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-study-stats')">⋮⋮</span>
                     </div>
-                    <div class="stat-box">
-                        <div id="stat-bm" class="stat-val">0</div>
-                        <div class="stat-lbl">Enlaces</div>
+                </div>
+                <div class="card-body">
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div id="stat-focus-today" class="stat-val">0m</div>
+                            <div class="stat-lbl">Foco Hoy</div>
+                        </div>
+                        <div class="stat-box">
+                            <div id="stat-focus-total" class="stat-val">0h</div>
+                            <div class="stat-lbl">Total Foco</div>
+                        </div>
+                        <div class="stat-box">
+                            <div id="stat-streak" class="stat-val">🔥 0d</div>
+                            <div class="stat-lbl">Racha</div>
+                        </div>
+                        <div class="stat-box">
+                            <div id="stat-ratio" class="stat-val">0%</div>
+                            <div class="stat-lbl">Completadas</div>
+                        </div>
                     </div>
-                    <div class="stat-box">
-                        <div id="stat-srv" class="stat-val">0</div>
-                        <div class="stat-lbl">Servidores</div>
+
+                    <div class="chart-container">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:0.62rem; color:var(--text-muted); font-family:var(--font-mono);">Histórico de Estudio (Últimos 7 días)</span>
+                            <span id="chart-week-sum" style="font-size:0.62rem; color:var(--accent-cyan); font-family:var(--font-mono);">0 min</span>
+                        </div>
+                        <div class="svg-chart-bars" id="study-bars-container"></div>
+                    </div>
+
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <input type="number" id="manual-study-mins" min="5" max="300" placeholder="+Minutos" style="width:85px; margin-bottom:0;">
+                        <button onclick="addManualStudyTime()" class="btn-violet" style="flex:1;">+ Registrar Estudio Offline</button>
                     </div>
                 </div>
             </div>
 
-            <div class="card" id="card-schedule" draggable="true">
-                <h2>
-                    <span>📅 Clases / Horario</span>
-                    <div>
-                        <button class="btn-icon" onclick="toggleScheduleViewMode()" title="Cambiar Vista">📊</button>
+            <!-- TARJETA: POMODORO PRO -->
+            <div class="card" id="card-pomodoro" data-category="focus">
+                <div class="card-header">
+                    <span class="card-title-text">⏱️ Pomodoro Pro</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-pomodoro')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-pomodoro')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="pomodoro-display">25:00</div>
+                    <div id="pomodoro-target" class="pomo-target-info">Objetivo: Sesión Libre</div>
+                    <div class="pomodoro-controls">
+                        <div class="pomo-preset-row">
+                            <select id="pomo-focus-time">
+                                <option value="15">🎯 15 Min Foco</option>
+                                <option value="25" selected>🎯 25 Min Foco</option>
+                                <option value="45">🎯 45 Min Foco</option>
+                                <option value="60">🎯 60 Min Foco</option>
+                            </select>
+                            <select id="pomo-break-time">
+                                <option value="5" selected>☕ 5 Min Break</option>
+                                <option value="10">☕ 10 Min Break</option>
+                                <option value="15">☕ 15 Min Break</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            <button onclick="startCustomPomodoro('focus')" style="flex:1;">Iniciar Foco</button>
+                            <button onclick="startCustomPomodoro('break')" class="btn-violet" style="flex:1;">Break</button>
+                            <button onclick="stopPomodoro()" style="color: var(--text-muted); border-color: var(--card-border);">◼</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA: REPRODUCTOR DE RUIDO BLANCO / BINAURAL -->
+            <div class="card" id="card-audio" data-category="focus">
+                <div class="card-header">
+                    <span class="card-title-text">🎧 Ruido Blanco / Lofi & Ondas Binaurales</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-audio')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-audio')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="audio-player-widget">
+                        <div class="audio-controls-row">
+                            <select id="audio-sound-type" style="flex:2; margin-bottom:0;" onchange="handleAudioTypeChange(this.value)">
+                                <option value="brown">🟤 Ruido Marrón (Enfoque Profundo)</option>
+                                <option value="pink">🌸 Ruido Rosa (Suave / Lluvia)</option>
+                                <option value="white">⚪ Ruido Blanco (Aislamiento)</option>
+                                <option value="rain">🌧️ Lluvia Sintética Relajante</option>
+                                <option value="binaural-alpha">🧠 Ondas Alfa 10Hz (Concentración)</option>
+                                <option value="binaural-theta">🧘 Ondas Theta 6Hz (Memoria / Calma)</option>
+                            </select>
+                            
+                            <div class="audio-wave-visualizer" id="audio-visualizer">
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                            </div>
+
+                            <button id="btn-audio-toggle" onclick="toggleNoiseGenerator()" style="width:65px;">▶ Play</button>
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono);">Volumen:</span>
+                            <input type="range" id="audio-volume" min="0" max="100" value="40" style="flex:1; cursor:pointer;" oninput="updateAudioVolume(this.value)">
+                            <span id="audio-vol-text" style="font-size:0.65rem; font-family:var(--font-mono); color:var(--accent-cyan); width:28px;">40%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA: SNIPPET & COMMAND LAB -->
+            <div class="card" id="card-snippets" data-category="dev">
+                <div class="card-header">
+                    <span class="card-title-text">💻 Snippet & Command Lab</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-snippets')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-snippets')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div style="display:flex; gap:4px; margin-bottom:2px;">
+                        <input type="text" id="snippet-search" placeholder="🔍 Buscar comando o snippet..." oninput="renderSnippets()" style="margin-bottom:0;">
+                        <select id="snippet-filter-cat" style="width:120px; margin-bottom:0;" onchange="renderSnippets()">
+                            <option value="all">Todas categorías</option>
+                            <option value="Linux">🐧 Linux / Bash</option>
+                            <option value="PowerShell">⚡ PowerShell</option>
+                            <option value="Git">🐙 Git</option>
+                            <option value="Docker">🐳 Docker</option>
+                            <option value="SQL">🗄️ SQL</option>
+                            <option value="Java">☕ Java</option>
+                            <option value="Custom">⭐ Mis Snippets</option>
+                        </select>
+                    </div>
+
+                    <div class="snippet-grid" id="snippet-list-container"></div>
+
+                    <button class="btn-toggle" onclick="toggleForm('form-add-snippet')">✚ Añadir Snippet Personalizado</button>
+                    <div id="form-add-snippet" class="hidden-form">
+                        <input type="text" id="snip-new-title" placeholder="Título (ej: Backup BBDD MySQL)">
+                        <div style="display:flex; gap:4px; margin-top:3px;">
+                            <input type="text" id="snip-new-cat" placeholder="Categoría" style="width:110px;">
+                            <input type="text" id="snip-new-cmd" placeholder="Comando..." style="flex:1;">
+                        </div>
+                        <button onclick="addCustomSnippet()" class="btn-violet" style="width:100%; margin-top:4px;">Guardar Snippet</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA: CLASES / HORARIO -->
+            <div class="card" id="card-schedule" data-category="study">
+                <div class="card-header">
+                    <span class="card-title-text">📅 Horario & Clases</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleScheduleViewMode()" title="Cambiar Vista Tabla/Widget">📊</button>
                         <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button>
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-schedule')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-schedule')">⋮⋮</span>
                     </div>
-                </h2>
-                <div class="schedule-widget" id="schedule-widget">
-                    <div class="sch-status">Calculando...</div>
                 </div>
-            </div>
-
-            <div class="card" id="card-pomodoro" draggable="true">
-                <h2>⏱️ Pomodoro Pro</h2>
-                <div id="pomodoro-display">25:00</div>
-                <div class="pomodoro-controls">
-                    <div class="pomo-preset-row">
-                        <select id="pomo-focus-time">
-                            <option value="15">🎯 15 M Foco</option>
-                            <option value="25" selected>🎯 25 M Foco</option>
-                            <option value="45">🎯 45 M Foco</option>
-                        </select>
-                        <select id="pomo-break-time">
-                            <option value="5" selected>☕ 5 M Break</option>
-                            <option value="10">☕ 10 M Break</option>
-                        </select>
-                    </div>
-                    <div style="display:flex; gap:6px;">
-                        <button onclick="startCustomPomodoro('focus')" style="flex:1;">Iniciar Foco</button>
-                        <button onclick="startCustomPomodoro('break')" class="btn-violet" style="flex:1;">Break</button>
-                        <button onclick="stopPomodoro()" style="color: var(--text-muted); border-color: var(--card-border);">◼</button>
+                <div class="card-body">
+                    <div class="schedule-widget" id="schedule-widget">
+                        <div class="sch-status">Calculando horario...</div>
                     </div>
                 </div>
             </div>
 
-            <div class="card" id="card-sync" draggable="true">
-                <h2>☁️ GitHub Sync <button class="btn-icon" onclick="toggleForm('gist-settings')">⚙️</button></h2>
-                <div id="gist-settings" class="hidden-form">
-                    <input type="password" id="sync-token" placeholder="GitHub PAT">
-                    <input type="text" id="sync-gist" placeholder="Gist ID">
-                </div>
-                <label class="auto-sync-toggle">
-                    <input type="checkbox" id="auto-sync-check" onchange="toggleAutoSync()"> Auto-Sincronización
-                </label>
-                <div class="sync-row">
-                    <button onclick="pushToCloud(false)" style="flex: 1;">⬆️ Subir</button>
-                    <button onclick="pullFromCloud()" class="btn-violet" style="flex: 1;">⬇️ Bajar</button>
-                </div>
-                <div class="sync-status-bar">
-                    <span id="cloud-log"><span class="led led-off" id="sync-led"></span> Listo</span>
-                    <span id="last-sync-time">Última: Nunca</span>
-                </div>
-            </div>
-
-            <div class="card" id="card-bookmarks" draggable="true">
-                <h2>🔖 Enlaces</h2>
-                <input type="text" id="bm-search-filter" class="search-filter-input" placeholder="🔍 Buscar enlace..." oninput="renderBookmarks()">
-                <ul id="bookmarks-list"></ul>
-                <button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
-                <div id="form-bookmarks" class="hidden-form">
-                    <input type="text" id="bm-name" placeholder="Nombre">
-                    <input type="url" id="bm-url" placeholder="URL">
-                    <button onclick="addBookmark()" style="width:100%">Guardar</button>
-                </div>
-            </div>
-
-            <div class="card" id="card-servers" draggable="true">
-                <h2>🖥️ Servidores</h2>
-                <input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Buscar servidor..." oninput="renderServers()">
-                <ul id="servers-list"></ul>
-                <button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
-                <div id="form-servers" class="hidden-form">
-                    <input type="text" id="srv-name" placeholder="Nombre">
-                    <div style="display:flex; gap:6px;">
-                        <input type="text" id="srv-ip" placeholder="IP / Dominio" style="flex: 1;">
-                        <input type="text" id="srv-creds" placeholder="Creds" style="width: 90px;">
+            <!-- TARJETA: ENLACES -->
+            <div class="card" id="card-bookmarks" data-category="dev">
+                <div class="card-header">
+                    <span class="card-title-text">🔖 Enlaces & Documentación</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-bookmarks')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-bookmarks')">⋮⋮</span>
                     </div>
-                    <button onclick="addServer()" class="btn-violet" style="width:100%">Guardar</button>
+                </div>
+                <div class="card-body">
+                    <input type="text" id="bm-search-filter" class="search-filter-input" placeholder="🔍 Filtrar enlaces..." oninput="renderBookmarks()">
+                    <ul id="bookmarks-list" style="max-height: 120px;"></ul>
+                    <button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
+                    <div id="form-bookmarks" class="hidden-form">
+                        <input type="text" id="bm-name" placeholder="Nombre">
+                        <input type="url" id="bm-url" placeholder="https://...">
+                        <button onclick="addBookmark()" style="width:100%; margin-top:3px;">Guardar</button>
+                    </div>
                 </div>
             </div>
+
+            <!-- TARJETA: SERVIDORES & LABS -->
+            <div class="card" id="card-servers" data-category="dev">
+                <div class="card-header">
+                    <span class="card-title-text">🖥️ Servidores & VMs</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-servers')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-servers')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Filtrar servidores..." oninput="renderServers()">
+                    <ul id="servers-list" style="max-height: 120px;"></ul>
+                    <button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
+                    <div id="form-servers" class="hidden-form">
+                        <input type="text" id="srv-name" placeholder="Nombre">
+                        <div style="display:flex; gap:4px; margin-top:3px;">
+                            <input type="text" id="srv-ip" placeholder="IP / Host" style="flex: 1;">
+                            <input type="text" id="srv-creds" placeholder="Credenciales" style="width: 90px;">
+                        </div>
+                        <button onclick="addServer()" class="btn-violet" style="width:100%; margin-top:4px;">Guardar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA: GITHUB SYNC -->
+            <div class="card" id="card-sync" data-category="focus">
+                <div class="card-header">
+                    <span class="card-title-text">☁️ Sincronización GitHub Gist</span>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="toggleForm('gist-settings')" title="Configuración">⚙️</button>
+                        <button class="btn-icon" onclick="toggleCardCollapse('card-sync')">_</button>
+                        <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-sync')">⋮⋮</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="gist-settings" class="hidden-form">
+                        <input type="password" id="sync-token" placeholder="GitHub Personal Access Token">
+                        <input type="text" id="sync-gist" placeholder="Gist ID" style="margin-top:3px;">
+                    </div>
+                    <label class="auto-sync-toggle">
+                        <input type="checkbox" id="auto-sync-check" onchange="toggleAutoSync()"> Auto-Sincronización en cambios
+                    </label>
+                    <div class="sync-row">
+                        <button onclick="pushToCloud(false)" style="flex: 1;">⬆️ Subir</button>
+                        <button onclick="pullFromCloud()" class="btn-violet" style="flex: 1;">⬇️ Bajar</button>
+                    </div>
+                    <div class="sync-status-bar">
+                        <span id="cloud-log"><span class="led led-off" id="sync-led"></span> Listo</span>
+                        <span id="last-sync-time">Última: Nunca</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <!-- MODAL BUSCADOR GLOBAL (CTRL + K) -->
     <div class="modal-overlay" id="global-search-modal">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content" style="max-width: 520px;">
             <div class="modal-header">
-                <h2>🔍 Buscador Global</h2>
+                <h2 style="font-size:0.95rem; font-family:var(--font-mono); color:var(--accent-cyan);">🔍 Buscador Global</h2>
                 <button class="btn-icon" onclick="closeGlobalSearch()">✖</button>
             </div>
-            <input type="text" id="global-search-input" placeholder="Escribe para buscar tareas, enlaces o servidores..." oninput="filterGlobalSearch()">
+            <input type="text" id="global-search-input" placeholder="Buscar entregas, tareas, comandos, enlaces o notas..." oninput="filterGlobalSearch()">
             <div class="modal-body">
                 <ul id="global-search-results"></ul>
             </div>
         </div>
     </div>
 
-    <!-- MODAL EDITOR DE HORARIO -->
+    <!-- MODAL EDITOR DE HORARIO SEMANAL -->
     <div class="modal-overlay" id="schedule-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>⚙️ Editor de Horario Semanal</h2>
+                <h2 style="font-size:0.95rem; font-family:var(--font-mono); color:var(--accent-cyan);">⚙️ Editor de Horario Semanal</h2>
                 <button class="btn-icon" onclick="closeScheduleModal()" style="font-size: 1.1rem;">✖</button>
             </div>
             <div class="modal-body">
-                <div style="display:flex; gap: 6px; margin-bottom: 15px; align-items: flex-end; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px solid var(--card-border);">
-                    <div style="flex:1;">
-                        <label style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono);">Día</label>
-                        <select id="sch-add-day" style="margin-bottom:0;">
+                <div style="display:flex; gap: 4px; margin-bottom: 10px; align-items: flex-end; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; border: 1px solid var(--card-border); flex-wrap:wrap;">
+                    <div style="flex:1; min-width:80px;">
+                        <label style="font-size:0.62rem; color:var(--text-muted); font-family:var(--font-mono);">Día</label>
+                        <select id="sch-add-day">
                             <option value="1">Lunes</option>
                             <option value="2">Martes</option>
                             <option value="3">Miércoles</option>
@@ -577,41 +1134,43 @@
                         </select>
                     </div>
                     <div>
-                        <label style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono);">Inicio</label>
-                        <input type="time" id="sch-add-start" style="margin-bottom:0; width:85px;">
+                        <label style="font-size:0.62rem; color:var(--text-muted); font-family:var(--font-mono);">Inicio</label>
+                        <input type="time" id="sch-add-start" style="width:75px;">
                     </div>
                     <div>
-                        <label style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono);">Fin</label>
-                        <input type="time" id="sch-add-end" style="margin-bottom:0; width:85px;">
+                        <label style="font-size:0.62rem; color:var(--text-muted); font-family:var(--font-mono);">Fin</label>
+                        <input type="time" id="sch-add-end" style="width:75px;">
                     </div>
-                    <div style="flex:2;">
-                        <label style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono);">Asignatura</label>
-                        <input type="text" id="sch-add-subject" placeholder="Asignatura" style="margin-bottom:0;">
+                    <div style="flex:2; min-width:110px;">
+                        <label style="font-size:0.62rem; color:var(--text-muted); font-family:var(--font-mono);">Asignatura</label>
+                        <input type="text" id="sch-add-subject" placeholder="Asignatura">
                     </div>
-                    <div style="flex:1;">
-                        <label style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono);">Aula</label>
-                        <input type="text" id="sch-add-room" placeholder="Aula" style="margin-bottom:0;">
+                    <div style="flex:1; min-width:65px;">
+                        <label style="font-size:0.62rem; color:var(--text-muted); font-family:var(--font-mono);">Aula</label>
+                        <input type="text" id="sch-add-room" placeholder="Aula">
                     </div>
-                    <button onclick="addScheduleClass()" class="btn-violet" style="height: 31px;">✚</button>
+                    <button onclick="addScheduleClass()" class="btn-violet" style="height: 29px;">✚</button>
                 </div>
                 <div id="schedule-list-editor"></div>
             </div>
             <div style="display:flex; justify-content:space-between;">
                 <button class="btn-danger" onclick="clearSchedule()">Limpiar Horario</button>
-                <button class="btn-violet" onclick="closeScheduleModal()">Cerrar</button>
+                <button class="btn-violet" onclick="closeScheduleModal()">Listo</button>
             </div>
         </div>
     </div>
 
+    <!-- FOOTER -->
     <footer>
-        <div>DevWorkspace v4.0 &bull; Ultimate Edition</div>
+        <div>DevWorkspace v5.0 Ultimate &bull; DAM / DAW / SMR / Uni Suite</div>
         <div>
-            <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none; margin-right: 10px;">[Exportar JSON]</a>
+            <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none; margin-right: 12px;">[Exportar JSON]</a>
             <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" style="color:var(--accent-violet); text-decoration:none;">[Importar JSON]</a>
             <input type="file" id="import-json-input" style="display:none;" accept=".json" onchange="importData(event)">
         </div>
     </footer>
 
+    <!-- SCRIPT PRINCIPAL AUDITADO Y OPTIMIZADO -->
     <script>
         function debounce(func, wait) {
             let timeout;
@@ -623,61 +1182,178 @@
         }
 
         const defaultData = { 
-            bookmarks: [], tasks: [], servers: [], schedule: [], stickyNote: "",
+            bookmarks: [
+                { id: 1, name: "GitHub", url: "https://github.com" },
+                { id: 2, name: "MDN Web Docs", url: "https://developer.mozilla.org" },
+                { id: 3, name: "DevDocs API", url: "https://devdocs.io" }
+            ], 
+            tasks: [], 
+            servers: [
+                { id: 1, name: "Debian Lab DAM", ip: "192.168.1.150", creds: "student / pass" }
+            ], 
+            schedule: [], 
+            stickyNote: "",
             notes: { general: "", comandos: "", clases: "" }, 
+            grades: [
+                {
+                    id: 1,
+                    subject: "Programación (Java)",
+                    target: 5.0,
+                    finalWeight: 40,
+                    items: [
+                        { id: 101, name: "Práctica 1 (POO)", grade: 8.5, weight: 25 },
+                        { id: 102, name: "Examen Parcial 1", grade: 6.0, weight: 35 }
+                    ]
+                },
+                {
+                    id: 2,
+                    subject: "Bases de Datos (SQL)",
+                    target: 5.0,
+                    finalWeight: 50,
+                    items: [
+                        { id: 201, name: "Consultas & Normalización", grade: 7.2, weight: 50 }
+                    ]
+                }
+            ],
+            deliveries: [
+                { id: 1, title: "Práctica 2: Consultas Multitabla", subject: "Bases de Datos", type: "Práctica", dueDate: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 16), done: false },
+                { id: 2, title: "Examen Parcial Tema 3-5", subject: "Programación", type: "Examen", dueDate: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 16), done: false }
+            ],
+            snippets: [],
+            studyKanban: [
+                { id: 1, title: "Herencia y Polimorfismo en Java", subject: "PROG", col: "doing", pomos: 4, donePomos: 2, priority: "high" },
+                { id: 2, title: "Diagramas E/R y Normalización 3FN", subject: "BBDD", col: "todo", pomos: 3, donePomos: 0, priority: "high" },
+                { id: 3, title: "Configuración Servidor DHCP en Linux", subject: "SIST", col: "done", pomos: 2, donePomos: 2, priority: "medium" }
+            ],
+            studyStats: {
+                todayFocusMinutes: 0,
+                totalFocusMinutes: 0,
+                lastDate: new Date().toISOString().slice(0, 10),
+                streakDays: 0,
+                history: []
+            },
             settings: { 
                 autoSync: false, lastSync: null, timezone: 'local', theme: 'cyberpunk',
                 customTheme: { name: 'Mi Tema', bg: '#05080f', card: '#0d131f', border: '#1e293b', text: '#f8fafc', cyan: '#38bdf8', violet: '#a855f7' },
                 scheduleViewMode: 'widget',
+                activeDashboardView: 'all',
+                collapsedCards: [],
                 layout: {
-                    colLeft: ['card-tasks', 'card-notes', 'card-sticky'],
-                    colRight: ['card-stats', 'card-schedule', 'card-pomodoro', 'card-sync', 'card-bookmarks', 'card-servers']
+                    colLeft: ['card-kanban', 'card-grades', 'card-deliveries', 'card-tasks', 'card-notes', 'card-sticky'],
+                    colRight: ['card-study-stats', 'card-pomodoro', 'card-audio', 'card-snippets', 'card-schedule', 'card-bookmarks', 'card-servers', 'card-sync']
                 }
             } 
         };
         
-        let appData = JSON.parse(localStorage.getItem('devWorkspaceData')) || defaultData;
-        appData.notes = appData.notes || defaultData.notes;
-        appData.settings = appData.settings || defaultData.settings;
-        appData.settings.customTheme = appData.settings.customTheme || defaultData.settings.customTheme;
-        appData.settings.layout = appData.settings.layout || defaultData.settings.layout;
-        appData.stickyNote = appData.stickyNote || "";
+        let appData = defaultData;
+        try {
+            const stored = localStorage.getItem('devWorkspaceData');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                appData = { ...defaultData, ...parsed };
+                appData.notes = { ...defaultData.notes, ...(parsed.notes || {}) };
+                appData.settings = { ...defaultData.settings, ...(parsed.settings || {}) };
+                appData.settings.customTheme = { ...defaultData.settings.customTheme, ...(parsed.settings?.customTheme || {}) };
+                appData.settings.layout = { ...defaultData.settings.layout, ...(parsed.settings?.layout || {}) };
+                appData.studyStats = { ...defaultData.studyStats, ...(parsed.studyStats || {}) };
+                if (!appData.settings.statsResetDone) {
+                    appData.studyStats = {
+                        todayFocusMinutes: 0,
+                        totalFocusMinutes: 0,
+                        lastDate: new Date().toISOString().slice(0, 10),
+                        streakDays: 0,
+                        history: []
+                    };
+                    appData.settings.statsResetDone = true;
+                }
+                if (!Array.isArray(appData.grades)) appData.grades = defaultData.grades;
+                if (!Array.isArray(appData.deliveries)) appData.deliveries = defaultData.deliveries;
+                if (!Array.isArray(appData.snippets)) appData.snippets = defaultData.snippets;
+                appData.snippets = (appData.snippets || []).filter(s => s.isCustom);
+                if (!Array.isArray(appData.studyKanban)) appData.studyKanban = defaultData.studyKanban;
+            }
+        } catch(e) {
+            console.error("Error al cargar localStorage:", e);
+            appData = defaultData;
+        }
 
         let currentTaskFilter = 'all';
+        let currentDelivFilter = 'all';
         let currentNotesTab = 'general';
         let autoSyncTimer = null;
         let gistFilesCache = {};
-        let networkTimeOffset = 0;
-        let cachedFormatter = null;
-        let cachedTz = null;
+        let activePomoTask = null;
+        let pomoInterval = null;
+        let countdownInterval = null;
 
-        async function syncNetworkTime() {
-            const statusEl = document.getElementById('net-status');
-            try {
-                const startTime = Date.now();
-                const res = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
-                if(res.ok) {
-                    const data = await res.json();
-                    const serverUtcMs = new Date(data.utc_datetime).getTime();
-                    networkTimeOffset = (serverUtcMs + ((Date.now() - startTime) / 2)) - Date.now();
-                    statusEl.textContent = "🌐 UTC Sincronizado";
-                    statusEl.style.color = "var(--accent-green)";
+        function checkDailyStreak() {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            if (appData.studyStats.lastDate !== todayStr) {
+                const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                if (appData.studyStats.lastDate < yesterday) {
+                    appData.studyStats.streakDays = 0;
                 }
-            } catch(e) {
-                statusEl.textContent = "⚠️ UTC Reloj Local";
-                statusEl.style.color = "var(--accent-yellow)";
+                appData.studyStats.todayFocusMinutes = 0;
+                appData.studyStats.lastDate = todayStr;
+                saveData(false);
             }
         }
 
-        function saveData() { 
-            localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); 
-            renderAll(); 
-            triggerAutoSync(); 
+        function saveData(triggerSync = true) { 
+            try {
+                localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); 
+            } catch(e) {
+                console.error("Error de persistencia:", e);
+            }
+            if (triggerSync) triggerAutoSync(); 
         }
 
         function toggleForm(id) { 
             const el = document.getElementById(id); 
-            el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
+            if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
+        }
+
+        function toggleCardCollapse(cardId) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            card.classList.toggle('collapsed');
+            
+            if (!appData.settings.collapsedCards) appData.settings.collapsedCards = [];
+            if (card.classList.contains('collapsed')) {
+                if (!appData.settings.collapsedCards.includes(cardId)) appData.settings.collapsedCards.push(cardId);
+            } else {
+                appData.settings.collapsedCards = appData.settings.collapsedCards.filter(id => id !== cardId);
+            }
+            saveData(false);
+        }
+
+        function toggleAllCards() {
+            const cards = document.querySelectorAll('.card');
+            const shouldCollapse = [...cards].some(c => !c.classList.contains('collapsed'));
+            cards.forEach(c => {
+                if (shouldCollapse) c.classList.add('collapsed');
+                else c.classList.remove('collapsed');
+            });
+            appData.settings.collapsedCards = shouldCollapse ? [...cards].map(c => c.id) : [];
+            saveData(false);
+        }
+
+        function setDashboardView(viewKey) {
+            appData.settings.activeDashboardView = viewKey;
+            document.querySelectorAll('.view-pill').forEach(btn => btn.classList.remove('active'));
+            const targetBtn = [...document.querySelectorAll('.view-pill')].find(b => b.getAttribute('onclick')?.includes(viewKey));
+            if (targetBtn) targetBtn.classList.add('active');
+
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                const cat = card.getAttribute('data-category');
+                if (viewKey === 'all' || cat === viewKey) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            saveData(false);
         }
 
         function changeTheme(themeName) {
@@ -692,7 +1368,7 @@
                 clearCustomInlineStyles();
                 document.documentElement.setAttribute('data-theme', themeName);
             }
-            saveData();
+            saveData(false);
         }
 
         function applyCustomThemeStyles() {
@@ -733,21 +1409,23 @@
                 violet: document.getElementById('cp-violet').value
             };
             applyCustomThemeStyles();
-            saveData();
+            saveData(false);
         }, 150);
+
+        let cachedFormatter = null;
+        let cachedTz = null;
 
         function changeTimezone(tzVal) {
             appData.settings.timezone = tzVal;
             cachedFormatter = null;
-            saveData();
+            saveData(false);
             updateClockDisplay();
         }
 
         function getClockDate() {
-            const accurateNow = new Date(Date.now() + networkTimeOffset);
+            const now = new Date();
             const tz = appData.settings.timezone;
-            
-            if (!tz || tz === 'local') return accurateNow;
+            if (!tz || tz === 'local') return now;
             
             try {
                 if (!cachedFormatter || cachedTz !== tz) {
@@ -758,34 +1436,40 @@
                     });
                 }
                 const map = {};
-                cachedFormatter.formatToParts(accurateNow).forEach(p => { if (p.type !== 'literal') map[p.type] = parseInt(p.value, 10); });
+                cachedFormatter.formatToParts(now).forEach(p => { if (p.type !== 'literal') map[p.type] = parseInt(p.value, 10); });
                 if (map.hour === 24) map.hour = 0;
                 return new Date(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
             } catch (e) {
-                return accurateNow;
+                return now;
             }
         }
 
         function updateClockDisplay() {
             const dateObj = getClockDate();
-            document.getElementById('time').textContent = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-            document.getElementById('date').textContent = dateObj.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+            document.getElementById('time').textContent = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            document.getElementById('date').textContent = dateObj.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
             updateScheduleWidget(dateObj);
         }
         setInterval(updateClockDisplay, 1000);
 
+        let draggedCardId = null;
+
+        function handleDragStart(e, cardId) {
+            draggedCardId = cardId;
+            const card = document.getElementById(cardId);
+            if (card) card.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', cardId);
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
         function setupDragAndDrop() {
             const container = document.getElementById('dashboard-container');
-            container.addEventListener('dragstart', e => {
-                if(e.target.classList.contains('card')) {
-                    e.target.classList.add('dragging');
-                    e.dataTransfer.setData('text/plain', e.target.id);
-                }
-            });
-
-            container.addEventListener('dragend', e => {
-                if(e.target.classList.contains('card')) {
-                    e.target.classList.remove('dragging');
+            
+            document.addEventListener('dragend', () => {
+                if (draggedCardId) {
+                    const card = document.getElementById(draggedCardId);
+                    if (card) card.classList.remove('dragging');
+                    draggedCardId = null;
                     saveLayoutState();
                 }
             });
@@ -820,40 +1504,897 @@
                 colLeft: [...document.querySelectorAll('#col-left .card')].map(c => c.id),
                 colRight: [...document.querySelectorAll('#col-right .card')].map(c => c.id)
             };
-            localStorage.setItem('devWorkspaceData', JSON.stringify(appData));
-            triggerAutoSync();
+            saveData(false);
         }
 
         function applyLayoutState() {
             const layout = appData.settings.layout || defaultData.settings.layout;
             const colLeftEl = document.getElementById('col-left');
             const colRightEl = document.getElementById('col-right');
-            layout.colLeft.forEach(id => { const card = document.getElementById(id); if(card) colLeftEl.appendChild(card); });
-            layout.colRight.forEach(id => { const card = document.getElementById(id); if(card) colRightEl.appendChild(card); });
+            
+            const placedIds = new Set();
+            (layout.colLeft || []).forEach(id => {
+                const card = document.getElementById(id);
+                if(card) { colLeftEl.appendChild(card); placedIds.add(id); }
+            });
+            (layout.colRight || []).forEach(id => {
+                const card = document.getElementById(id);
+                if(card) { colRightEl.appendChild(card); placedIds.add(id); }
+            });
+
+            document.querySelectorAll('.card').forEach((card, idx) => {
+                if (!placedIds.has(card.id)) {
+                    if (idx % 2 === 0) colLeftEl.appendChild(card);
+                    else colRightEl.appendChild(card);
+                }
+            });
+
+            (appData.settings.collapsedCards || []).forEach(cardId => {
+                const card = document.getElementById(cardId);
+                if (card) card.classList.add('collapsed');
+            });
         }
 
-        function updateStats() {
-            const tasks = appData.tasks || [];
-            const done = tasks.filter(t => t.done).length;
-            const taskPct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
-            
-            document.getElementById('stat-tasks').textContent = `${taskPct}%`;
-            document.getElementById('stat-bm').textContent = (appData.bookmarks || []).length;
-            document.getElementById('stat-srv').textContent = (appData.servers || []).length;
+        // --- SINTETIZADOR WEB AUDIO API ---
+        class NoiseSynth {
+            constructor() {
+                this.ctx = null;
+                this.source = null;
+                this.gainNode = null;
+                this.oscL = null;
+                this.oscR = null;
+                this.filter = null;
+                this.isPlaying = false;
+                this.currentType = 'brown';
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContextClass();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            createNoiseBuffer(type) {
+                const bufferSize = this.ctx.sampleRate * 4;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+
+                if (type === 'white') {
+                    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                } else if (type === 'brown') {
+                    let lastOut = 0.0;
+                    for (let i = 0; i < bufferSize; i++) {
+                        const white = Math.random() * 2 - 1;
+                        data[i] = (lastOut + (0.02 * white)) / 1.02;
+                        lastOut = data[i];
+                        data[i] *= 3.5;
+                    }
+                } else if (type === 'pink' || type === 'rain') {
+                    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+                    for (let i = 0; i < bufferSize; i++) {
+                        const white = Math.random() * 2 - 1;
+                        b0 = 0.99886 * b0 + white * 0.0555179;
+                        b1 = 0.99332 * b1 + white * 0.0750759;
+                        b2 = 0.96900 * b2 + white * 0.1538520;
+                        b3 = 0.86650 * b3 + white * 0.3104856;
+                        b4 = 0.55000 * b4 + white * 0.5329522;
+                        b5 = -0.7616 * b5 - white * 0.0168980;
+                        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+                        b6 = white * 0.115926;
+                    }
+                }
+                return buffer;
+            }
+
+            play(type, volumePct) {
+                this.init();
+                this.stop();
+                this.currentType = type;
+
+                this.gainNode = this.ctx.createGain();
+                const vol = Math.max(0.01, Math.min(1, volumePct / 100));
+                this.gainNode.gain.setValueAtTime(vol, this.ctx.currentTime);
+                this.gainNode.connect(this.ctx.destination);
+
+                if (type.startsWith('binaural')) {
+                    const diff = type === 'binaural-alpha' ? 10 : 6;
+                    const baseFreq = 210;
+
+                    const merger = this.ctx.createChannelMerger(2);
+                    this.oscL = this.ctx.createOscillator();
+                    this.oscR = this.ctx.createOscillator();
+                    this.oscL.type = 'sine';
+                    this.oscR.type = 'sine';
+                    this.oscL.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+                    this.oscR.frequency.setValueAtTime(baseFreq + diff, this.ctx.currentTime);
+
+                    this.oscL.connect(merger, 0, 0);
+                    this.oscR.connect(merger, 0, 1);
+                    merger.connect(this.gainNode);
+
+                    this.oscL.start();
+                    this.oscR.start();
+                } else if (type === 'rain') {
+                    const buffer = this.createNoiseBuffer('rain');
+                    this.source = this.ctx.createBufferSource();
+                    this.source.buffer = buffer;
+                    this.source.loop = true;
+
+                    this.filter = this.ctx.createBiquadFilter();
+                    this.filter.type = 'lowpass';
+                    this.filter.frequency.setValueAtTime(850, this.ctx.currentTime);
+
+                    this.source.connect(this.filter);
+                    this.filter.connect(this.gainNode);
+                    this.source.start();
+                } else {
+                    const buffer = this.createNoiseBuffer(type);
+                    this.source = this.ctx.createBufferSource();
+                    this.source.buffer = buffer;
+                    this.source.loop = true;
+                    this.source.connect(this.gainNode);
+                    this.source.start();
+                }
+
+                this.isPlaying = true;
+                document.getElementById('audio-visualizer').classList.add('audio-playing');
+                document.getElementById('btn-audio-toggle').textContent = '⏹ Stop';
+                document.getElementById('btn-audio-toggle').classList.add('btn-violet');
+            }
+
+            setVolume(volumePct) {
+                if (this.gainNode && this.ctx) {
+                    const vol = Math.max(0.001, Math.min(1, volumePct / 100));
+                    this.gainNode.gain.setValueAtTime(vol, this.ctx.currentTime);
+                }
+            }
+
+            stop() {
+                if (this.source) {
+                    try { this.source.stop(); } catch(e){}
+                    this.source.disconnect();
+                    this.source = null;
+                }
+                if (this.oscL) {
+                    try { this.oscL.stop(); } catch(e){}
+                    this.oscL.disconnect();
+                    this.oscL = null;
+                }
+                if (this.oscR) {
+                    try { this.oscR.stop(); } catch(e){}
+                    this.oscR.disconnect();
+                    this.oscR = null;
+                }
+                if (this.gainNode) {
+                    this.gainNode.disconnect();
+                    this.gainNode = null;
+                }
+                this.isPlaying = false;
+                const vis = document.getElementById('audio-visualizer');
+                if (vis) vis.classList.remove('audio-playing');
+                const btn = document.getElementById('btn-audio-toggle');
+                if (btn) {
+                    btn.textContent = '▶ Play';
+                    btn.classList.remove('btn-violet');
+                }
+            }
         }
 
-        function toggleScheduleViewMode() { appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table'; saveData(); }
+        const audioSynth = new NoiseSynth();
 
-        function updateScheduleWidget(now) {
-            const widget = document.getElementById('schedule-widget');
-            const day = now.getDay();
-            
-            if(day === 0 || day === 6 || !appData.schedule || appData.schedule.length === 0) {
-                widget.innerHTML = `<div class="sch-status" style="margin:0;">${(!appData.schedule || appData.schedule.length === 0) ? 'Sin horario (Pulsa ⚙️ para editar)' : 'Fin de semana libre 🎉'}</div>`;
+        function toggleNoiseGenerator() {
+            if (audioSynth.isPlaying) {
+                audioSynth.stop();
+            } else {
+                const type = document.getElementById('audio-sound-type').value;
+                const vol = parseInt(document.getElementById('audio-volume').value, 10);
+                audioSynth.play(type, vol);
+            }
+        }
+
+        function updateAudioVolume(val) {
+            document.getElementById('audio-vol-text').textContent = `${val}%`;
+            audioSynth.setVolume(parseInt(val, 10));
+        }
+
+        function handleAudioTypeChange(newType) {
+            if (audioSynth.isPlaying) {
+                const vol = parseInt(document.getElementById('audio-volume').value, 10);
+                audioSynth.play(newType, vol);
+            }
+        }
+
+        function playChimeAlert() {
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContextClass();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            } catch(e){}
+        }
+
+        // --- CALCULADORA DE CALIFICACIONES ---
+        function renderGradesCalculator() {
+            const container = document.getElementById('grades-subjects-container');
+            if (!container) return;
+
+            if (!appData.grades || appData.grades.length === 0) {
+                container.innerHTML = `<div class="empty-state">No hay asignaturas registradas. Añade tu primer módulo abajo.</div>`;
                 return;
             }
 
-            const todayClasses = appData.schedule.filter(c => parseInt(c.day) === day).sort((a,b) => a.start.localeCompare(b.start));
+            container.innerHTML = appData.grades.map(subj => {
+                const items = subj.items || [];
+                const currentWeight = items.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);
+                const currentPoints = items.reduce((sum, item) => sum + ((parseFloat(item.grade) || 0) * ((parseFloat(item.weight) || 0) / 100)), 0);
+                const target = parseFloat(subj.target) || 5.0;
+                const remainingWeight = Math.max(0, 100 - currentWeight);
+                
+                let neededGrade = 0;
+                let statusBadge = '';
+                
+                if (currentWeight >= 100) {
+                    const finalGrade = currentPoints.toFixed(2);
+                    if (finalGrade >= 5) statusBadge = `<span class="grade-summary-badge badge-pass">Aprobado (${finalGrade})</span>`;
+                    else statusBadge = `<span class="grade-summary-badge badge-fail">Suspenso (${finalGrade})</span>`;
+                } else if (remainingWeight > 0) {
+                    neededGrade = (target - currentPoints) / (remainingWeight / 100);
+                    if (neededGrade <= 0) {
+                        statusBadge = `<span class="grade-summary-badge badge-pass">Aprobado asegurado (${currentPoints.toFixed(2)})</span>`;
+                    } else if (neededGrade > 10) {
+                        statusBadge = `<span class="grade-summary-badge badge-fail">Necesitas ${neededGrade.toFixed(2)} (Imposible)</span>`;
+                    } else {
+                        statusBadge = `<span class="grade-summary-badge badge-warn">Necesitas un ${neededGrade.toFixed(2)} en el resto (${remainingWeight}%)</span>`;
+                    }
+                }
+
+                return `
+                <div class="grade-calc-subject">
+                    <div class="grade-calc-header">
+                        <strong style="color:var(--accent-cyan); font-size:0.8rem;">${subj.subject}</strong>
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            ${statusBadge}
+                            <button onclick="deleteGradeSubject(${subj.id})" class="btn-icon" title="Eliminar Asignatura">✖</button>
+                        </div>
+                    </div>
+                    <div style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono); margin-bottom:4px; display:flex; justify-content:space-between;">
+                        <span>Acumulado: <b>${currentPoints.toFixed(2)}</b> / 10</span>
+                        <span>Evaluado: <b>${currentWeight}%</b> | Restante: <b>${remainingWeight}%</b></span>
+                    </div>
+                    
+                    <div class="eval-items-list">
+                        ${items.map(item => `
+                            <div class="eval-item-row">
+                                <span style="flex:2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">• ${item.name}</span>
+                                <span style="width:55px; color:var(--accent-cyan); font-family:var(--font-mono);">${item.grade} / 10</span>
+                                <span style="width:50px; color:var(--text-muted); font-family:var(--font-mono);">${item.weight}%</span>
+                                <button onclick="deleteGradeItem(${subj.id}, ${item.id})" class="btn-icon" style="font-size:0.65rem;">✖</button>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div style="display:flex; gap:4px; margin-top:4px; border-top:1px dashed var(--card-border); padding-top:4px;">
+                        <input type="text" id="grade-item-name-${subj.id}" placeholder="Actividad" style="flex:2;">
+                        <input type="number" id="grade-item-val-${subj.id}" min="0" max="10" step="0.1" placeholder="Nota" style="width:55px;">
+                        <input type="number" id="grade-item-w-${subj.id}" min="1" max="${remainingWeight || 100}" placeholder="Peso %" style="width:60px;">
+                        <button onclick="addGradeItem(${subj.id})" class="btn-violet">✚</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function addGradeSubject() {
+            const name = document.getElementById('new-grade-subj-name').value.trim();
+            const target = parseFloat(document.getElementById('new-grade-subj-target').value) || 5.0;
+            if (!name) return alert("Escribe el nombre del módulo.");
+
+            appData.grades.push({
+                id: Date.now(),
+                subject: name,
+                target: target,
+                items: []
+            });
+            document.getElementById('new-grade-subj-name').value = '';
+            saveData();
+            renderGradesCalculator();
+            toggleForm('form-add-grade-subject');
+        }
+
+        function deleteGradeSubject(subjId) {
+            if (!confirm("¿Eliminar este módulo de la calculadora?")) return;
+            appData.grades = appData.grades.filter(s => s.id !== subjId);
+            saveData();
+            renderGradesCalculator();
+        }
+
+        function addGradeItem(subjId) {
+            const nameEl = document.getElementById(`grade-item-name-${subjId}`);
+            const valEl = document.getElementById(`grade-item-val-${subjId}`);
+            const wEl = document.getElementById(`grade-item-w-${subjId}`);
+
+            const name = nameEl.value.trim();
+            const grade = parseFloat(valEl.value);
+            const weight = parseFloat(wEl.value);
+
+            if (!name || isNaN(grade) || isNaN(weight)) return alert("Completa nombre, nota y % de peso.");
+            if (grade < 0 || grade > 10) return alert("La nota debe estar entre 0 y 10.");
+
+            const subj = appData.grades.find(s => s.id === subjId);
+            if (subj) {
+                subj.items.push({ id: Date.now(), name, grade, weight });
+                saveData();
+                renderGradesCalculator();
+            }
+        }
+
+        function deleteGradeItem(subjId, itemId) {
+            const subj = appData.grades.find(s => s.id === subjId);
+            if (subj) {
+                subj.items = subj.items.filter(it => it.id !== itemId);
+                saveData();
+                renderGradesCalculator();
+            }
+        }
+
+        // --- GESTOR DE ENTREGAS Y EXÁMENES ---
+        function setDeliveriesFilter(filter) {
+            currentDelivFilter = filter;
+            ['all', 'exam', 'practice', 'pending'].forEach(f => {
+                const el = document.getElementById(`deliv-filter-${f}`);
+                if (el) el.classList.remove('active');
+            });
+            document.getElementById(`deliv-filter-${filter}`)?.classList.add('active');
+            renderDeliveries();
+        }
+
+        function renderDeliveries() {
+            const container = document.getElementById('deliveries-list');
+            if (!container) return;
+
+            let items = [...(appData.deliveries || [])];
+            if (currentDelivFilter === 'exam') items = items.filter(d => d.type === 'Examen');
+            if (currentDelivFilter === 'practice') items = items.filter(d => d.type !== 'Examen');
+            if (currentDelivFilter === 'pending') items = items.filter(d => !d.done);
+
+            items.sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+            if (items.length === 0) {
+                container.innerHTML = `<div class="empty-state">No hay entregas pendientes registradas. 🎉</div>`;
+                return;
+            }
+
+            const nowMs = Date.now();
+
+            container.innerHTML = items.map(d => {
+                const targetMs = new Date(d.dueDate).getTime();
+                const diffMs = targetMs - nowMs;
+                
+                let urgencyClass = '';
+                let countdownText = '';
+
+                if (d.done) {
+                    countdownText = '✅ Entregado';
+                } else if (diffMs <= 0) {
+                    urgencyClass = 'urgent-pulse';
+                    const passedDays = Math.floor(Math.abs(diffMs) / (1000 * 3600 * 24));
+                    countdownText = `❌ Vencido hace ${passedDays}d`;
+                } else {
+                    const hours = Math.floor(diffMs / (1000 * 3600));
+                    const mins = Math.floor((diffMs % (1000 * 3600)) / (1000 * 60));
+                    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+                    if (diffMs < 24 * 3600 * 1000) {
+                        urgencyClass = 'urgent-pulse';
+                        countdownText = `🔥 ${hours}h ${mins}m ${secs}s`;
+                    } else if (diffMs < 72 * 3600 * 1000) {
+                        urgencyClass = 'urgent-warn';
+                        const days = Math.floor(hours / 24);
+                        countdownText = `⚠️ ${days}d ${hours % 24}h ${mins}m`;
+                    } else {
+                        const days = Math.floor(hours / 24);
+                        countdownText = `🟢 ${days}d ${hours % 24}h`;
+                    }
+                }
+
+                return `
+                <div class="deadline-card-item ${urgencyClass} ${d.done ? 'task-done' : ''}">
+                    <div class="item-content" onclick="toggleDeliveryDone(${d.id})" style="cursor:pointer;">
+                        <span class="item-title">
+                            ${d.done ? '✅' : d.type === 'Examen' ? '📝' : '💻'} ${d.title}
+                            <span class="badge ${d.type === 'Examen' ? 'bg-high' : 'bg-medium'}">${d.type}</span>
+                        </span>
+                        <span class="item-detail">${d.subject} &bull; ${new Date(d.dueDate).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <span class="countdown-pill">${countdownText}</span>
+                        <button onclick="deleteDelivery(${d.id})" class="btn-icon">✖</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function toggleDeliveryDone(id) {
+            const item = appData.deliveries.find(d => d.id === id);
+            if (item) {
+                item.done = !item.done;
+                saveData();
+                renderDeliveries();
+                updateStats();
+            }
+        }
+
+        function addDelivery() {
+            const title = document.getElementById('deliv-title').value.trim();
+            const subject = document.getElementById('deliv-subject').value.trim();
+            const type = document.getElementById('deliv-type').value;
+            const dueDate = document.getElementById('deliv-datetime').value;
+
+            if (!title || !dueDate) return alert("Indica título y fecha/hora límite.");
+
+            appData.deliveries.push({
+                id: Date.now(),
+                title,
+                subject: subject || "General",
+                type,
+                dueDate,
+                done: false
+            });
+
+            document.getElementById('deliv-title').value = '';
+            document.getElementById('deliv-subject').value = '';
+            document.getElementById('deliv-datetime').value = '';
+            toggleForm('form-add-delivery');
+            saveData();
+            renderDeliveries();
+            updateStats();
+        }
+
+        function deleteDelivery(id) {
+            appData.deliveries = appData.deliveries.filter(d => d.id !== id);
+            saveData();
+            renderDeliveries();
+            updateStats();
+        }
+
+        // --- SNIPPET & COMMAND LAB ---
+        function renderSnippets() {
+            const container = document.getElementById('snippet-list-container');
+            if (!container) return;
+
+            const query = (document.getElementById('snippet-search')?.value || '').toLowerCase().trim();
+            const catFilter = document.getElementById('snippet-filter-cat')?.value || 'all';
+
+            let items = [...(appData.snippets || [])];
+
+            if (catFilter === 'Custom') {
+                items = items.filter(s => s.isCustom);
+            } else if (catFilter !== 'all') {
+                items = items.filter(s => s.cat.toLowerCase() === catFilter.toLowerCase());
+            }
+
+            if (query) {
+                items = items.filter(s => s.title.toLowerCase().includes(query) || s.cmd.toLowerCase().includes(query) || s.cat.toLowerCase().includes(query));
+            }
+
+            if (items.length === 0) {
+                container.innerHTML = `<div class="empty-state">No hay snippets guardados. Añade uno con el botón de abajo.</div>`;
+                return;
+            }
+
+            container.innerHTML = items.map(s => `
+                <div class="snippet-box">
+                    <div class="snippet-header">
+                        <strong>${s.title}</strong>
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <span class="snippet-tag">${s.cat}</span>
+                            <button class="btn-copy" onclick="copySnippetText(this, ${JSON.stringify(s.cmd)})">Copiar</button>
+                            <button onclick="deleteSnippet(${s.id})" class="btn-icon" title="Eliminar">✖</button>
+                        </div>
+                    </div>
+                    <pre class="snippet-code">${escapeHtml(s.cmd)}</pre>
+                </div>
+            `).join('');
+        }
+
+        function copySnippetText(btn, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = btn.textContent;
+                btn.textContent = '¡Ok!';
+                btn.style.borderColor = 'var(--accent-green)';
+                btn.style.color = 'var(--accent-green)';
+                setTimeout(() => {
+                    btn.textContent = orig;
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                }, 1200);
+            });
+        }
+
+        function addCustomSnippet() {
+            const title = document.getElementById('snip-new-title').value.trim();
+            const cat = document.getElementById('snip-new-cat').value.trim() || 'Custom';
+            const cmd = document.getElementById('snip-new-cmd').value.trim();
+
+            if (!title || !cmd) return alert("Completa el título y el comando.");
+
+            appData.snippets.unshift({
+                id: Date.now(),
+                title,
+                cat,
+                cmd,
+                isCustom: true
+            });
+
+            document.getElementById('snip-new-title').value = '';
+            document.getElementById('snip-new-cat').value = '';
+            document.getElementById('snip-new-cmd').value = '';
+            toggleForm('form-add-snippet');
+            saveData();
+            renderSnippets();
+        }
+
+        function deleteSnippet(id) {
+            appData.snippets = appData.snippets.filter(s => s.id !== id);
+            saveData();
+            renderSnippets();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // --- KANBAN DE ESTUDIO ---
+        function renderKanban() {
+            const cols = { todo: [], doing: [], done: [] };
+            (appData.studyKanban || []).forEach(task => {
+                if (cols[task.col]) cols[task.col].push(task);
+            });
+
+            ['todo', 'doing', 'done'].forEach(colKey => {
+                const countEl = document.getElementById(`kanban-count-${colKey}`);
+                const listEl = document.getElementById(`kanban-list-${colKey}`);
+                if (countEl) countEl.textContent = cols[colKey].length;
+                if (!listEl) return;
+
+                if (cols[colKey].length === 0) {
+                    listEl.innerHTML = `<div class="empty-state" style="padding:4px; font-size:0.62rem;">Vacío</div>`;
+                    return;
+                }
+
+                listEl.innerHTML = cols[colKey].map(t => {
+                    const prioColor = t.priority === 'high' ? 'var(--accent-red)' : t.priority === 'low' ? 'var(--accent-blue)' : 'var(--accent-yellow)';
+                    return `
+                    <div class="kanban-card" style="border-left: 3px solid ${prioColor};">
+                        <div class="kanban-card-title">${t.title}</div>
+                        <div class="kanban-card-meta">
+                            <span>🏷️ ${t.subject || 'Estudio'}</span>
+                            <span>🍅 ${t.donePomos || 0}/${t.pomos || 1}</span>
+                        </div>
+                        <div class="kanban-card-actions">
+                            <button onclick="setKanbanTaskToPomo(${t.id})" class="btn-icon" title="Enfocar en Pomodoro">🎯</button>
+                            ${colKey !== 'todo' ? `<button onclick="moveKanbanTask(${t.id}, -1)" class="btn-icon" title="Retroceder">◀</button>` : ''}
+                            ${colKey !== 'done' ? `<button onclick="moveKanbanTask(${t.id}, 1)" class="btn-icon" title="Avanzar">▶</button>` : ''}
+                            <button onclick="deleteKanbanTask(${t.id})" class="btn-icon" title="Eliminar">✖</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            });
+        }
+
+        function moveKanbanTask(taskId, dir) {
+            const flow = ['todo', 'doing', 'done'];
+            const task = appData.studyKanban.find(t => t.id === taskId);
+            if (!task) return;
+            const curIdx = flow.indexOf(task.col);
+            const nextIdx = curIdx + dir;
+            if (nextIdx >= 0 && nextIdx < flow.length) {
+                task.col = flow[nextIdx];
+                saveData();
+                renderKanban();
+                updateStats();
+            }
+        }
+
+        function addKanbanTask() {
+            const title = document.getElementById('kanban-new-title').value.trim();
+            const subject = document.getElementById('kanban-new-subject').value.trim() || 'General';
+            const priority = document.getElementById('kanban-new-prio').value;
+            const pomos = parseInt(document.getElementById('kanban-new-pomos').value, 10) || 2;
+
+            if (!title) return alert("Escribe el nombre del tema.");
+
+            appData.studyKanban.push({
+                id: Date.now(),
+                title,
+                subject,
+                priority,
+                pomos,
+                donePomos: 0,
+                col: 'todo'
+            });
+
+            document.getElementById('kanban-new-title').value = '';
+            document.getElementById('kanban-new-subject').value = '';
+            toggleForm('form-kanban-add');
+            saveData();
+            renderKanban();
+        }
+
+        function deleteKanbanTask(taskId) {
+            appData.studyKanban = appData.studyKanban.filter(t => t.id !== taskId);
+            saveData();
+            renderKanban();
+            updateStats();
+        }
+
+        function setKanbanTaskToPomo(taskId) {
+            const task = appData.studyKanban.find(t => t.id === taskId);
+            if (!task) return;
+            activePomoTask = task;
+            const targetEl = document.getElementById('pomodoro-target');
+            if (targetEl) targetEl.textContent = `🎯 Objetivo: ${task.title} (${task.subject})`;
+            alert(`Objetivo fijado en Pomodoro: "${task.title}"`);
+        }
+
+        // --- ESTADÍSTICAS Y MÉTRICAS ---
+        function updateAdvancedStats() {
+            const stats = appData.studyStats;
+            const todayMins = stats.todayFocusMinutes || 0;
+            const totalMins = stats.totalFocusMinutes || 0;
+
+            const todayH = Math.floor(todayMins / 60);
+            const todayM = todayMins % 60;
+            document.getElementById('stat-focus-today').textContent = todayH > 0 ? `${todayH}h ${todayM}m` : `${todayM}m`;
+
+            const totalH = Math.floor(totalMins / 60);
+            document.getElementById('stat-focus-total').textContent = `${totalH}h`;
+
+            document.getElementById('stat-streak').textContent = `🔥 ${stats.streakDays || 0}d`;
+
+            const allItems = [
+                ...(appData.tasks || []).map(t => t.done),
+                ...(appData.deliveries || []).map(d => d.done),
+                ...(appData.studyKanban || []).map(k => k.col === 'done')
+            ];
+            const doneCount = allItems.filter(Boolean).length;
+            const ratio = allItems.length ? Math.round((doneCount / allItems.length) * 100) : 0;
+            document.getElementById('stat-ratio').textContent = `${ratio}%`;
+
+            renderStudyChart();
+        }
+
+        function renderStudyChart() {
+            const container = document.getElementById('study-bars-container');
+            if (!container) return;
+
+            const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            const history = appData.studyStats.history || [];
+            
+            const last7 = [];
+            let weekSum = 0;
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date(Date.now() - (i * 86400000));
+                const dateStr = d.toISOString().slice(0, 10);
+                const dayName = days[d.getDay()];
+                const found = history.find(h => h.date === dateStr);
+                const mins = found ? found.mins : 0;
+                weekSum += mins;
+                last7.push({ dayName, mins });
+            }
+
+            document.getElementById('chart-week-sum').textContent = `${weekSum} min esta semana`;
+
+            const maxMins = Math.max(60, ...last7.map(x => x.mins));
+
+            container.innerHTML = last7.map(item => {
+                const pct = Math.min(100, Math.round((item.mins / maxMins) * 100));
+                return `
+                <div class="chart-bar-col">
+                    <span style="font-size:0.52rem; color:var(--text-muted); font-family:var(--font-mono);">${item.mins > 0 ? item.mins + 'm' : ''}</span>
+                    <div class="bar-fill" style="height:${Math.max(4, pct)}%; ${item.mins > 0 ? 'background:var(--accent-cyan);' : 'background:var(--card-border);'}"></div>
+                    <span class="bar-label">${item.dayName}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function addManualStudyTime() {
+            const input = document.getElementById('manual-study-mins');
+            const mins = parseInt(input.value, 10);
+            if (!mins || mins <= 0) return alert("Indica los minutos estudiados.");
+
+            recordStudyTime(mins);
+            input.value = '';
+            alert(`Registrados +${mins} minutos de estudio.`);
+        }
+
+        function resetStudyStats() {
+            if (confirm("¿Reiniciar todas las métricas de estudio a 0?")) {
+                appData.studyStats = {
+                    todayFocusMinutes: 0,
+                    totalFocusMinutes: 0,
+                    lastDate: new Date().toISOString().slice(0, 10),
+                    streakDays: 0,
+                    history: []
+                };
+                saveData(false);
+                updateAdvancedStats();
+            }
+        }
+
+        function recordStudyTime(mins) {
+            checkDailyStreak();
+            appData.studyStats.todayFocusMinutes = (appData.studyStats.todayFocusMinutes || 0) + mins;
+            appData.studyStats.totalFocusMinutes = (appData.studyStats.totalFocusMinutes || 0) + mins;
+
+            const todayStr = new Date().toISOString().slice(0, 10);
+            let hist = appData.studyStats.history.find(h => h.date === todayStr);
+            if (hist) {
+                hist.mins += mins;
+            } else {
+                appData.studyStats.history.push({ date: todayStr, mins });
+                if (appData.studyStats.history.length > 30) appData.studyStats.history.shift();
+            }
+
+            saveData(false);
+            updateAdvancedStats();
+        }
+
+        // --- POMODORO PRO ---
+        function startCustomPomodoro(type) {
+            if ("Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+            clearInterval(pomoInterval);
+            
+            const mins = parseInt(document.getElementById(type === 'focus' ? 'pomo-focus-time' : 'pomo-break-time').value, 10);
+            let secondsLeft = mins * 60;
+            const display = document.getElementById('pomodoro-display');
+
+            pomoInterval = setInterval(() => {
+                const m = Math.floor(secondsLeft / 60);
+                const s = secondsLeft % 60;
+                display.textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+
+                if (secondsLeft-- <= 0) {
+                    clearInterval(pomoInterval);
+                    display.textContent = "00:00";
+                    playChimeAlert();
+
+                    if (type === 'focus') {
+                        recordStudyTime(mins);
+                        if (activePomoTask) {
+                            activePomoTask.donePomos = (activePomoTask.donePomos || 0) + 1;
+                            if (activePomoTask.donePomos >= activePomoTask.pomos) {
+                                activePomoTask.col = 'done';
+                            }
+                            renderKanban();
+                        }
+                    }
+
+                    const title = type === 'focus' ? '🎯 ¡Foco Completado!' : '☕ ¡Descanso Finalizado!';
+                    const msg = type === 'focus' ? `Has sumado ${mins} minutos de estudio productivo.` : 'Toca volver a la carga.';
+                    
+                    if ("Notification" in window && Notification.permission === "granted") {
+                        new Notification(title, { body: msg });
+                    } else {
+                        alert(`${title}\n${msg}`);
+                    }
+                }
+            }, 1000);
+        }
+
+        function stopPomodoro() { 
+            clearInterval(pomoInterval); 
+            document.getElementById('pomodoro-display').textContent = "25:00"; 
+        }
+
+        // --- TAREAS RÁPIDAS ---
+        function setTaskFilter(filter) { 
+            currentTaskFilter = filter; 
+            ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f)?.classList.remove('active')); 
+            document.getElementById('filter-' + filter)?.classList.add('active'); 
+            renderTasks(); 
+        }
+
+        function renderTasks() {
+            let tasks = [...(appData.tasks || [])];
+            if(currentTaskFilter === 'pending') tasks = tasks.filter(t => !t.done);
+            if(currentTaskFilter === 'done') tasks = tasks.filter(t => t.done);
+            tasks.sort((a,b) => (a.done !== b.done) ? (a.done ? 1 : -1) : ((a.date ? new Date(a.date).getTime() : Infinity) - (b.date ? new Date(b.date).getTime() : Infinity)));
+            
+            const list = document.getElementById('tasks-list');
+            if(!list) return;
+
+            if(tasks.length === 0) { list.innerHTML = `<div class="empty-state">No hay tareas pendientes ✌️</div>`; return; }
+            list.innerHTML = tasks.map(t => `
+                <li class="task-item ${t.done ? 'task-done' : ''} ${t.priority === 'high' ? 'prio-high' : t.priority === 'low' ? 'prio-low' : 'prio-medium'}">
+                    <div class="item-content" onclick="toggleTask(${t.id})" style="cursor:pointer">
+                        <span class="item-title">${t.done ? '✅' : '⬜'} ${t.text} <span class="badge ${t.priority==='high'?'bg-high':t.priority==='low'?'bg-low':'bg-medium'}">${t.priority}</span></span>
+                        <span class="item-detail">${t.date || ''}</span>
+                    </div>
+                    <button onclick="deleteTask(${t.id})" class="btn-icon">✖</button>
+                </li>`).join('');
+            updateStats();
+        }
+
+        function addTask() { 
+            const text = document.getElementById('task-text').value.trim(); 
+            const date = document.getElementById('task-date').value; 
+            const priority = document.getElementById('task-priority').value; 
+            if (text) { 
+                appData.tasks.push({ id: Date.now(), text, date, priority, done: false }); 
+                document.getElementById('task-text').value=''; 
+                saveData(); 
+                renderTasks(); 
+            } 
+        }
+        function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) { t.done = !t.done; saveData(); renderTasks(); } }
+        function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); renderTasks(); }
+
+        function updateStats() {
+            updateAdvancedStats();
+        }
+
+        // --- SCRATCHPAD & APUNTES ---
+        function setNotesTab(tab) { 
+            currentNotesTab = tab; 
+            ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t)?.classList.remove('active')); 
+            document.getElementById('tab-' + tab)?.classList.add('active'); 
+            document.getElementById('scratchpad').value = appData.notes[tab] || ""; 
+        }
+
+        document.getElementById('scratchpad').addEventListener('input', debounce(e => {
+            appData.notes[currentNotesTab] = e.target.value;
+            saveData(true);
+        }, 300));
+
+        document.getElementById('sticky-note-input').value = appData.stickyNote || "";
+        document.getElementById('sticky-note-input').addEventListener('input', debounce(e => {
+            appData.stickyNote = e.target.value;
+            saveData(true);
+        }, 300));
+
+        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Apuntes copiados al portapapeles."); }
+        function toolDownload() { 
+            const now = getClockDate(), yyyy = now.getFullYear(), mm = String(now.getMonth() + 1).padStart(2, '0'), dd = String(now.getDate()).padStart(2, '0');
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(new Blob([appData.notes[currentNotesTab] || ""], { type: "text/plain" })); 
+            a.download = `${yyyy}${mm}${dd}_${currentNotesTab}.txt`; a.click(); 
+        }
+
+        // --- HORARIO & CLASES ---
+        function toggleScheduleViewMode() { 
+            appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table'; 
+            saveData(false); 
+            updateScheduleWidget(getClockDate()); 
+        }
+
+        function updateScheduleWidget(now) {
+            const widget = document.getElementById('schedule-widget');
+            if (!widget) return;
+            const day = now.getDay();
+            
+            if(day === 0 || day === 6 || !appData.schedule || appData.schedule.length === 0) {
+                widget.innerHTML = `<div class="sch-status" style="margin:0;">${(!appData.schedule || appData.schedule.length === 0) ? 'Sin horario configurado (Pulsa ⚙️)' : 'Fin de semana libre 🎉'}</div>`;
+                return;
+            }
+
+            const todayClasses = appData.schedule.filter(c => parseInt(c.day, 10) === day).sort((a,b) => a.start.localeCompare(b.start));
             if(todayClasses.length === 0) { widget.innerHTML = `<div class="sch-status" style="margin:0;">Sin clases hoy</div>`; return; }
 
             const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -861,10 +2402,10 @@
             let current = null, next = null;
 
             for(let c of todayClasses) {
-                const startMins = parseInt(c.start.split(':')[0])*60 + parseInt(c.start.split(':')[1]);
-                const endMins = parseInt(c.end.split(':')[0])*60 + parseInt(c.end.split(':')[1]);
+                const startMins = parseInt(c.start.split(':')[0],10)*60 + parseInt(c.start.split(':')[1],10);
+                const endMins = parseInt(c.end.split(':')[0],10)*60 + parseInt(c.end.split(':')[1],10);
                 if(nowMins >= startMins && nowMins < endMins) { current = c; break; }
-                if(nowMins < startMins && (!next || startMins < (parseInt(next.start.split(':')[0])*60 + parseInt(next.start.split(':')[1])))) { next = c; }
+                if(nowMins < startMins && (!next || startMins < (parseInt(next.start.split(':')[0],10)*60 + parseInt(next.start.split(':')[1],10)))) { next = c; }
             }
 
             const formatDiff = (secs) => `${Math.floor(secs/3600)>0?Math.floor(secs/3600)+'h ':''}${Math.floor((secs%3600)/60).toString().padStart(2,'0')}m ${(secs%60).toString().padStart(2,'0')}s`;
@@ -872,8 +2413,8 @@
             if(appData.settings.scheduleViewMode === 'table') {
                 let html = `<table class="schedule-table-view"><thead><tr><th>HORA</th><th>ASIGNATURA</th><th>AULA</th></tr></thead><tbody>`;
                 todayClasses.forEach(c => {
-                    const startMins = parseInt(c.start.split(':')[0])*60 + parseInt(c.start.split(':')[1]);
-                    const endMins = parseInt(c.end.split(':')[0])*60 + parseInt(c.end.split(':')[1]);
+                    const startMins = parseInt(c.start.split(':')[0],10)*60 + parseInt(c.start.split(':')[1],10);
+                    const endMins = parseInt(c.end.split(':')[0],10)*60 + parseInt(c.end.split(':')[1],10);
                     const isCurrent = (nowMins >= startMins && nowMins < endMins);
                     html += `<tr class="${isCurrent ? 'current-class' : ''}"><td>${c.start}-${c.end}</td><td>${c.subject} ${isCurrent?'🟢':''}</td><td style="color:var(--accent-violet);">${c.room||'-'}</td></tr>`;
                 });
@@ -882,13 +2423,13 @@
             }
 
             if(current) {
-                const endMins = parseInt(current.end.split(':')[0])*60 + parseInt(current.end.split(':')[1]);
+                const endMins = parseInt(current.end.split(':')[0],10)*60 + parseInt(current.end.split(':')[1],10);
                 widget.innerHTML = `<div class="sch-status" style="color:var(--accent-cyan);">🟢 En curso</div><div class="sch-subject">${current.subject}</div><div class="sch-room">📍 ${current.room||'Sin aula'} | Termina: ${current.end}</div><div class="sch-countdown">${formatDiff((endMins*60) - (nowMins*60+nowSecs))}</div>`;
             } else if(next) {
-                const startMins = parseInt(next.start.split(':')[0])*60 + parseInt(next.start.split(':')[1]);
+                const startMins = parseInt(next.start.split(':')[0],10)*60 + parseInt(next.start.split(':')[1],10);
                 widget.innerHTML = `<div class="sch-status" style="color:var(--accent-yellow);">⏳ Siguiente Clase</div><div class="sch-subject">${next.subject}</div><div class="sch-room">📍 ${next.room||'Sin aula'} | Inicio: ${next.start}</div><div class="sch-countdown">${formatDiff((startMins*60) - (nowMins*60+nowSecs))}</div>`;
             } else {
-                widget.innerHTML = `<div class="sch-status" style="margin:0;">Jornada finalizada por hoy 🍻</div>`;
+                widget.innerHTML = `<div class="sch-status" style="margin:0;">Jornada lectiva finalizada 🍻</div>`;
             }
         }
 
@@ -901,9 +2442,9 @@
             if(!appData.schedule || appData.schedule.length === 0) { list.innerHTML = `<div class="empty-state">No hay clases configuradas.</div>`; return; }
             let html = '';
             for(let d=1; d<=5; d++) {
-                const dayClasses = appData.schedule.filter(c => parseInt(c.day) === d).sort((a,b) => a.start.localeCompare(b.start));
+                const dayClasses = appData.schedule.filter(c => parseInt(c.day,10) === d).sort((a,b) => a.start.localeCompare(b.start));
                 if(dayClasses.length > 0) {
-                    html += `<div style="margin-bottom:10px;"><div style="font-family:var(--font-mono); color:var(--accent-violet); font-size:0.8rem;">${dayNames[d]}</div><ul>`;
+                    html += `<div style="margin-bottom:6px;"><div style="font-family:var(--font-mono); color:var(--accent-violet); font-size:0.72rem; font-weight:bold;">${dayNames[d]}</div><ul>`;
                     html += dayClasses.map(c => `<li><span>${c.start}-${c.end} <b>${c.subject}</b> (${c.room||'-'})</span><button onclick="deleteScheduleClass(${c.id})" class="btn-icon">✖</button></li>`).join('');
                     html += `</ul></div>`;
                 }
@@ -912,110 +2453,245 @@
         }
 
         function addScheduleClass() {
-            const day = document.getElementById('sch-add-day').value, start = document.getElementById('sch-add-start').value, end = document.getElementById('sch-add-end').value, subject = document.getElementById('sch-add-subject').value, room = document.getElementById('sch-add-room').value;
+            const day = document.getElementById('sch-add-day').value;
+            const start = document.getElementById('sch-add-start').value;
+            const end = document.getElementById('sch-add-end').value;
+            const subject = document.getElementById('sch-add-subject').value.trim();
+            const room = document.getElementById('sch-add-room').value.trim();
+
             if(day && start && end && subject) {
                 appData.schedule.push({ id: Date.now(), day, start, end, subject, room });
-                document.getElementById('sch-add-subject').value = ''; document.getElementById('sch-add-room').value = '';
-                saveData(); renderScheduleEditor();
+                document.getElementById('sch-add-subject').value = '';
+                document.getElementById('sch-add-room').value = '';
+                saveData(); 
+                renderScheduleEditor();
             }
         }
         function deleteScheduleClass(id) { appData.schedule = appData.schedule.filter(c => c.id !== id); saveData(); renderScheduleEditor(); }
-        function clearSchedule() { if(confirm("¿Limpiar todo el horario?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
+        function clearSchedule() { if(confirm("¿Limpiar todo el horario semanal?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
 
-        function setTaskFilter(filter) { currentTaskFilter = filter; ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f).classList.remove('active')); document.getElementById('filter-' + filter).classList.add('active'); renderTasks(); }
-        function renderTasks() {
-            let tasks = [...appData.tasks];
-            if(currentTaskFilter === 'pending') tasks = tasks.filter(t => !t.done);
-            if(currentTaskFilter === 'done') tasks = tasks.filter(t => t.done);
-            tasks.sort((a,b) => (a.done !== b.done) ? (a.done ? 1 : -1) : ((a.date ? new Date(a.date).getTime() : Infinity) - (b.date ? new Date(b.date).getTime() : Infinity)));
-            const list = document.getElementById('tasks-list');
-            if(tasks.length === 0) { list.innerHTML = `<div class="empty-state">No hay tareas ✌️</div>`; return; }
-            list.innerHTML = tasks.map(t => `
-                <li class="task-item ${t.done ? 'task-done' : ''} ${t.priority === 'high' ? 'prio-high' : t.priority === 'low' ? 'prio-low' : 'prio-medium'}">
-                    <div class="item-content" onclick="toggleTask(${t.id})" style="cursor:pointer">
-                        <span class="item-title">${t.done ? '✅' : '⬜'} ${t.text} <span class="badge ${t.priority==='high'?'bg-high':t.priority==='low'?'bg-low':'bg-medium'}">${t.priority}</span></span>
-                        <span class="item-detail">${t.date || ''}</span>
-                    </div>
-                    <button onclick="deleteTask(${t.id})" class="btn-icon">✖</button>
-                </li>`).join('');
-            updateStats();
+        // --- ENLACES & SERVIDORES ---
+        function renderBookmarks() {
+            const filter = (document.getElementById('bm-search-filter')?.value || '').toLowerCase();
+            const list = document.getElementById('bookmarks-list');
+            if(!list) return;
+
+            let items = appData.bookmarks || [];
+            if (filter) items = items.filter(bm => bm.name.toLowerCase().includes(filter) || bm.url.toLowerCase().includes(filter));
+            if(items.length === 0) { list.innerHTML = `<div class="empty-state">${filter ? 'Sin coincidencias' : 'Sin enlaces guardados'}</div>`; return; }
+            list.innerHTML = items.map(bm => `<li><div class="item-content"><a href="${bm.url}" target="_blank" class="item-title" style="color:var(--text-main); text-decoration:none;">🔗 ${bm.name}</a><span class="item-detail">${bm.url}</span></div><button onclick="deleteBookmark(${bm.id})" class="btn-icon">✖</button></li>`).join('');
         }
-        function addTask() { const text = document.getElementById('task-text').value, date = document.getElementById('task-date').value, priority = document.getElementById('task-priority').value; if (text) { appData.tasks.push({ id: Date.now(), text, date, priority, done: false }); document.getElementById('task-text').value=''; saveData(); } }
-        function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
-        function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
+        function addBookmark() { 
+            const n = document.getElementById('bm-name').value.trim(), u = document.getElementById('bm-url').value.trim(); 
+            if (n && u) { 
+                appData.bookmarks.push({ id: Date.now(), name:n, url:u }); 
+                document.getElementById('bm-name').value=''; 
+                document.getElementById('bm-url').value=''; 
+                toggleForm('form-bookmarks'); 
+                saveData(); 
+                renderBookmarks(); 
+            } 
+        }
+        function deleteBookmark(id) { appData.bookmarks = appData.bookmarks.filter(x => x.id !== id); saveData(); renderBookmarks(); }
 
-        function setNotesTab(tab) { 
-            currentNotesTab = tab; 
-            ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); 
-            document.getElementById('tab-' + tab).classList.add('active'); 
-            document.getElementById('scratchpad').value = appData.notes[tab] || ""; 
+        function renderServers() {
+            const filter = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
+            const list = document.getElementById('servers-list');
+            if(!list) return;
+
+            let items = appData.servers || [];
+            if (filter) items = items.filter(srv => srv.name.toLowerCase().includes(filter) || srv.ip.toLowerCase().includes(filter));
+            if(items.length === 0) { list.innerHTML = `<div class="empty-state">${filter ? 'Sin coincidencias' : 'Sin servidores guardados'}</div>`; return; }
+            list.innerHTML = items.map(srv => `<li><div class="item-content"><span class="item-title" style="color: var(--accent-cyan)">🖥️ ${srv.name}</span><span class="item-detail">${srv.ip} ${srv.creds ? '['+srv.creds+']' : ''}</span></div><button class="btn-copy" onclick="copySnippetText(this, '${srv.ip}')">IP</button><button onclick="deleteServer(${srv.id})" class="btn-icon">✖</button></li>`).join('');
+        }
+        function addServer() { 
+            const n = document.getElementById('srv-name').value.trim(), i = document.getElementById('srv-ip').value.trim(), c = document.getElementById('srv-creds').value.trim(); 
+            if (n && i) { 
+                appData.servers.push({ id: Date.now(), name:n, ip:i, creds:c }); 
+                document.getElementById('srv-name').value=''; 
+                document.getElementById('srv-ip').value=''; 
+                document.getElementById('srv-creds').value=''; 
+                toggleForm('form-servers'); 
+                saveData(); 
+                renderServers(); 
+            } 
+        }
+        function deleteServer(id) { appData.servers = appData.servers.filter(x => x.id !== id); saveData(); renderServers(); }
+
+        // --- BUSCADOR GLOBAL (CTRL + K) ---
+        function openGlobalSearch() { 
+            document.getElementById('global-search-modal').style.display = 'flex'; 
+            document.getElementById('global-search-input').focus(); 
+        }
+        function closeGlobalSearch() { document.getElementById('global-search-modal').style.display = 'none'; }
+        
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                openGlobalSearch();
+            }
+            if (e.key === 'Escape') {
+                closeGlobalSearch();
+                closeScheduleModal();
+            }
+        });
+
+        function filterGlobalSearch() {
+            const query = document.getElementById('global-search-input').value.toLowerCase().trim();
+            const resultsEl = document.getElementById('global-search-results');
+            if(!query) { resultsEl.innerHTML = `<div class="empty-state">Escribe para buscar en todo el workspace...</div>`; return; }
+
+            let results = [];
+            (appData.deliveries || []).forEach(d => { if(d.title.toLowerCase().includes(query) || d.subject.toLowerCase().includes(query)) results.push({ type: '⏳ Entrega', text: `${d.title} (${d.subject})` }); });
+            (appData.studyKanban || []).forEach(k => { if(k.title.toLowerCase().includes(query) || k.subject.toLowerCase().includes(query)) results.push({ type: '📅 Kanban', text: `${k.title} [${k.col}]` }); });
+            (appData.snippets || []).forEach(s => { if(s.title.toLowerCase().includes(query) || s.cmd.toLowerCase().includes(query)) results.push({ type: '💻 Snippet', text: `${s.title}: ${s.cmd.slice(0, 45)}...` }); });
+            (appData.tasks || []).forEach(t => { if(t.text.toLowerCase().includes(query)) results.push({ type: '📋 Tarea', text: t.text }); });
+            (appData.bookmarks || []).forEach(b => { if(b.name.toLowerCase().includes(query) || b.url.toLowerCase().includes(query)) results.push({ type: '🔗 Enlace', text: `${b.name} (${b.url})` }); });
+            (appData.servers || []).forEach(s => { if(s.name.toLowerCase().includes(query) || s.ip.toLowerCase().includes(query)) results.push({ type: '🖥️ Servidor', text: `${s.name} - ${s.ip}` }); });
+
+            if(results.length === 0) { resultsEl.innerHTML = `<div class="empty-state">Sin resultados para "${query}"</div>`; return; }
+            resultsEl.innerHTML = results.map(r => `<li><b>${r.type}:</b> <span style="margin-left:6px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(r.text)}</span></li>`).join('');
         }
 
-        document.getElementById('scratchpad').addEventListener('input', debounce(e => {
-            appData.notes[currentNotesTab] = e.target.value;
-            localStorage.setItem('devWorkspaceData', JSON.stringify(appData));
-            triggerAutoSync();
-        }, 300));
+        // --- GITHUB GIST SYNC & IMPORT/EXPORT ---
+        function setLog(msg, color, ledClass) { 
+            const log = document.getElementById('cloud-log'); 
+            if (log) {
+                log.innerHTML = `<span class="led ${ledClass}"></span> ${msg}`; 
+                log.style.color = color; 
+            }
+        }
+        function toggleAutoSync() { 
+            appData.settings.autoSync = document.getElementById('auto-sync-check').checked; 
+            saveData(false); 
+        }
+        function triggerAutoSync() { 
+            if(!appData.settings.autoSync) return; 
+            clearTimeout(autoSyncTimer); 
+            setLog("Auto-sync...", "var(--text-muted)", "led-yellow"); 
+            autoSyncTimer = setTimeout(() => pushToCloud(true), 2500); 
+        }
+        
+        async function pushToCloud(isAuto = false) {
+            const token = document.getElementById('sync-token').value.trim();
+            const gistId = document.getElementById('sync-gist').value.trim();
+            if(!token || !gistId) { if(!isAuto) setLog("Faltan Datos", "var(--accent-red)", "led-red"); return; }
+            
+            localStorage.setItem('gistToken', token); 
+            localStorage.setItem('gistId', gistId);
+            setLog(isAuto ? "Auto-guardando..." : "Subiendo...", "var(--text-main)", "led-yellow");
 
-        document.getElementById('sticky-note-input').value = appData.stickyNote || "";
-        document.getElementById('sticky-note-input').addEventListener('input', debounce(e => {
-            appData.stickyNote = e.target.value;
-            localStorage.setItem('devWorkspaceData', JSON.stringify(appData));
-            triggerAutoSync();
-        }, 300));
+            try {
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, { 
+                    method: 'PATCH', 
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, 
+                    body: JSON.stringify({ files: { 'devworkspace.json': { content: JSON.stringify(appData, null, 2) } } }) 
+                });
+                if(res.ok) { 
+                    setLog("Sincronizado", "var(--text-muted)", "led-green"); 
+                    document.getElementById('last-sync-time').textContent = `Última: ${new Date().toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'})}`;
+                    fetchGistFileList(); 
+                } else setLog("Error API", "var(--accent-red)", "led-red");
+            } catch(e) { setLog("Error Red", "var(--accent-red)", "led-red"); }
+        }
 
-        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado al portapapeles."); }
-        function toolDownload() { 
-            const now = getClockDate(), yyyy = now.getFullYear(), mm = String(now.getMonth() + 1).padStart(2, '0'), dd = String(now.getDate()).padStart(2, '0');
-            const a = document.createElement('a'); 
-            a.href = URL.createObjectURL(new Blob([appData.notes[currentNotesTab] || ""], { type: "text/plain" })); 
-            a.download = `${yyyy}${mm}${dd}_${currentNotesTab}.txt`; a.click(); 
+        async function pullFromCloud() {
+            const token = document.getElementById('sync-token').value.trim();
+            const gistId = document.getElementById('sync-gist').value.trim();
+            if(!token || !gistId) return setLog("Faltan Datos", "var(--accent-red)", "led-red");
+
+            localStorage.setItem('gistToken', token); 
+            localStorage.setItem('gistId', gistId);
+            setLog("Descargando...", "var(--text-main)", "led-yellow");
+
+            try {
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, { 
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' } 
+                });
+                if(res.ok) {
+                    const data = await res.json();
+                    if (data.files && data.files['devworkspace.json']) {
+                        const imported = JSON.parse(data.files['devworkspace.json'].content);
+                        appData = { ...defaultData, ...imported };
+                        saveData(false);
+                        location.reload();
+                    } else {
+                        setLog("Sin archivo devworkspace.json", "var(--accent-red)", "led-red");
+                    }
+                } else setLog("Error API", "var(--accent-red)", "led-red");
+            } catch(e) { setLog("Error Red/JSON", "var(--accent-red)", "led-red"); }
         }
 
         async function saveCurrentNoteToGist() {
-            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken'), gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
-            if(!token || !gistId) return alert("Configura credenciales de GitHub Sync.");
-            const now = getClockDate(), yyyy = now.getFullYear(), mm = String(now.getMonth() + 1).padStart(2, '0'), dd = String(now.getDate()).padStart(2, '0');
-            const fileName = `${yyyy}${mm}${dd}_${currentNotesTab}.txt`;
+            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken');
+            const gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
+            if(!token || !gistId) return alert("Configura token y Gist ID en el módulo de sincronización.");
+
+            const now = getClockDate();
+            const fileName = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${currentNotesTab}.txt`;
             setLog(`Subiendo ${fileName}...`, "var(--text-main)", "led-yellow");
+
             try {
-                const patchData = { files: {} }; patchData.files[fileName] = { content: appData.notes[currentNotesTab] || " " };
-                const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify(patchData) });
-                if(res.ok) { setLog(`Guardado ${fileName}`, "var(--text-muted)", "led-green"); fetchGistFileList(); } 
-                else setLog("Error Gist", "var(--accent-red)", "led-red");
+                const patchData = { files: {} };
+                patchData.files[fileName] = { content: appData.notes[currentNotesTab] || " " };
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' },
+                    body: JSON.stringify(patchData)
+                });
+                if(res.ok) {
+                    setLog(`Guardado ${fileName}`, "var(--text-muted)", "led-green");
+                    fetchGistFileList();
+                } else setLog("Error Gist", "var(--accent-red)", "led-red");
             } catch(e) { setLog("Error Red", "var(--accent-red)", "led-red"); }
         }
 
         async function deleteSelectedGistFile() {
             const select = document.getElementById('gist-file-selector');
             const filename = select.value;
-            if (!filename) return alert("Selecciona un archivo .txt del desplegable para eliminar.");
-            if (!confirm(`¿Seguro que quieres ELIMINAR '${filename}' del Gist remoto?`)) return;
+            if (!filename) return alert("Selecciona un archivo .txt del selector para eliminarlo.");
+            if (!confirm(`¿Eliminar definitivamente '${filename}' de GitHub Gist?`)) return;
 
-            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken'), gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
-            if(!token || !gistId) return alert("Faltan credenciales.");
+            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken');
+            const gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
 
             setLog(`Borrando ${filename}...`, "var(--accent-red)", "led-yellow");
             try {
-                const patchData = { files: {} }; patchData.files[filename] = null;
-                const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify(patchData) });
-                if(res.ok) { setLog(`Eliminado ${filename}`, "var(--text-muted)", "led-green"); fetchGistFileList(); } 
-                else setLog("Error al borrar", "var(--accent-red)", "led-red");
+                const patchData = { files: {} };
+                patchData.files[filename] = null;
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' },
+                    body: JSON.stringify(patchData)
+                });
+                if(res.ok) {
+                    setLog(`Eliminado ${filename}`, "var(--text-muted)", "led-green");
+                    fetchGistFileList();
+                } else setLog("Error al borrar", "var(--accent-red)", "led-red");
             } catch(e) { setLog("Error Red", "var(--accent-red)", "led-red"); }
         }
 
         async function fetchGistFileList() {
-            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken'), gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
+            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken');
+            const gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
             const select = document.getElementById('gist-file-selector');
             if(!token || !gistId) return select.innerHTML = `<option value="">📂 Sin credenciales</option>`;
+
             try {
-                const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' } });
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+                });
                 if(res.ok) {
                     const data = await res.json();
                     const txtFiles = Object.keys(data.files).filter(f => /\.txt$/i.test(f));
                     gistFilesCache = data.files;
                     select.innerHTML = `<option value="">📂 Archivos (${txtFiles.length})</option>`;
-                    txtFiles.forEach(f => { const opt = document.createElement('option'); opt.value = f; opt.textContent = f; select.appendChild(opt); });
+                    txtFiles.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f;
+                        opt.textContent = f;
+                        select.appendChild(opt);
+                    });
                 }
             } catch(e) { select.innerHTML = `<option value="">📂 Error Gist</option>`; }
         }
@@ -1024,112 +2700,7 @@
             if(!filename || !gistFilesCache[filename]) return;
             appData.notes[currentNotesTab] = gistFilesCache[filename].content || "";
             document.getElementById('scratchpad').value = appData.notes[currentNotesTab];
-            saveData();
-        }
-
-        let pomoInterval;
-        function notifyPomodoro(title, body) {
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, { body });
-            } else alert(`${title}\n${body}`);
-        }
-
-        function startCustomPomodoro(type) {
-            if ("Notification" in window && Notification.permission === "default") {
-                Notification.requestPermission();
-            }
-            clearInterval(pomoInterval);
-            let t = parseInt(document.getElementById(type === 'focus' ? 'pomo-focus-time' : 'pomo-break-time').value) * 60;
-            const d = document.getElementById('pomodoro-display');
-            pomoInterval = setInterval(() => {
-                d.textContent = `${Math.floor(t/60).toString().padStart(2,'0')}:${(t%60).toString().padStart(2,'0')}`;
-                if (t-- <= 0) { 
-                    clearInterval(pomoInterval); 
-                    d.textContent = "00:00"; 
-                    notifyPomodoro(type === 'focus' ? '🎯 Foco completado' : '☕ Break terminado', 'DevWorkspace Pomodoro');
-                }
-            }, 1000);
-        }
-        function stopPomodoro() { clearInterval(pomoInterval); document.getElementById('pomodoro-display').textContent = "25:00"; }
-
-        function renderBookmarks() {
-            const filter = (document.getElementById('bm-search-filter')?.value || '').toLowerCase();
-            const list = document.getElementById('bookmarks-list');
-            let items = appData.bookmarks || [];
-            if (filter) items = items.filter(bm => bm.name.toLowerCase().includes(filter) || bm.url.toLowerCase().includes(filter));
-            if(items.length === 0) { list.innerHTML = `<div class="empty-state">${filter ? 'Sin coincidencias' : 'Sin enlaces'}</div>`; return; }
-            list.innerHTML = items.map(bm => `<li><div class="item-content"><a href="${bm.url}" target="_blank" class="item-title" style="color:var(--text-main); text-decoration:none;">🔗 ${bm.name}</a><span class="item-detail">${bm.url}</span></div><button onclick="appData.bookmarks=appData.bookmarks.filter(x=>x.id!==${bm.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
-            updateStats();
-        }
-        function addBookmark() { const n = document.getElementById('bm-name').value, u = document.getElementById('bm-url').value; if (n && u) { appData.bookmarks.push({ id: Date.now(), name:n, url:u }); document.getElementById('bm-name').value=''; document.getElementById('bm-url').value=''; toggleForm('form-bookmarks'); saveData(); } }
-
-        function renderServers() {
-            const filter = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
-            const list = document.getElementById('servers-list');
-            let items = appData.servers || [];
-            if (filter) items = items.filter(srv => srv.name.toLowerCase().includes(filter) || srv.ip.toLowerCase().includes(filter));
-            if(items.length === 0) { list.innerHTML = `<div class="empty-state">${filter ? 'Sin coincidencias' : 'Sin servidores'}</div>`; return; }
-            list.innerHTML = items.map(srv => `<li><div class="item-content"><span class="item-title" style="color: var(--accent-cyan)">🖥️ ${srv.name}</span><span class="item-detail">${srv.ip} ${srv.creds ? '['+srv.creds+']' : ''}</span></div><button class="btn-copy" onclick="navigator.clipboard.writeText('${srv.ip}'); this.textContent='¡Ok!'; setTimeout(()=>this.textContent='Copiar', 1000);">Copiar</button><button onclick="appData.servers=appData.servers.filter(x=>x.id!==${srv.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
-            updateStats();
-        }
-        function addServer() { const n = document.getElementById('srv-name').value, i = document.getElementById('srv-ip').value, c = document.getElementById('srv-creds').value; if (n && i) { appData.servers.push({ id: Date.now(), name:n, ip:i, creds:c }); document.getElementById('srv-name').value=''; document.getElementById('srv-ip').value=''; document.getElementById('srv-creds').value=''; toggleForm('form-servers'); saveData(); } }
-
-        function openGlobalSearch() { document.getElementById('global-search-modal').style.display = 'flex'; document.getElementById('global-search-input').focus(); }
-        function closeGlobalSearch() { document.getElementById('global-search-modal').style.display = 'none'; }
-        
-        document.addEventListener('keydown', e => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-                e.preventDefault();
-                openGlobalSearch();
-            }
-        });
-
-        function filterGlobalSearch() {
-            const query = document.getElementById('global-search-input').value.toLowerCase().trim();
-            const resultsEl = document.getElementById('global-search-results');
-            if(!query) { resultsEl.innerHTML = `<div class="empty-state">Escribe para buscar...</div>`; return; }
-
-            let results = [];
-            (appData.tasks || []).forEach(t => { if(t.text.toLowerCase().includes(query)) results.push({ type: '📋 Tarea', text: t.text }); });
-            (appData.bookmarks || []).forEach(b => { if(b.name.toLowerCase().includes(query) || b.url.toLowerCase().includes(query)) results.push({ type: '🔗 Enlace', text: `${b.name} (${b.url})` }); });
-            (appData.servers || []).forEach(s => { if(s.name.toLowerCase().includes(query) || s.ip.toLowerCase().includes(query)) results.push({ type: '🖥️ Servidor', text: `${s.name} - ${s.ip}` }); });
-
-            if(results.length === 0) { resultsEl.innerHTML = `<div class="empty-state">Sin resultados</div>`; return; }
-            resultsEl.innerHTML = results.map(r => `<li><b>${r.type}:</b> ${r.text}</li>`).join('');
-        }
-
-        function setLog(msg, color, ledClass) { const log = document.getElementById('cloud-log'); log.innerHTML = `<span class="led ${ledClass}"></span> ${msg}`; log.style.color = color; }
-        function toggleAutoSync() { appData.settings.autoSync = document.getElementById('auto-sync-check').checked; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); }
-        function triggerAutoSync() { if(!appData.settings.autoSync) return; clearTimeout(autoSyncTimer); setLog("Auto-sync...", "var(--text-muted)", "led-yellow"); autoSyncTimer = setTimeout(() => pushToCloud(true), 2000); }
-        
-        async function pushToCloud(isAuto = false) {
-            const token = document.getElementById('sync-token').value, gistId = document.getElementById('sync-gist').value;
-            if(!token || !gistId) { if(!isAuto) setLog("Faltan Datos", "var(--accent-red)", "led-red"); return; }
-            localStorage.setItem('gistToken', token); localStorage.setItem('gistId', gistId);
-            setLog(isAuto ? "Auto-guardando..." : "Subiendo...", "var(--text-main)", "led-yellow");
-            try {
-                const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify({ files: { 'devworkspace.json': { content: JSON.stringify(appData) } } }) });
-                if(res.ok) { setLog("Sincronizado", "var(--text-muted)", "led-green"); fetchGistFileList(); } 
-                else setLog("Error API", "var(--accent-red)", "led-red");
-            } catch(e) { setLog("Error Red", "var(--accent-red)", "led-red"); }
-        }
-
-        async function pullFromCloud() {
-            const token = document.getElementById('sync-token').value, gistId = document.getElementById('sync-gist').value;
-            if(!token || !gistId) return setLog("Faltan Datos", "var(--accent-red)", "led-red");
-            localStorage.setItem('gistToken', token); localStorage.setItem('gistId', gistId);
-            setLog("Descargando...", "var(--text-main)", "led-yellow");
-            try {
-                const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' } });
-                if(res.ok) {
-                    const data = await res.json();
-                    appData = { ...defaultData, ...JSON.parse(data.files['devworkspace.json'].content) };
-                    document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
-                    document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
-                    changeTheme(appData.settings.theme || 'cyberpunk');
-                    applyLayoutState(); saveData(); setNotesTab(currentNotesTab); setLog("Descargado", "var(--text-muted)", "led-green"); fetchGistFileList();
-                } else setLog("Error API", "var(--accent-red)", "led-red");
-            } catch(e) { setLog("Error Red/JSON", "var(--accent-red)", "led-red"); }
+            saveData(false);
         }
 
         function exportData() { 
@@ -1146,41 +2717,62 @@
             reader.onload = function(e) {
                 try {
                     const imported = JSON.parse(e.target.result);
-                    if (confirm("¿Reemplazar los datos actuales por la copia de seguridad cargada?")) {
+                    if (confirm("¿Reemplazar los datos actuales por la copia de seguridad importada?")) {
                         appData = { ...defaultData, ...imported };
-                        saveData();
+                        saveData(false);
                         location.reload();
                     }
                 } catch(err) {
-                    alert("Error al parsear el archivo JSON importado.");
+                    alert("Error: El archivo seleccionado no es un JSON válido.");
                 }
             };
             reader.readAsText(file);
         }
-        
-        function renderAll() { renderTasks(); renderBookmarks(); renderServers(); updateClockDisplay(); updateStats(); }
+
+        function renderAll() {
+            renderGradesCalculator();
+            renderDeliveries();
+            renderSnippets();
+            renderKanban();
+            renderTasks();
+            renderBookmarks();
+            renderServers();
+            updateClockDisplay();
+            updateStats();
+        }
 
         // --- INICIALIZACIÓN ---
-        document.getElementById('sync-token').value = localStorage.getItem('gistToken') || '';
-        document.getElementById('sync-gist').value = localStorage.getItem('gistId') || '';
-        document.getElementById('auto-sync-check').checked = appData.settings.autoSync || false;
-        document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
-        document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
-        
-        document.querySelectorAll('#custom-theme-panel input').forEach(input => {
-            input.addEventListener('input', updateCustomThemeParams);
+        window.addEventListener('DOMContentLoaded', () => {
+            checkDailyStreak();
+
+            document.getElementById('sync-token').value = localStorage.getItem('gistToken') || '';
+            document.getElementById('sync-gist').value = localStorage.getItem('gistId') || '';
+            document.getElementById('auto-sync-check').checked = appData.settings.autoSync || false;
+            document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
+            document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
+            
+            document.querySelectorAll('#custom-theme-panel input').forEach(input => {
+                input.addEventListener('input', updateCustomThemeParams);
+            });
+
+            document.getElementById('theme-select').addEventListener('change', e => changeTheme(e.target.value));
+            document.getElementById('timezone-select').addEventListener('change', e => changeTimezone(e.target.value));
+
+            changeTheme(appData.settings.theme || 'cyberpunk');
+            applyLayoutState();
+            setupDragAndDrop();
+            renderAll();
+            setNotesTab('general');
+            fetchGistFileList();
+
+            if (appData.settings.activeDashboardView) {
+                setDashboardView(appData.settings.activeDashboardView);
+            }
+
+            countdownInterval = setInterval(() => {
+                renderDeliveries();
+            }, 10000);
         });
-
-        document.getElementById('theme-select').addEventListener('change', e => changeTheme(e.target.value));
-        document.getElementById('timezone-select').addEventListener('change', e => changeTimezone(e.target.value));
-
-        changeTheme(appData.settings.theme || 'cyberpunk');
-        syncNetworkTime();
-        applyLayoutState();
-        setupDragAndDrop();
-        renderAll(); 
-        setNotesTab('general');
-        fetchGistFileList();
     </script>
 </body>
 </html>
