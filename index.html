@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace - Dashboard Pro</title>
+    <title>DevWorkspace - Dashboard Ultimate v4.0</title>
     <style>
         :root {
             --bg-color: #05080f;
@@ -33,6 +33,14 @@
             --text-main: #ffffff; --text-muted: #aaaaaa; --radius: 0px;
         }
 
+        html[data-theme="dracula"] {
+            --bg-color: #282a36; --card-bg: #44475a; --card-border: #6272a4;
+            --accent-cyan: #8be9fd; --accent-cyan-glow: rgba(139, 233, 253, 0.2);
+            --accent-violet: #bd93f9; --accent-violet-glow: rgba(189, 147, 249, 0.2);
+            --accent-red: #ff5555; --accent-yellow: #f1fa8c; --accent-blue: #8be9fd; --accent-green: #50fa7b;
+            --text-main: #f8f8f2; --text-muted: #6272a4; --radius: 6px;
+        }
+
         html[data-theme="valorant"] {
             --bg-color: #0f1923; --card-bg: #1f2b36; --card-border: #36495a;
             --accent-cyan: #ff4655; --accent-cyan-glow: rgba(255, 70, 85, 0.25);
@@ -58,7 +66,6 @@
             display: flex; flex-direction: column; gap: 15px;
         }
 
-        /* --- HEADER ESTRUCTURADO --- */
         header { 
             display: flex; justify-content: space-between; align-items: center; 
             padding-bottom: 12px; border-bottom: 1px solid var(--card-border);
@@ -69,7 +76,7 @@
             color: var(--accent-cyan); font-family: var(--font-mono); font-size: 1.5rem;
             text-shadow: 0 0 8px var(--accent-cyan-glow); letter-spacing: 0.5px;
         }
-        .header-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         #clock-container { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         #time { font-size: 1.6rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 8px var(--accent-violet-glow); line-height: 1; }
         #date { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
@@ -80,6 +87,14 @@
             color: var(--accent-cyan); font-family: var(--font-mono); font-size: 0.75rem;
             padding: 5px 8px; border-radius: 4px; cursor: pointer; outline: none;
         }
+
+        .btn-quick-search {
+            background: rgba(0,0,0,0.4); border: 1px solid var(--card-border);
+            color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem;
+            padding: 5px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+        }
+        .btn-quick-search:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        kbd { background: rgba(255,255,255,0.1); border-radius: 3px; padding: 1px 4px; font-size: 0.65rem; }
 
         .custom-theme-panel {
             display: none; align-items: center; gap: 6px; 
@@ -94,7 +109,6 @@
             width: 100px; margin-bottom: 0; font-size: 0.75rem; padding: 2px 6px;
         }
 
-        /* --- CONTENEDOR PRINCIPAL CONTROLADO --- */
         .dashboard-container {
             display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
             flex-grow: 1; min-height: 0; height: calc(100vh - 120px);
@@ -110,7 +124,6 @@
         ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-        /* --- TARJETAS HARMONIOSAS --- */
         .card { 
             background-color: var(--card-bg); border: 1px solid var(--card-border); 
             border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; 
@@ -129,7 +142,6 @@
             flex-shrink: 0; user-select: none;
         }
 
-        /* --- COMPONENTES FORMULARIO --- */
         input, textarea, select { 
             width: 100%; background-color: rgba(0,0,0,0.3); border: 1px solid var(--card-border); 
             color: var(--text-main); padding: 6px 8px; border-radius: 4px; font-family: var(--font-mono); 
@@ -155,7 +167,6 @@
         
         .hidden-form { display: none; margin-top: 8px; border-top: 1px dashed var(--card-border); padding-top: 8px; }
 
-        /* --- LISTAS OPTIMIZADAS --- */
         ul { list-style: none; overflow-y: auto; padding-right: 4px; flex: 1; }
         li { 
             display: flex; justify-content: space-between; align-items: center; 
@@ -171,7 +182,11 @@
         .btn-copy { font-size: 0.6rem; padding: 1px 4px; border: 1px solid var(--card-border); color: var(--accent-cyan); border-radius: 3px; }
         .empty-state { text-align: center; padding: 10px; color: var(--text-muted); font-family: var(--font-mono); font-style: italic; font-size: 0.75rem; border: 1px dashed var(--card-border); border-radius: 4px; }
 
-        /* --- SECCIONES ESPECÍFICAS --- */
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+        .stat-box { background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 4px; padding: 6px 4px; }
+        .stat-val { font-size: 1.1rem; font-family: var(--font-mono); font-weight: bold; color: var(--accent-cyan); }
+        .stat-lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-family: var(--font-mono); }
+
         .task-filters { display: flex; gap: 6px; margin-bottom: 8px; flex-shrink: 0; }
         .task-filters button { flex: 1; padding: 3px; font-size: 0.7rem; border-color: var(--card-border); color: var(--text-muted); }
         .task-filters button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); }
@@ -185,17 +200,16 @@
         .bg-high { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
         .bg-medium { background: rgba(234, 179, 8, 0.15); color: var(--accent-yellow); }
         .bg-low { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
-        .overdue { color: var(--accent-red); font-weight: bold; }
-        .today { color: var(--accent-yellow); font-weight: bold; }
 
         .scratchpad-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
         .tabs { display: flex; gap: 4px; }
         .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 4px 8px; color: var(--text-muted); background: transparent; text-transform: none; }
         .tab-btn.active { color: var(--accent-violet); border-bottom-color: var(--accent-violet); font-weight: bold; }
-        .quick-tools { display: flex; gap: 4px; align-items: center; }
+        .quick-tools { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
         .gist-file-select { width: auto; margin-bottom: 0; font-size: 0.7rem; padding: 3px 6px; color: var(--accent-cyan); border-color: var(--card-border); background: rgba(0,0,0,0.4); }
         .tool-btn { padding: 3px 6px; font-size: 0.68rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
         .tool-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        .tool-btn-danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: transparent; }
         .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); min-height: 100px; font-size: 0.8rem; }
 
         .schedule-widget { 
@@ -227,6 +241,10 @@
         .sync-row { display: flex; gap: 8px; margin-top: 4px; }
         .auto-sync-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-main); cursor: pointer; font-family: var(--font-mono); }
 
+        .search-filter-input {
+            margin-bottom: 6px; font-size: 0.75rem; padding: 4px 6px; border-color: var(--card-border);
+        }
+
         .modal-overlay { 
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
             background: rgba(0,0,0,0.85); z-index: 1000; display: none; 
@@ -256,8 +274,10 @@
             <h1>DevWorkspace_</h1>
         </div>
         <div class="header-controls">
+            <button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
             <select id="theme-select" class="theme-select">
                 <option value="cyberpunk">🎨 Cyberpunk</option>
+                <option value="dracula">🧛 Dracula</option>
                 <option value="minecraft">⛏️ Minecraft</option>
                 <option value="valorant">🎯 Valorant</option>
                 <option value="retro">📻 Retro CRT</option>
@@ -327,17 +347,42 @@
                         <select id="gist-file-selector" class="gist-file-select" onchange="loadSelectedGistFile(this.value)">
                             <option value="">📂 Archivos Gist...</option>
                         </select>
-                        <button class="tool-btn btn-violet" onclick="saveCurrentNoteToGist()">☁️ Gist</button>
+                        <button class="tool-btn btn-violet" onclick="saveCurrentNoteToGist()" title="Subir / Guardar en Gist">☁️ Guardar Gist</button>
+                        <button class="tool-btn tool-btn-danger" onclick="deleteSelectedGistFile()" title="Eliminar archivo del Gist remoto">🗑️ Borrar Gist</button>
                         <button class="tool-btn" onclick="toolCopy()">Copiar</button>
                         <button class="tool-btn" onclick="toolDownload()">Descargar</button>
                     </div>
                 </div>
                 <textarea id="scratchpad" class="notes-area" placeholder="Escribe notas rápidas aquí..."></textarea>
             </div>
+
+            <div class="card" id="card-sticky" draggable="true" style="min-height: 110px;">
+                <h2>📌 Sticky Note / Buffer Rápido <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
+                <textarea id="sticky-note-input" class="notes-area" style="min-height: 60px; background: rgba(255,255,255,0.015);" placeholder="Cosas temporales sin guardar (pegar IP, comandos sueltos, etc.)..."></textarea>
+            </div>
         </div>
 
         <!-- COLUMNA DERECHA -->
         <div class="col-right" id="col-right">
+            <!-- NUEVO: METRICAS Y METAS -->
+            <div class="card" id="card-stats" draggable="true" style="min-height: 100px;">
+                <h2>📊 Estadísticas del Workspace <span style="font-size:0.65rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div id="stat-tasks" class="stat-val">0%</div>
+                        <div class="stat-lbl">Tareas Hechas</div>
+                    </div>
+                    <div class="stat-box">
+                        <div id="stat-bm" class="stat-val">0</div>
+                        <div class="stat-lbl">Enlaces</div>
+                    </div>
+                    <div class="stat-box">
+                        <div id="stat-srv" class="stat-val">0</div>
+                        <div class="stat-lbl">Servidores</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card" id="card-schedule" draggable="true">
                 <h2>
                     <span>📅 Clases / Horario</span>
@@ -352,7 +397,7 @@
             </div>
 
             <div class="card" id="card-pomodoro" draggable="true">
-                <h2>⏱️ Pomodoro</h2>
+                <h2>⏱️ Pomodoro Pro</h2>
                 <div id="pomodoro-display">25:00</div>
                 <div class="pomodoro-controls">
                     <div class="pomo-preset-row">
@@ -395,6 +440,7 @@
 
             <div class="card" id="card-bookmarks" draggable="true">
                 <h2>🔖 Enlaces</h2>
+                <input type="text" id="bm-search-filter" class="search-filter-input" placeholder="🔍 Buscar enlace..." oninput="renderBookmarks()">
                 <ul id="bookmarks-list"></ul>
                 <button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
                 <div id="form-bookmarks" class="hidden-form">
@@ -406,6 +452,7 @@
 
             <div class="card" id="card-servers" draggable="true">
                 <h2>🖥️ Servidores</h2>
+                <input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Buscar servidor..." oninput="renderServers()">
                 <ul id="servers-list"></ul>
                 <button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
                 <div id="form-servers" class="hidden-form">
@@ -416,6 +463,20 @@
                     </div>
                     <button onclick="addServer()" class="btn-violet" style="width:100%">Guardar</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL BUSCADOR GLOBAL (CTRL + K) -->
+    <div class="modal-overlay" id="global-search-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>🔍 Buscador Global</h2>
+                <button class="btn-icon" onclick="closeGlobalSearch()">✖</button>
+            </div>
+            <input type="text" id="global-search-input" placeholder="Escribe para buscar tareas, enlaces o servidores..." oninput="filterGlobalSearch()">
+            <div class="modal-body">
+                <ul id="global-search-results"></ul>
             </div>
         </div>
     </div>
@@ -467,12 +528,15 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v3.2 &bull; Dashboard Optimizado</div>
-        <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON]</a>
+        <div>DevWorkspace v4.0 &bull; Ultimate Edition</div>
+        <div>
+            <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none; margin-right: 10px;">[Exportar JSON]</a>
+            <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" style="color:var(--accent-violet); text-decoration:none;">[Importar JSON]</a>
+            <input type="file" id="import-json-input" style="display:none;" accept=".json" onchange="importData(event)">
+        </div>
     </footer>
 
     <script>
-        // --- DEBOUNCE UTILITY ---
         function debounce(func, wait) {
             let timeout;
             return function executedFunction(...args) {
@@ -483,15 +547,15 @@
         }
 
         const defaultData = { 
-            bookmarks: [], tasks: [], servers: [], schedule: [],
+            bookmarks: [], tasks: [], servers: [], schedule: [], stickyNote: "",
             notes: { general: "", comandos: "", clases: "" }, 
             settings: { 
                 autoSync: false, lastSync: null, timezone: 'local', theme: 'cyberpunk',
                 customTheme: { name: 'Mi Tema', bg: '#05080f', card: '#0d131f', border: '#1e293b', text: '#f8fafc', cyan: '#38bdf8', violet: '#a855f7' },
                 scheduleViewMode: 'widget',
                 layout: {
-                    colLeft: ['card-tasks', 'card-notes'],
-                    colRight: ['card-schedule', 'card-pomodoro', 'card-sync', 'card-bookmarks', 'card-servers']
+                    colLeft: ['card-tasks', 'card-notes', 'card-sticky'],
+                    colRight: ['card-stats', 'card-schedule', 'card-pomodoro', 'card-sync', 'card-bookmarks', 'card-servers']
                 }
             } 
         };
@@ -501,6 +565,7 @@
         appData.settings = appData.settings || defaultData.settings;
         appData.settings.customTheme = appData.settings.customTheme || defaultData.settings.customTheme;
         appData.settings.layout = appData.settings.layout || defaultData.settings.layout;
+        appData.stickyNote = appData.stickyNote || "";
 
         let currentTaskFilter = 'all';
         let currentNotesTab = 'general';
@@ -539,7 +604,6 @@
             el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
         }
 
-        // --- MANEJO DE TEMAS ---
         function changeTheme(themeName) {
             appData.settings.theme = themeName;
             const panel = document.getElementById('custom-theme-panel');
@@ -596,7 +660,6 @@
             saveData();
         }, 150);
 
-        // --- RELOJ Y ZONA HORARIA OPTIMIZADOS ---
         function changeTimezone(tzVal) {
             appData.settings.timezone = tzVal;
             cachedFormatter = null;
@@ -635,7 +698,6 @@
         }
         setInterval(updateClockDisplay, 1000);
 
-        // --- DRAG & DROP ESTRUCTURADO ---
         function setupDragAndDrop() {
             const container = document.getElementById('dashboard-container');
             container.addEventListener('dragstart', e => {
@@ -694,7 +756,18 @@
             layout.colRight.forEach(id => { const card = document.getElementById(id); if(card) colRightEl.appendChild(card); });
         }
 
-        // --- LÓGICA DE HORARIO ---
+        // --- STATS WIDGET ---
+        function updateStats() {
+            const tasks = appData.tasks || [];
+            const done = tasks.filter(t => t.done).length;
+            const taskPct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+            
+            document.getElementById('stat-tasks').textContent = `${taskPct}%`;
+            document.getElementById('stat-bm').textContent = (appData.bookmarks || []).length;
+            document.getElementById('stat-srv').textContent = (appData.servers || []).length;
+        }
+
+        // --- HORARIO ---
         function toggleScheduleViewMode() { appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table'; saveData(); }
 
         function updateScheduleWidget(now) {
@@ -775,7 +848,7 @@
         function deleteScheduleClass(id) { appData.schedule = appData.schedule.filter(c => c.id !== id); saveData(); renderScheduleEditor(); }
         function clearSchedule() { if(confirm("¿Limpiar todo el horario?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
 
-        // --- MANEJO DE TAREAS ---
+        // --- TAREAS ---
         function setTaskFilter(filter) { currentTaskFilter = filter; ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f).classList.remove('active')); document.getElementById('filter-' + filter).classList.add('active'); renderTasks(); }
         function renderTasks() {
             let tasks = [...appData.tasks];
@@ -792,12 +865,13 @@
                     </div>
                     <button onclick="deleteTask(${t.id})" class="btn-icon">✖</button>
                 </li>`).join('');
+            updateStats();
         }
         function addTask() { const text = document.getElementById('task-text').value, date = document.getElementById('task-date').value, priority = document.getElementById('task-priority').value; if (text) { appData.tasks.push({ id: Date.now(), text, date, priority, done: false }); document.getElementById('task-text').value=''; saveData(); } }
         function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
         function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
 
-        // --- SCRATCHPAD ---
+        // --- SCRATCHPAD & GIST ---
         function setNotesTab(tab) { 
             currentNotesTab = tab; 
             ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); 
@@ -811,7 +885,14 @@
             triggerAutoSync();
         }, 300));
 
-        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado."); }
+        document.getElementById('sticky-note-input').value = appData.stickyNote || "";
+        document.getElementById('sticky-note-input').addEventListener('input', debounce(e => {
+            appData.stickyNote = e.target.value;
+            localStorage.setItem('devWorkspaceData', JSON.stringify(appData));
+            triggerAutoSync();
+        }, 300));
+
+        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado al portapapeles."); }
         function toolDownload() { 
             const now = getClockDate(), yyyy = now.getFullYear(), mm = String(now.getMonth() + 1).padStart(2, '0'), dd = String(now.getDate()).padStart(2, '0');
             const a = document.createElement('a'); 
@@ -830,6 +911,24 @@
                 const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify(patchData) });
                 if(res.ok) { setLog(`Guardado ${fileName}`, "var(--text-muted)", "led-green"); fetchGistFileList(); } 
                 else setLog("Error Gist", "var(--accent-red)", "led-red");
+            } catch(e) { setLog("Error Red", "var(--accent-red)", "led-red"); }
+        }
+
+        async function deleteSelectedGistFile() {
+            const select = document.getElementById('gist-file-selector');
+            const filename = select.value;
+            if (!filename) return alert("Selecciona un archivo .txt del desplegable para eliminar.");
+            if (!confirm(`¿Seguro que quieres ELIMINAR '${filename}' del Gist remoto?`)) return;
+
+            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken'), gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
+            if(!token || !gistId) return alert("Faltan credenciales.");
+
+            setLog(`Borrando ${filename}...`, "var(--accent-red)", "led-yellow");
+            try {
+                const patchData = { files: {} }; patchData.files[filename] = null;
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify(patchData) });
+                if(res.ok) { setLog(`Eliminado ${filename}`, "var(--text-muted)", "led-green"); fetchGistFileList(); } 
+                else setLog("Error al borrar", "var(--accent-red)", "led-red");
             } catch(e) { setLog("Error Red", "var(--accent-red)", "led-red"); }
         }
 
@@ -856,35 +955,81 @@
             saveData();
         }
 
-        // --- POMODORO ---
+        // --- POMODORO CON NOTIFICACIONES NATIVAS ---
         let pomoInterval;
+        function notifyPomodoro(title, body) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(title, { body });
+            } else alert(`${title}\n${body}`);
+        }
+
         function startCustomPomodoro(type) {
+            if ("Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+            }
             clearInterval(pomoInterval);
             let t = parseInt(document.getElementById(type === 'focus' ? 'pomo-focus-time' : 'pomo-break-time').value) * 60;
             const d = document.getElementById('pomodoro-display');
             pomoInterval = setInterval(() => {
                 d.textContent = `${Math.floor(t/60).toString().padStart(2,'0')}:${(t%60).toString().padStart(2,'0')}`;
-                if (t-- <= 0) { clearInterval(pomoInterval); d.textContent = "00:00"; alert(type === 'focus' ? '🎯 Foco completado.' : '☕ Break terminado.'); }
+                if (t-- <= 0) { 
+                    clearInterval(pomoInterval); 
+                    d.textContent = "00:00"; 
+                    notifyPomodoro(type === 'focus' ? '🎯 Foco completado' : '☕ Break terminado', 'DevWorkspace Pomodoro');
+                }
             }, 1000);
         }
         function stopPomodoro() { clearInterval(pomoInterval); document.getElementById('pomodoro-display').textContent = "25:00"; }
 
         // --- ENLACES Y SERVIDORES ---
         function renderBookmarks() {
+            const filter = (document.getElementById('bm-search-filter')?.value || '').toLowerCase();
             const list = document.getElementById('bookmarks-list');
-            if(!appData.bookmarks || appData.bookmarks.length === 0) { list.innerHTML = `<div class="empty-state">Sin enlaces</div>`; return; }
-            list.innerHTML = appData.bookmarks.map(bm => `<li><div class="item-content"><a href="${bm.url}" target="_blank" class="item-title" style="color:var(--text-main); text-decoration:none;">🔗 ${bm.name}</a><span class="item-detail">${bm.url}</span></div><button onclick="appData.bookmarks=appData.bookmarks.filter(x=>x.id!==${bm.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
+            let items = appData.bookmarks || [];
+            if (filter) items = items.filter(bm => bm.name.toLowerCase().includes(filter) || bm.url.toLowerCase().includes(filter));
+            if(items.length === 0) { list.innerHTML = `<div class="empty-state">${filter ? 'Sin coincidencias' : 'Sin enlaces'}</div>`; return; }
+            list.innerHTML = items.map(bm => `<li><div class="item-content"><a href="${bm.url}" target="_blank" class="item-title" style="color:var(--text-main); text-decoration:none;">🔗 ${bm.name}</a><span class="item-detail">${bm.url}</span></div><button onclick="appData.bookmarks=appData.bookmarks.filter(x=>x.id!==${bm.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
+            updateStats();
         }
         function addBookmark() { const n = document.getElementById('bm-name').value, u = document.getElementById('bm-url').value; if (n && u) { appData.bookmarks.push({ id: Date.now(), name:n, url:u }); document.getElementById('bm-name').value=''; document.getElementById('bm-url').value=''; toggleForm('form-bookmarks'); saveData(); } }
 
         function renderServers() {
+            const filter = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
             const list = document.getElementById('servers-list');
-            if(!appData.servers || appData.servers.length === 0) { list.innerHTML = `<div class="empty-state">Sin servidores</div>`; return; }
-            list.innerHTML = appData.servers.map(srv => `<li><div class="item-content"><span class="item-title" style="color: var(--accent-cyan)">🖥️ ${srv.name}</span><span class="item-detail">${srv.ip} ${srv.creds ? '['+srv.creds+']' : ''}</span></div><button class="btn-copy" onclick="navigator.clipboard.writeText('${srv.ip}'); this.textContent='¡Ok!'; setTimeout(()=>this.textContent='Copiar', 1000);">Copiar</button><button onclick="appData.servers=appData.servers.filter(x=>x.id!==${srv.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
+            let items = appData.servers || [];
+            if (filter) items = items.filter(srv => srv.name.toLowerCase().includes(filter) || srv.ip.toLowerCase().includes(filter));
+            if(items.length === 0) { list.innerHTML = `<div class="empty-state">${filter ? 'Sin coincidencias' : 'Sin servidores'}</div>`; return; }
+            list.innerHTML = items.map(srv => `<li><div class="item-content"><span class="item-title" style="color: var(--accent-cyan)">🖥️ ${srv.name}</span><span class="item-detail">${srv.ip} ${srv.creds ? '['+srv.creds+']' : ''}</span></div><button class="btn-copy" onclick="navigator.clipboard.writeText('${srv.ip}'); this.textContent='¡Ok!'; setTimeout(()=>this.textContent='Copiar', 1000);">Copiar</button><button onclick="appData.servers=appData.servers.filter(x=>x.id!==${srv.id}); saveData();" class="btn-icon">✖</button></li>`).join('');
+            updateStats();
         }
         function addServer() { const n = document.getElementById('srv-name').value, i = document.getElementById('srv-ip').value, c = document.getElementById('srv-creds').value; if (n && i) { appData.servers.push({ id: Date.now(), name:n, ip:i, creds:c }); document.getElementById('srv-name').value=''; document.getElementById('srv-ip').value=''; document.getElementById('srv-creds').value=''; toggleForm('form-servers'); saveData(); } }
 
-        // --- SYNC ---
+        // --- BUSCADOR GLOBAL (CTRL + K) ---
+        function openGlobalSearch() { document.getElementById('global-search-modal').style.display = 'flex'; document.getElementById('global-search-input').focus(); }
+        function closeGlobalSearch() { document.getElementById('global-search-modal').style.display = 'none'; }
+        
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                openGlobalSearch();
+            }
+        });
+
+        function filterGlobalSearch() {
+            const query = document.getElementById('global-search-input').value.toLowerCase().trim();
+            const resultsEl = document.getElementById('global-search-results');
+            if(!query) { resultsEl.innerHTML = `<div class="empty-state">Escribe para buscar...</div>`; return; }
+
+            let results = [];
+            (appData.tasks || []).forEach(t => { if(t.text.toLowerCase().includes(query)) results.push({ type: '📋 Tarea', text: t.text }); });
+            (appData.bookmarks || []).forEach(b => { if(b.name.toLowerCase().includes(query) || b.url.toLowerCase().includes(query)) results.push({ type: '🔗 Enlace', text: `${b.name} (${b.url})` }); });
+            (appData.servers || []).forEach(s => { if(s.name.toLowerCase().includes(query) || s.ip.toLowerCase().includes(query)) results.push({ type: '🖥️ Servidor', text: `${s.name} - ${s.ip}` }); });
+
+            if(results.length === 0) { resultsEl.innerHTML = `<div class="empty-state">Sin resultados</div>`; return; }
+            resultsEl.innerHTML = results.map(r => `<li><b>${r.type}:</b> ${r.text}</li>`).join('');
+        }
+
+        // --- CLOUD SYNC & IMPORT/EXPORT ---
         function setLog(msg, color, ledClass) { const log = document.getElementById('cloud-log'); log.innerHTML = `<span class="led ${ledClass}"></span> ${msg}`; log.style.color = color; }
         function toggleAutoSync() { appData.settings.autoSync = document.getElementById('auto-sync-check').checked; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); }
         function triggerAutoSync() { if(!appData.settings.autoSync) return; clearTimeout(autoSyncTimer); setLog("Auto-sync...", "var(--text-muted)", "led-yellow"); autoSyncTimer = setTimeout(() => pushToCloud(true), 2000); }
@@ -919,9 +1064,33 @@
             } catch(e) { setLog("Error Red/JSON", "var(--accent-red)", "led-red"); }
         }
 
-        function exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(appData)], { type: "application/json" })); a.download = `backup_${Date.now()}.json`; a.click(); }
+        function exportData() { 
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(appData, null, 2)], { type: "application/json" })); 
+            a.download = `backup_devworkspace_${Date.now()}.json`; 
+            a.click(); 
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (confirm("¿Reemplazar los datos actuales por la copia de seguridad cargada?")) {
+                        appData = { ...defaultData, ...imported };
+                        saveData();
+                        location.reload();
+                    }
+                } catch(err) {
+                    alert("Error al parsear el archivo JSON importado.");
+                }
+            };
+            reader.readAsText(file);
+        }
         
-        function renderAll() { renderTasks(); renderBookmarks(); renderServers(); updateClockDisplay(); }
+        function renderAll() { renderTasks(); renderBookmarks(); renderServers(); updateClockDisplay(); updateStats(); }
 
         // --- INICIALIZACIÓN ---
         document.getElementById('sync-token').value = localStorage.getItem('gistToken') || '';
@@ -930,7 +1099,6 @@
         document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
         document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
         
-        // Listeners con Debounce para Panel Personalizado
         document.querySelectorAll('#custom-theme-panel input').forEach(input => {
             input.addEventListener('input', updateCustomThemeParams);
         });
