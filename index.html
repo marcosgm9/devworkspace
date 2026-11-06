@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="cyberpunk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DevWorkspace - Dashboard</title>
     <style>
         :root {
-            /* Palette: Cyberpunk / CLI Dark Mode */
+            /* Palette Por Defecto: Cyberpunk CLI */
             --bg-color: #05080f;
             --card-bg: #0d131f;
             --card-border: #1e293b;
@@ -26,6 +26,64 @@
             --transition: all 0.25s ease-in-out;
         }
 
+        /* TEMAS VISUALES */
+        html[data-theme="minecraft"] {
+            --bg-color: #1a120c;
+            --card-bg: #2d1e18;
+            --card-border: #5c3a21;
+            --accent-cyan: #55ff55;
+            --accent-cyan-glow: rgba(85, 255, 85, 0.2);
+            --accent-violet: #ffaa00;
+            --accent-violet-glow: rgba(255, 170, 0, 0.2);
+            --accent-red: #ff5555;
+            --accent-yellow: #ffff55;
+            --accent-blue: #55ffff;
+            --accent-green: #55ff55;
+            --text-main: #ffffff;
+            --text-muted: #aaaaaa;
+            --font-sans: 'VT323', monospace, sans-serif;
+            --font-mono: 'Courier New', monospace;
+            --radius: 0px;
+        }
+
+        html[data-theme="valorant"] {
+            --bg-color: #0f1923;
+            --card-bg: #1f2b36;
+            --card-border: #36495a;
+            --accent-cyan: #ff4655;
+            --accent-cyan-glow: rgba(255, 70, 85, 0.25);
+            --accent-violet: #ece8e1;
+            --accent-violet-glow: rgba(236, 232, 225, 0.15);
+            --accent-red: #ff4655;
+            --accent-yellow: #f5a623;
+            --accent-blue: #00d2ff;
+            --accent-green: #00e676;
+            --text-main: #ece8e1;
+            --text-muted: #768079;
+            --font-sans: 'Segoe UI', sans-serif;
+            --font-mono: 'Consolas', monospace;
+            --radius: 2px;
+        }
+
+        html[data-theme="retro"] {
+            --bg-color: #000000;
+            --card-bg: #0a0a0a;
+            --card-border: #33ff33;
+            --accent-cyan: #33ff33;
+            --accent-cyan-glow: rgba(51, 255, 51, 0.2);
+            --accent-violet: #33ff33;
+            --accent-violet-glow: rgba(51, 255, 51, 0.2);
+            --accent-red: #ff3333;
+            --accent-yellow: #ffff33;
+            --accent-blue: #33ffff;
+            --accent-green: #33ff33;
+            --text-main: #33ff33;
+            --text-muted: #1e821e;
+            --font-sans: 'Courier New', monospace;
+            --font-mono: 'Courier New', monospace;
+            --radius: 4px;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body { 
@@ -33,6 +91,7 @@
             font-family: var(--font-sans); padding: 20px; 
             height: 100vh; overflow: hidden; 
             display: flex; flex-direction: column; 
+            transition: var(--transition);
         }
 
         /* --- HEADER --- */
@@ -45,31 +104,48 @@
             color: var(--accent-cyan); font-family: var(--font-mono); font-size: 1.8rem;
             text-shadow: 0 0 10px var(--accent-cyan-glow); letter-spacing: 1px;
         }
-        #clock-container { text-align: right; }
-        #time { font-size: 2rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 10px var(--accent-violet-glow); }
-        #date { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+        .header-controls { display: flex; align-items: center; gap: 15px; }
+        #clock-container { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+        #time { font-size: 2rem; font-family: var(--font-mono); color: var(--accent-violet); font-weight: bold; text-shadow: 0 0 10px var(--accent-violet-glow); line-height: 1; }
+        #date { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+        
+        .tz-select, .theme-select {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid var(--card-border);
+            color: var(--accent-cyan);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
 
-        /* --- LAYOUT GRID --- */
+        /* --- LAYOUT GRID DRAGGABLE --- */
         .dashboard-container {
             display: grid; grid-template-columns: 65% 1fr; gap: 20px;
             flex-grow: 1; min-height: 0; 
         }
         
-        .col-left { display: flex; flex-direction: column; gap: 20px; overflow: hidden; min-height: 0; }
-        .col-right { display: flex; flex-direction: column; gap: 20px; overflow-y: auto; overflow-x: hidden; padding-right: 10px; }
+        .col-left, .col-right { 
+            display: flex; flex-direction: column; gap: 20px; min-height: 0; 
+        }
+        .col-left { overflow: hidden; }
+        .col-right { overflow-y: auto; overflow-x: hidden; padding-right: 10px; }
 
-        /* Scrollbars Globales */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-        /* --- CARDS --- */
+        /* --- CARDS & DRAG DROP --- */
         .card { 
             background-color: var(--card-bg); border: 1px solid var(--card-border); 
             border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; 
             box-shadow: 0 8px 16px rgba(0,0,0,0.3); position: relative; transition: var(--transition);
+            cursor: grab;
         }
+        .card:active { cursor: grabbing; }
+        .card.dragging { opacity: 0.4; border: 2px dashed var(--accent-cyan); }
         .card:hover { border-color: var(--accent-cyan); box-shadow: 0 0 12px var(--accent-cyan-glow); }
 
         .card h2 { 
@@ -142,19 +218,20 @@
         .today { color: var(--accent-yellow); font-weight: bold; }
 
         /* --- SCRATCHPAD --- */
-        .scratchpad-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+        .scratchpad-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
         .tabs { display: flex; gap: 5px; }
         .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 6px 12px; color: var(--text-muted); border-radius: 0; background: transparent; text-transform: none; }
         .tab-btn:hover { background: rgba(255,255,255,0.05); }
         .tab-btn.active { color: var(--accent-violet); border-bottom-color: var(--accent-violet); font-weight: bold; }
-        .quick-tools { display: flex; gap: 5px; }
-        .tool-btn { padding: 3px 6px; font-size: 0.65rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
+        .quick-tools { display: flex; gap: 5px; align-items: center; }
+        .gist-file-select { width: auto; margin-bottom: 0; font-size: 0.75rem; padding: 4px 8px; color: var(--accent-cyan); border-color: var(--card-border); background: rgba(0,0,0,0.6); }
+        .tool-btn { padding: 4px 8px; font-size: 0.7rem; border: 1px solid var(--card-border); color: var(--text-muted); text-transform: none; border-radius: 3px; }
         .tool-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
         .tool-btn-danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: transparent; }
         .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); height: 100%; }
         .notes-area:focus { border-color: var(--card-border); }
 
-        /* --- HORARIO ESCOLAR (NUEVO) --- */
+        /* --- HORARIO ESCOLAR --- */
         .schedule-widget { 
             background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); 
             border-radius: 4px; padding: 12px; text-align: center;
@@ -184,10 +261,11 @@
         .day-title { font-family: var(--font-mono); color: var(--accent-violet); font-size: 0.9rem; margin-bottom: 5px; border-bottom: 1px dashed var(--card-border); padding-bottom: 3px; }
         .modal-footer { display: flex; justify-content: space-between; padding-top: 15px; border-top: 1px solid var(--card-border); }
 
-        /* --- POMODORO --- */
-        #pomodoro-display { font-size: 3rem; font-family: var(--font-mono); text-align: center; color: var(--accent-cyan); margin: 5px 0 15px 0; font-weight: bold; text-shadow: 0 0 10px var(--accent-cyan-glow); }
-        .pomodoro-controls { display: flex; justify-content: space-between; gap: 8px; }
-        .pomodoro-controls button { flex-grow: 1; }
+        /* --- POMODORO EXTENDIDO --- */
+        #pomodoro-display { font-size: 3rem; font-family: var(--font-mono); text-align: center; color: var(--accent-cyan); margin: 5px 0 10px 0; font-weight: bold; text-shadow: 0 0 10px var(--accent-cyan-glow); }
+        .pomodoro-controls { display: flex; flex-direction: column; gap: 8px; }
+        .pomo-preset-row { display: flex; gap: 5px; justify-content: center; }
+        .pomo-preset-row select { width: 48%; margin-bottom: 0; font-size: 0.75rem; }
 
         /* --- CLOUD SYNC --- */
         .sync-status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-top: 12px; font-family: var(--font-mono); background: rgba(0,0,0,0.3); padding: 6px 10px; border-radius: 4px; border: 1px solid var(--card-border); }
@@ -215,19 +293,37 @@
 
     <header>
         <h1>DevWorkspace_</h1>
-        <div id="clock-container">
-            <div id="time">00:00</div>
-            <div id="date">--/--/----</div>
+        <div class="header-controls">
+            <select id="theme-select" class="theme-select" onchange="changeTheme(this.value)">
+                <option value="cyberpunk">🎨 Cyberpunk</option>
+                <option value="minecraft">⛏️ Minecraft</option>
+                <option value="valorant">🎯 Valorant</option>
+                <option value="retro">📻 Retro CRT</option>
+            </select>
+            <div id="clock-container">
+                <div id="time">00:00</div>
+                <div id="date">--/--/----</div>
+                <select id="timezone-select" class="tz-select" onchange="changeTimezone(this.value)">
+                    <option value="local">Local (Sistema)</option>
+                    <option value="UTC">UTC (GMT+0)</option>
+                    <option value="Etc/GMT-1">UTC+1 (CET)</option>
+                    <option value="Etc/GMT-2">UTC+2 (EET)</option>
+                    <option value="Etc/GMT+4">UTC-4 (AST)</option>
+                    <option value="Etc/GMT+5">UTC-5 (EST)</option>
+                    <option value="Etc/GMT+6">UTC-6 (CST)</option>
+                    <option value="Etc/GMT+8">UTC-8 (PST)</option>
+                </select>
+            </div>
         </div>
     </header>
 
-    <div class="dashboard-container">
+    <div class="dashboard-container" id="dashboard-container">
         
         <!-- COLUMNA IZQUIERDA -->
-        <div class="col-left">
+        <div class="col-left" id="col-left">
             <!-- TAREAS & ENTREGAS -->
-            <div class="card tasks-card">
-                <h2>📋 Tareas & Entregas</h2>
+            <div class="card tasks-card" id="card-tasks" draggable="true">
+                <h2>📋 Tareas & Entregas <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
                 <div class="task-filters">
                     <button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button>
                     <button id="filter-pending" onclick="setTaskFilter('pending')">Pendientes</button>
@@ -247,8 +343,8 @@
             </div>
 
             <!-- SCRATCHPAD -->
-            <div class="card notes-card">
-                <h2>📝 Scratchpad <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">Auto-guardado</span></h2>
+            <div class="card notes-card" id="card-notes" draggable="true">
+                <h2>📝 Scratchpad <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">⋮⋮ Mover</span></h2>
                 <div class="scratchpad-header">
                     <div class="tabs">
                         <button class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button>
@@ -256,8 +352,12 @@
                         <button class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button>
                     </div>
                     <div class="quick-tools">
+                        <select id="gist-file-selector" class="gist-file-select" onchange="loadSelectedGistFile(this.value)">
+                            <option value="">📂 Archivos Gist...</option>
+                        </select>
+                        <button class="tool-btn btn-violet" onclick="saveCurrentNoteToGist()" title="Guardar como {fecha}{categoria}.txt en Gist">☁️ Gist</button>
                         <button class="tool-btn" onclick="toolCopy()">Copiar</button>
-                        <button class="tool-btn" onclick="toolDownload()">Descargar .txt</button>
+                        <button class="tool-btn" onclick="toolDownload()">Descargar</button>
                         <button class="tool-btn tool-btn-danger" onclick="toolClear()">Limpiar</button>
                     </div>
                 </div>
@@ -266,10 +366,10 @@
         </div>
 
         <!-- COLUMNA DERECHA -->
-        <div class="col-right">
+        <div class="col-right" id="col-right">
             
-            <!-- HORARIO ESCOLAR (NUEVO) -->
-            <div class="card">
+            <!-- HORARIO ESCOLAR -->
+            <div class="card" id="card-schedule" draggable="true">
                 <h2>📅 Clases / Horario <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button></h2>
                 <div class="schedule-widget" id="schedule-widget">
                     <div class="sch-status">Calculando...</div>
@@ -277,18 +377,33 @@
             </div>
 
             <!-- POMODORO -->
-            <div class="card">
-                <h2>⏱️ Pomodoro</h2>
+            <div class="card" id="card-pomodoro" draggable="true">
+                <h2>⏱️ Pomodoro Multi-preset</h2>
                 <div id="pomodoro-display">25:00</div>
                 <div class="pomodoro-controls">
-                    <button onclick="startPomodoro(25)">25m Foco</button>
-                    <button onclick="startPomodoro(5)" class="btn-violet">5m Break</button>
-                    <button onclick="stopPomodoro()" style="color: var(--text-muted); border-color: var(--card-border); flex-grow:0;">◼</button>
+                    <div class="pomo-preset-row">
+                        <select id="pomo-focus-time">
+                            <option value="15">🎯 15 Min Foco</option>
+                            <option value="25" selected>🎯 25 Min Foco</option>
+                            <option value="45">🎯 45 Min Foco</option>
+                            <option value="60">🎯 60 Min Foco</option>
+                        </select>
+                        <select id="pomo-break-time">
+                            <option value="5" selected>☕ 5 Min Break</option>
+                            <option value="10">☕ 10 Min Break</option>
+                            <option value="15">☕ 15 Min Break</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button onclick="startCustomPomodoro('focus')" style="flex-grow:1;">Iniciar Foco</button>
+                        <button onclick="startCustomPomodoro('break')" class="btn-violet" style="flex-grow:1;">Iniciar Break</button>
+                        <button onclick="stopPomodoro()" style="color: var(--text-muted); border-color: var(--card-border);">◼</button>
+                    </div>
                 </div>
             </div>
 
             <!-- CLOUD SYNC -->
-            <div class="card">
+            <div class="card" id="card-sync" draggable="true">
                 <h2>☁️ GitHub Sync <button class="btn-icon" onclick="toggleForm('gist-settings')" title="Configuración">⚙️</button></h2>
                 <div id="gist-settings" class="hidden-form">
                     <input type="password" id="sync-token" placeholder="GitHub Personal Access Token">
@@ -308,7 +423,7 @@
             </div>
 
             <!-- ENLACES -->
-            <div class="card">
+            <div class="card" id="card-bookmarks" draggable="true">
                 <h2>🔖 Enlaces</h2>
                 <ul id="bookmarks-list"></ul>
                 <button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
@@ -320,7 +435,7 @@
             </div>
 
             <!-- SERVIDORES -->
-            <div class="card">
+            <div class="card" id="card-servers" draggable="true">
                 <h2>🖥️ Servidores</h2>
                 <ul id="servers-list"></ul>
                 <button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
@@ -374,9 +489,7 @@
                     </div>
                     <button onclick="addScheduleClass()" class="btn-violet" style="height: 35px;">✚ Añadir</button>
                 </div>
-                <div id="schedule-list-editor">
-                    <!-- Lista agrupada renderizada por JS -->
-                </div>
+                <div id="schedule-list-editor"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn-danger" onclick="clearSchedule()">Limpiar Horario Completo</button>
@@ -386,45 +499,161 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v2.2 &bull; Student CLI Mode</div>
+        <div>DevWorkspace v2.5 &bull; Custom Layout & Themes</div>
         <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none;">[Exportar JSON local]</a>
     </footer>
 
     <script>
-        // --- ESTADO INICIAL ---
+        // --- ESTADO INICIAL COMPLETO Y SEGURO ---
         const defaultData = { 
             bookmarks: [], tasks: [], servers: [], schedule: [],
             notes: { general: "", comandos: "", clases: "" }, 
-            settings: { autoSync: false, lastSync: null } 
+            settings: { 
+                autoSync: false, 
+                lastSync: null, 
+                timezone: 'local', 
+                theme: 'cyberpunk',
+                layout: {
+                    colLeft: ['card-tasks', 'card-notes'],
+                    colRight: ['card-schedule', 'card-pomodoro', 'card-sync', 'card-bookmarks', 'card-servers']
+                }
+            } 
         };
+        
         let appData = JSON.parse(localStorage.getItem('devWorkspaceData')) || defaultData;
         if(!appData.notes) appData.notes = { general: "", comandos: "", clases: "" };
-        if(!appData.settings) appData.settings = { autoSync: false, lastSync: null };
+        if(!appData.settings) appData.settings = defaultData.settings;
+        if(!appData.settings.timezone) appData.settings.timezone = 'local';
+        if(!appData.settings.theme) appData.settings.theme = 'cyberpunk';
+        if(!appData.settings.layout) appData.settings.layout = defaultData.settings.layout;
         if(!appData.schedule) appData.schedule = [];
+        if(!appData.bookmarks) appData.bookmarks = [];
+        if(!appData.servers) appData.servers = [];
+        if(!appData.tasks) appData.tasks = [];
 
         let currentTaskFilter = 'all';
         let currentNotesTab = 'general';
         let autoSyncTimer = null;
+        let gistFilesCache = {};
 
-        document.getElementById('sync-token').value = localStorage.getItem('gistToken') || '';
-        document.getElementById('sync-gist').value = localStorage.getItem('gistId') || '';
-        document.getElementById('auto-sync-check').checked = appData.settings.autoSync;
-        if(appData.settings.lastSync) document.getElementById('last-sync-time').textContent = `Última sinc: ${appData.settings.lastSync}`;
+        function saveData() { 
+            localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); 
+            renderAll(); 
+            triggerAutoSync(); 
+        }
 
-        function saveData() { localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); renderAll(); triggerAutoSync(); }
+        function toggleForm(id) { 
+            const el = document.getElementById(id); 
+            el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
+        }
 
-        // --- RELOJ Y WIDGET HORARIO ---
-        setInterval(() => {
+        // --- MANEJO DE TEMAS VISUALES ---
+        function changeTheme(themeName) {
+            appData.settings.theme = themeName;
+            document.documentElement.setAttribute('data-theme', themeName);
+            saveData();
+        }
+
+        // --- MANEJO DE ZONA HORARIA Y RELOJ ---
+        function changeTimezone(tzVal) {
+            appData.settings.timezone = tzVal;
+            saveData();
+        }
+
+        function getClockDate() {
             const now = new Date();
-            document.getElementById('time').textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-            document.getElementById('date').textContent = now.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
-            updateScheduleWidget(now);
+            const tz = appData.settings.timezone;
+            if(!tz || tz === 'local') return now;
+            
+            try {
+                const str = now.toLocaleString('en-US', { timeZone: tz });
+                return new Date(str);
+            } catch(e) {
+                return now;
+            }
+        }
+
+        setInterval(() => {
+            const dateObj = getClockDate();
+            document.getElementById('time').textContent = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('date').textContent = dateObj.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' });
+            updateScheduleWidget(dateObj);
         }, 1000);
+
+        // --- DRAG AND DROP / ORGANIZACIÓN PERSONALIZADA ---
+        function setupDragAndDrop() {
+            const cards = document.querySelectorAll('.card');
+            const columns = document.querySelectorAll('.col-left, .col-right');
+
+            cards.forEach(card => {
+                card.addEventListener('dragstart', (e) => {
+                    card.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', card.id);
+                });
+
+                card.addEventListener('dragend', () => {
+                    card.classList.remove('dragging');
+                    saveLayoutState();
+                });
+            });
+
+            columns.forEach(col => {
+                col.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    const draggingCard = document.querySelector('.dragging');
+                    if(!draggingCard) return;
+
+                    const afterElement = getDragAfterElement(col, e.clientY);
+                    if (afterElement == null) {
+                        col.appendChild(draggingCard);
+                    } else {
+                        col.insertBefore(draggingCard, afterElement);
+                    }
+                });
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function saveLayoutState() {
+            const colLeft = [...document.querySelectorAll('#col-left .card')].map(c => c.id);
+            const colRight = [...document.querySelectorAll('#col-right .card')].map(c => c.id);
+            appData.settings.layout = { colLeft, colRight };
+            localStorage.setItem('devWorkspaceData', JSON.stringify(appData));
+            triggerAutoSync();
+        }
+
+        function applyLayoutState() {
+            const layout = appData.settings.layout || defaultData.settings.layout;
+            const colLeftEl = document.getElementById('col-left');
+            const colRightEl = document.getElementById('col-right');
+
+            layout.colLeft.forEach(id => {
+                const card = document.getElementById(id);
+                if(card) colLeftEl.appendChild(card);
+            });
+
+            layout.colRight.forEach(id => {
+                const card = document.getElementById(id);
+                if(card) colRightEl.appendChild(card);
+            });
+        }
 
         // --- HORARIO ESCOLAR LOGIC ---
         function updateScheduleWidget(now) {
             const widget = document.getElementById('schedule-widget');
-            const day = now.getDay(); // 0(Sun) - 6(Sat)
+            const day = now.getDay();
             
             if(day === 0 || day === 6 || appData.schedule.length === 0) {
                 widget.innerHTML = `<div class="sch-status" style="margin:0;">${appData.schedule.length === 0 ? 'Horario Vacío (Pulsa ⚙️ para editar)' : 'Fin de semana libre 🎉'}</div>`;
@@ -484,7 +713,7 @@
         // --- EDITOR DE HORARIO MODAL ---
         const dayNames = {1:'Lunes', 2:'Martes', 3:'Miércoles', 4:'Jueves', 5:'Viernes'};
         function openScheduleModal() { document.getElementById('schedule-modal').style.display = 'flex'; renderScheduleEditor(); }
-        function closeScheduleModal() { document.getElementById('schedule-modal').style.display = 'none'; updateScheduleWidget(new Date()); }
+        function closeScheduleModal() { document.getElementById('schedule-modal').style.display = 'none'; updateScheduleWidget(getClockDate()); }
         
         function renderScheduleEditor() {
             const list = document.getElementById('schedule-list-editor');
@@ -531,8 +760,6 @@
         function deleteScheduleClass(id) { appData.schedule = appData.schedule.filter(c => c.id !== id); saveData(); renderScheduleEditor(); }
         function clearSchedule() { if(confirm("¿Borrar todo el horario semanal?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
 
-        function toggleForm(id) { const el = document.getElementById(id); el.style.display = el.style.display === 'block' ? 'none' : 'block'; }
-
         // --- TAREAS ---
         function setTaskFilter(filter) { currentTaskFilter = filter; ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f).classList.remove('active')); document.getElementById('filter-' + filter).classList.add('active'); renderTasks(); }
         function getPriorityClass(prio) { return prio === 'high' ? 'prio-high' : prio === 'low' ? 'prio-low' : 'prio-medium'; }
@@ -558,17 +785,148 @@
         function toggleTask(id) { const t = appData.tasks.find(x => x.id === id); if(t) t.done = !t.done; saveData(); }
         function deleteTask(id) { appData.tasks = appData.tasks.filter(x => x.id !== id); saveData(); }
 
-        // --- SCRATCHPAD ---
-        function setNotesTab(tab) { currentNotesTab = tab; ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); document.getElementById('tab-' + tab).classList.add('active'); document.getElementById('scratchpad').value = appData.notes[tab] || ""; }
-        document.getElementById('scratchpad').addEventListener('input', e => { appData.notes[currentNotesTab] = e.target.value; localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); triggerAutoSync(); });
-        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado al portapapeles."); }
-        function toolDownload() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([appData.notes[currentNotesTab] || ""], { type: "text/plain" })); a.download = `notas_${currentNotesTab}_${Date.now()}.txt`; a.click(); }
-        function toolClear() { if(confirm(`¿Borrar [${currentNotesTab}]?`)) { appData.notes[currentNotesTab] = ""; document.getElementById('scratchpad').value = ""; saveData(); } }
+        // --- SCRATCHPAD Y GIST SYNC NOTAS ---
+        function setNotesTab(tab) { 
+            currentNotesTab = tab; 
+            ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t).classList.remove('active')); 
+            document.getElementById('tab-' + tab).classList.add('active'); 
+            document.getElementById('scratchpad').value = appData.notes[tab] || ""; 
+        }
 
-        // --- POMODORO ---
+        document.getElementById('scratchpad').addEventListener('input', e => { 
+            appData.notes[currentNotesTab] = e.target.value; 
+            localStorage.setItem('devWorkspaceData', JSON.stringify(appData)); 
+            triggerAutoSync(); 
+        });
+
+        function toolCopy() { navigator.clipboard.writeText(appData.notes[currentNotesTab] || ""); alert("Copiado al portapapeles."); }
+        
+        function getFormattedFilename(category) {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}_${category}.txt`;
+        }
+
+        function toolDownload() { 
+            const fileName = getFormattedFilename(currentNotesTab);
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(new Blob([appData.notes[currentNotesTab] || ""], { type: "text/plain" })); 
+            a.download = fileName; 
+            a.click(); 
+        }
+
+        function toolClear() { 
+            if(confirm(`¿Borrar [${currentNotesTab}]?`)) { 
+                appData.notes[currentNotesTab] = ""; 
+                document.getElementById('scratchpad').value = ""; 
+                saveData(); 
+            } 
+        }
+
+        async function saveCurrentNoteToGist() {
+            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken');
+            const gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
+
+            if(!token || !gistId) {
+                alert("Faltan las credenciales de GitHub (Token y Gist ID) en el panel de Cloud Sync.");
+                toggleForm('gist-settings');
+                return;
+            }
+
+            const fileName = getFormattedFilename(currentNotesTab);
+            const content = appData.notes[currentNotesTab] || "";
+
+            setLog(`Subiendo ${fileName}...`, "var(--text-main)", "led-yellow");
+
+            try {
+                const patchData = { files: {} };
+                patchData.files[fileName] = { content: content.length > 0 ? content : " " };
+
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    method: 'PATCH',
+                    headers: { 
+                        'Authorization': `token ${token}`, 
+                        'Accept': 'application/vnd.github.v3+json' 
+                    },
+                    body: JSON.stringify(patchData)
+                });
+
+                if(res.ok) {
+                    setLog(`Guardado ${fileName}`, "var(--text-muted)", "led-green");
+                    updateLastSyncTime();
+                    fetchGistFileList();
+                } else {
+                    setLog("Error al guardar archivo en Gist", "var(--accent-red)", "led-red");
+                }
+            } catch(e) {
+                setLog("Error de Red al conectar con Gist", "var(--accent-red)", "led-red");
+            }
+        }
+
+        async function fetchGistFileList() {
+            const token = document.getElementById('sync-token').value || localStorage.getItem('gistToken');
+            const gistId = document.getElementById('sync-gist').value || localStorage.getItem('gistId');
+            const select = document.getElementById('gist-file-selector');
+
+            if(!token || !gistId) {
+                select.innerHTML = `<option value="">📂 Sin credenciales Gist</option>`;
+                return;
+            }
+
+            try {
+                const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+                });
+
+                if(res.ok) {
+                    const data = await res.json();
+                    gistFilesCache = data.files;
+                    select.innerHTML = `<option value="">📂 Archivos Gist (${Object.keys(data.files).length})</option>`;
+                    
+                    Object.keys(data.files).forEach(filename => {
+                        const option = document.createElement('option');
+                        option.value = filename;
+                        option.textContent = filename;
+                        select.appendChild(option);
+                    });
+                }
+            } catch(e) {
+                select.innerHTML = `<option value="">📂 Error cargando Gist</option>`;
+            }
+        }
+
+        function loadSelectedGistFile(filename) {
+            if(!filename || !gistFilesCache[filename]) return;
+            const fileObj = gistFilesCache[filename];
+            appData.notes[currentNotesTab] = fileObj.content || "";
+            document.getElementById('scratchpad').value = appData.notes[currentNotesTab];
+            saveData();
+            alert(`Cargado contenido de '${filename}' en la pestaña actual [${currentNotesTab}]`);
+        }
+
+        // --- POMODORO EXTENDIDO ---
         let pomoInterval;
-        function startPomodoro(m) { clearInterval(pomoInterval); let t = m * 60; const d = document.getElementById('pomodoro-display'); pomoInterval = setInterval(() => { d.textContent = `${Math.floor(t/60).toString().padStart(2,'0')}:${(t%60).toString().padStart(2,'0')}`; if (t-- <= 0) { clearInterval(pomoInterval); d.textContent = "00:00"; alert(m === 25 ? '🎯 Foco terminado.' : '☕ Break terminado.'); } }, 1000); }
-        function stopPomodoro() { clearInterval(pomoInterval); document.getElementById('pomodoro-display').textContent = "25:00"; }
+        function startCustomPomodoro(type) {
+            clearInterval(pomoInterval);
+            const minutes = parseInt(document.getElementById(type === 'focus' ? 'pomo-focus-time' : 'pomo-break-time').value);
+            let t = minutes * 60;
+            const d = document.getElementById('pomodoro-display');
+            
+            pomoInterval = setInterval(() => {
+                d.textContent = `${Math.floor(t/60).toString().padStart(2,'0')}:${(t%60).toString().padStart(2,'0')}`;
+                if (t-- <= 0) {
+                    clearInterval(pomoInterval);
+                    d.textContent = "00:00";
+                    alert(type === 'focus' ? '🎯 Tiempo de foco completado.' : '☕ Tiempo de break terminado.');
+                }
+            }, 1000);
+        }
+        function stopPomodoro() { 
+            clearInterval(pomoInterval); 
+            document.getElementById('pomodoro-display').textContent = "25:00"; 
+        }
 
         // --- ENLACES Y SERVIDORES ---
         function renderBookmarks() {
@@ -598,7 +956,11 @@
             setLog(isAuto ? "Auto-guardando..." : "Subiendo...", "var(--text-main)", "led-yellow");
             try {
                 const res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }, body: JSON.stringify({ files: { 'devworkspace.json': { content: JSON.stringify(appData) } } }) });
-                if(res.ok) { setLog("Sincronizado", "var(--text-muted)", "led-green"); updateLastSyncTime(); } else setLog("Error de API", "var(--accent-red)", "led-red");
+                if(res.ok) { 
+                    setLog("Sincronizado", "var(--text-muted)", "led-green"); 
+                    updateLastSyncTime(); 
+                    fetchGistFileList(); 
+                } else setLog("Error de API", "var(--accent-red)", "led-red");
             } catch(e) { setLog("Error de Red", "var(--accent-red)", "led-red"); }
         }
 
@@ -613,15 +975,45 @@
                     const data = await res.json();
                     appData = { ...defaultData, ...JSON.parse(data.files['devworkspace.json'].content) };
                     appData.settings.autoSync = document.getElementById('auto-sync-check').checked;
-                    saveData(); setNotesTab(currentNotesTab); setLog("Descargado", "var(--text-muted)", "led-green"); updateLastSyncTime();
+                    
+                    document.documentElement.setAttribute('data-theme', appData.settings.theme || 'cyberpunk');
+                    document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
+                    document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
+                    
+                    applyLayoutState();
+                    saveData(); 
+                    setNotesTab(currentNotesTab); 
+                    setLog("Descargado", "var(--text-muted)", "led-green"); 
+                    updateLastSyncTime();
+                    fetchGistFileList();
                 } else setLog("Error de API", "var(--accent-red)", "led-red");
             } catch(e) { setLog("Error de Red/JSON", "var(--accent-red)", "led-red"); }
         }
 
         function exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(appData)], { type: "application/json" })); a.download = `backup_${Date.now()}.json`; a.click(); }
-        function renderAll() { renderTasks(); renderBookmarks(); renderServers(); updateScheduleWidget(new Date()); }
         
-        renderAll(); setNotesTab('general');
+        function renderAll() { 
+            renderTasks(); 
+            renderBookmarks(); 
+            renderServers(); 
+            updateScheduleWidget(getClockDate()); 
+        }
+
+        // --- INICIALIZACIÓN ---
+        document.getElementById('sync-token').value = localStorage.getItem('gistToken') || '';
+        document.getElementById('sync-gist').value = localStorage.getItem('gistId') || '';
+        document.getElementById('auto-sync-check').checked = appData.settings.autoSync;
+        document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
+        document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
+        document.documentElement.setAttribute('data-theme', appData.settings.theme || 'cyberpunk');
+
+        if(appData.settings.lastSync) document.getElementById('last-sync-time').textContent = `Última sinc: ${appData.settings.lastSync}`;
+
+        applyLayoutState();
+        setupDragAndDrop();
+        renderAll(); 
+        setNotesTab('general');
+        fetchGistFileList();
     </script>
 </body>
 </html>
