@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.0</title>
+    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.5</title>
     <style>
         :root {
             --bg-color: #05080f;
@@ -66,7 +66,6 @@
             display: flex; flex-direction: column; gap: 8px;
         }
 
-        /* --- HEADER ULTRA-COMPACTO & SIN DESBORDAMIENTOS --- */
         header { 
             display: flex; 
             justify-content: space-between; 
@@ -141,21 +140,8 @@
         .btn-quick-search:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
         kbd { background: rgba(255,255,255,0.1); border-radius: 3px; padding: 1px 4px; font-size: 0.6rem; }
 
-        .theme-select {
+        .theme-select, .tz-select {
             width: 125px !important;
-            background: rgba(0,0,0,0.4); 
-            border: 1px solid var(--card-border);
-            color: var(--accent-cyan); 
-            font-family: var(--font-mono); 
-            font-size: 0.72rem;
-            padding: 3px 6px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            outline: none;
-        }
-
-        .tz-select {
-            width: 135px !important;
             background: rgba(0,0,0,0.4); 
             border: 1px solid var(--card-border);
             color: var(--accent-cyan); 
@@ -221,7 +207,7 @@
             width: 75px; margin-bottom: 0; font-size: 0.7rem; padding: 1px 4px;
         }
 
-        /* --- BARRA DE FILTROS --- */
+        /* --- BARRA DE FILTROS & MODOS DE EDICIÓN --- */
         .view-filter-bar {
             display: flex;
             gap: 4px;
@@ -229,7 +215,7 @@
             overflow-x: auto;
             padding: 0;
             flex-shrink: 0;
-            height: 28px;
+            height: 30px;
         }
         .view-pill {
             background: rgba(0,0,0,0.3);
@@ -250,8 +236,13 @@
             color: var(--accent-cyan);
             font-weight: bold;
         }
+        .view-pill.btn-edit-mode.active {
+            background: rgba(234, 179, 8, 0.2);
+            border-color: var(--accent-yellow);
+            color: var(--accent-yellow);
+        }
 
-        /* --- GRID AJUSTADO A 100VH CON SCROLL INTERNO --- */
+        /* --- GRID DE DASHBOARD --- */
         .dashboard-container {
             display: grid; 
             grid-template-columns: 1fr 1fr; 
@@ -293,6 +284,7 @@
         .card.dragging { opacity: 0.35; border: 2px dashed var(--accent-cyan); }
         .card.collapsed .card-body { display: none !important; }
         .card.collapsed { padding-bottom: 6px; }
+        .card.hidden-card { display: none !important; }
 
         .card-header { 
             font-family: var(--font-mono); 
@@ -311,6 +303,22 @@
         .card-actions { display: flex; align-items: center; gap: 3px; }
         .drag-handle { cursor: grab; color: var(--text-muted); font-size: 0.72rem; padding: 1px 3px; border-radius: 3px; }
         .drag-handle:active { cursor: grabbing; }
+
+        /* MODO EDICIÓN CSS VISIBILIDAD */
+        .edit-controls { display: none; align-items: center; gap: 3px; background: rgba(0,0,0,0.4); padding: 1px 4px; border-radius: 4px; border: 1px solid var(--accent-yellow); }
+        body.edit-mode-active .edit-controls { display: flex; }
+        body.edit-mode-active .card { border-style: dashed; border-color: var(--accent-yellow); }
+
+        .card-category-select {
+            background: transparent;
+            border: none;
+            color: var(--accent-yellow);
+            font-family: var(--font-mono);
+            font-size: 0.62rem;
+            width: auto !important;
+            padding: 0 2px;
+            margin-bottom: 0 !important;
+        }
 
         .card-body {
             display: flex;
@@ -574,6 +582,23 @@
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--card-border); }
         .modal-body { overflow-y: auto; flex: 1; margin-bottom: 8px; }
 
+        .card-visibility-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 8px;
+        }
+        .visibility-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid var(--card-border);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+        }
+
         footer { 
             padding-top: 4px; border-top: 1px solid var(--card-border); 
             text-align: center; color: var(--text-muted); font-size: 0.65rem; 
@@ -595,7 +620,7 @@
     <!-- HEADER ULTRA-COMPACTO -->
     <header>
         <div class="header-title-zone">
-            <h1>DevWorkspace_ <span class="badge-version">v5.0 DAM/SMR</span></h1>
+            <h1>DevWorkspace_ <span class="badge-version">v5.5 DAM/SMR</span></h1>
         </div>
         <div class="header-controls">
             <button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
@@ -638,15 +663,36 @@
         </div>
     </header>
 
-    <!-- BARRA DE FILTRADO POR ÁREAS -->
+    <!-- BARRA DE FILTRADO POR ÁREAS Y GESTIÓN DE EDICIÓN -->
     <div class="view-filter-bar">
         <span style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono); margin-right:2px;">Vistas:</span>
-        <button class="view-pill active" onclick="setDashboardView('all')">🚀 Todo</button>
-        <button class="view-pill" onclick="setDashboardView('study')">🎓 Academia & Estudio</button>
-        <button class="view-pill" onclick="setDashboardView('dev')">💻 Dev & SysAdmin Lab</button>
-        <button class="view-pill" onclick="setDashboardView('focus')">⚡ Foco & Productividad</button>
+        <div id="view-pills-container" style="display:flex; gap:4px; align-items:center;">
+            <!-- Renderizado dinámico de pills -->
+        </div>
+        <button class="view-pill btn-violet" onclick="addCustomCategoryPrompt()" title="Añadir nueva categoría/sección">[+] Sección</button>
         <div style="flex:1;"></div>
+        <button class="view-pill btn-edit-mode" id="btn-toggle-edit-mode" onclick="toggleEditMode()">✏️ Modo Edición</button>
+        <button class="view-pill" onclick="openVisibilityModal()" title="Gestionar visibilidad de tarjetas individualmente">👁️ Visibilidad</button>
+        <button class="view-pill" onclick="toggleForm('form-create-card-panel')" title="Crear nueva tarjeta personalizada">✚ Nueva Tarjeta</button>
         <button class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕ Colapsar/Expandir</button>
+    </div>
+
+    <!-- PANEL INLINE PARA CREAR TARJETA PERSONALIZADA -->
+    <div id="form-create-card-panel" class="hidden-form" style="background:var(--card-bg); border:1px solid var(--accent-cyan); padding:8px; border-radius:var(--radius); margin-bottom:4px; flex-shrink:0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-family:var(--font-mono); font-size:0.78rem; color:var(--accent-cyan); font-weight:bold;">🛠️ Crear Tarjeta Personalizada</span>
+            <button class="btn-icon" onclick="toggleForm('form-create-card-panel')">✖</button>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <input type="text" id="new-card-title" placeholder="Título de la Tarjeta..." style="flex:2; min-width:140px;">
+            <select id="new-card-category" style="flex:1; min-width:120px;"></select>
+            <select id="new-card-type" style="width:110px;">
+                <option value="notes">📝 Notas / Texto</option>
+                <option value="checklist">📋 Lista Checklist</option>
+                <option value="iframe">🌐 Web / Embed</option>
+            </select>
+            <button onclick="createCustomCard()" class="btn-green">Crear Tarjeta</button>
+        </div>
     </div>
 
     <!-- CONTENEDOR GRID CON COLUMNAS INDEPENDIENTES -->
@@ -660,6 +706,10 @@
                 <div class="card-header">
                     <span class="card-title-text">📅 Kanban de Estudio</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-kanban', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-kanban')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-kanban')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-kanban')">⋮⋮</span>
                     </div>
@@ -711,6 +761,10 @@
                 <div class="card-header">
                     <span class="card-title-text">🧮 Calculadora de Calificaciones Ponderadas</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-grades', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-grades')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-grades')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-grades')">⋮⋮</span>
                     </div>
@@ -734,6 +788,10 @@
                 <div class="card-header">
                     <span class="card-title-text">⏳ Entregas & Exámenes con Cuenta Regresiva</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-deliveries', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-deliveries')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-deliveries')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-deliveries')">⋮⋮</span>
                     </div>
@@ -773,6 +831,10 @@
                 <div class="card-header">
                     <span class="card-title-text">📋 Tareas Generales</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-tasks', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-tasks')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-tasks')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-tasks')">⋮⋮</span>
                     </div>
@@ -802,6 +864,10 @@
                 <div class="card-header">
                     <span class="card-title-text">📝 Scratchpad & Apuntes</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-notes', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-notes')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-notes')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-notes')">⋮⋮</span>
                     </div>
@@ -832,6 +898,10 @@
                 <div class="card-header">
                     <span class="card-title-text">📌 Sticky Note / Buffer Temporal</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-sticky', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-sticky')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-sticky')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-sticky')">⋮⋮</span>
                     </div>
@@ -851,6 +921,10 @@
                 <div class="card-header">
                     <span class="card-title-text">📈 Métricas & Progreso del Estudiante</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-study-stats', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-study-stats')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="resetStudyStats()" title="Reiniciar Métricas a 0">🔄</button>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-study-stats')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-study-stats')">⋮⋮</span>
@@ -896,6 +970,10 @@
                 <div class="card-header">
                     <span class="card-title-text">⏱️ Pomodoro Pro</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-pomodoro', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-pomodoro')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-pomodoro')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-pomodoro')">⋮⋮</span>
                     </div>
@@ -931,6 +1009,10 @@
                 <div class="card-header">
                     <span class="card-title-text">🎧 Ruido Blanco / Lofi & Ondas Binaurales</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-audio', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-audio')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-audio')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-audio')">⋮⋮</span>
                     </div>
@@ -972,6 +1054,10 @@
                 <div class="card-header">
                     <span class="card-title-text">💻 Snippet & Command Lab</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-snippets', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-snippets')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-snippets')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-snippets')">⋮⋮</span>
                     </div>
@@ -1010,6 +1096,10 @@
                 <div class="card-header">
                     <span class="card-title-text">📅 Horario & Clases</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-schedule', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-schedule')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleScheduleViewMode()" title="Cambiar Vista Tabla/Widget">📊</button>
                         <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-schedule')">_</button>
@@ -1028,6 +1118,10 @@
                 <div class="card-header">
                     <span class="card-title-text">🔖 Enlaces & Documentación</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-bookmarks', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-bookmarks')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-bookmarks')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-bookmarks')">⋮⋮</span>
                     </div>
@@ -1049,6 +1143,10 @@
                 <div class="card-header">
                     <span class="card-title-text">🖥️ Servidores & VMs</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-servers', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-servers')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-servers')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-servers')">⋮⋮</span>
                     </div>
@@ -1073,6 +1171,10 @@
                 <div class="card-header">
                     <span class="card-title-text">☁️ Sincronización GitHub Gist</span>
                     <div class="card-actions">
+                        <div class="edit-controls">
+                            <select class="card-category-select" onchange="updateCardCategory('card-sync', this.value)"></select>
+                            <button class="btn-icon" onclick="toggleCardVisibility('card-sync')" title="Ocultar Tarjeta">👁️</button>
+                        </div>
                         <button class="btn-icon" onclick="toggleForm('gist-settings')" title="Configuración">⚙️</button>
                         <button class="btn-icon" onclick="toggleCardCollapse('card-sync')">_</button>
                         <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-sync')">⋮⋮</span>
@@ -1097,6 +1199,23 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- MODAL DE GESTIÓN DE VISIBILIDAD DE TARJETAS -->
+    <div class="modal-overlay" id="card-visibility-modal">
+        <div class="modal-content" style="max-width: 580px;">
+            <div class="modal-header">
+                <h2 style="font-size:0.95rem; font-family:var(--font-mono); color:var(--accent-cyan);">👁️ Visibilidad de Tarjetas</h2>
+                <button class="btn-icon" onclick="closeVisibilityModal()">✖</button>
+            </div>
+            <div class="modal-body">
+                <div class="card-visibility-grid" id="visibility-controls-container"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:6px;">
+                <button onclick="showAllCards()" class="btn-violet">Mostrar Todas</button>
+                <button onclick="closeVisibilityModal()" class="btn-green">Listo</button>
+            </div>
         </div>
     </div>
 
@@ -1162,7 +1281,7 @@
 
     <!-- FOOTER -->
     <footer>
-        <div>DevWorkspace v5.0 Ultimate &bull; DAM / DAW / SMR / Uni Suite</div>
+        <div>DevWorkspace v5.5 Ultimate &bull; DAM / DAW / SMR / Uni Suite</div>
         <div>
             <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none; margin-right: 12px;">[Exportar JSON]</a>
             <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" style="color:var(--accent-violet); text-decoration:none;">[Importar JSON]</a>
@@ -1180,6 +1299,13 @@
                 timeout = setTimeout(later, wait);
             };
         }
+
+        const defaultCategories = [
+            { key: 'all', label: '🚀 Todo' },
+            { key: 'study', label: '🎓 Academia & Estudio' },
+            { key: 'dev', label: '💻 Dev & SysAdmin Lab' },
+            { key: 'focus', label: '⚡ Foco & Productividad' }
+        ];
 
         const defaultData = { 
             bookmarks: [
@@ -1232,12 +1358,17 @@
                 streakDays: 0,
                 history: []
             },
+            customCategories: [],
+            customCards: [],
+            cardCategories: {},
             settings: { 
                 autoSync: false, lastSync: null, timezone: 'local', theme: 'cyberpunk',
                 customTheme: { name: 'Mi Tema', bg: '#05080f', card: '#0d131f', border: '#1e293b', text: '#f8fafc', cyan: '#38bdf8', violet: '#a855f7' },
                 scheduleViewMode: 'widget',
                 activeDashboardView: 'all',
                 collapsedCards: [],
+                hiddenCards: [],
+                editMode: false,
                 layout: {
                     colLeft: ['card-kanban', 'card-grades', 'card-deliveries', 'card-tasks', 'card-notes', 'card-sticky'],
                     colRight: ['card-study-stats', 'card-pomodoro', 'card-audio', 'card-snippets', 'card-schedule', 'card-bookmarks', 'card-servers', 'card-sync']
@@ -1256,6 +1387,11 @@
                 appData.settings.customTheme = { ...defaultData.settings.customTheme, ...(parsed.settings?.customTheme || {}) };
                 appData.settings.layout = { ...defaultData.settings.layout, ...(parsed.settings?.layout || {}) };
                 appData.studyStats = { ...defaultData.studyStats, ...(parsed.studyStats || {}) };
+                appData.customCategories = parsed.customCategories || [];
+                appData.customCards = parsed.customCards || [];
+                appData.cardCategories = parsed.cardCategories || {};
+                if (!appData.settings.hiddenCards) appData.settings.hiddenCards = [];
+
                 if (!appData.settings.statsResetDone) {
                     appData.studyStats = {
                         todayFocusMinutes: 0,
@@ -1313,6 +1449,278 @@
             if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
         }
 
+        /* --- GESTIÓN DE SECCIONES / CATEGORÍAS PERSONALIZADAS --- */
+        function getAllCategories() {
+            return [...defaultCategories, ...(appData.customCategories || [])];
+        }
+
+        function renderCategoryPills() {
+            const container = document.getElementById('view-pills-container');
+            if(!container) return;
+            const categories = getAllCategories();
+            
+            container.innerHTML = categories.map(cat => `
+                <button class="view-pill ${appData.settings.activeDashboardView === cat.key ? 'active' : ''}" 
+                        onclick="setDashboardView('${cat.key}')">
+                    ${cat.label}
+                </button>
+            `).join('');
+
+            populateCategorySelectors();
+        }
+
+        function populateCategorySelectors() {
+            const categories = getAllCategories().filter(c => c.key !== 'all');
+            
+            // Selector del panel de creación de tarjetas
+            const createSelect = document.getElementById('new-card-category');
+            if(createSelect) {
+                createSelect.innerHTML = categories.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
+            }
+
+            // Selectores inline de edición por tarjeta
+            document.querySelectorAll('.card').forEach(card => {
+                const select = card.querySelector('.card-category-select');
+                if(select) {
+                    const currentCat = appData.cardCategories[card.id] || card.getAttribute('data-category') || 'dev';
+                    select.innerHTML = categories.map(c => `<option value="${c.key}" ${c.key === currentCat ? 'selected' : ''}>${c.label}</option>`).join('');
+                }
+            });
+        }
+
+        function addCustomCategoryPrompt() {
+            const name = prompt("Nombre de la nueva sección / categoría:");
+            if(!name || !name.trim()) return;
+            const icon = prompt("Icono/Emoji para la sección (ej: ⚡, 📌, 🚀):", "📁") || "📁";
+            
+            const key = 'custom_cat_' + Date.now();
+            if(!appData.customCategories) appData.customCategories = [];
+            
+            appData.customCategories.push({
+                key: key,
+                label: `${icon} ${name.trim()}`
+            });
+
+            saveData(false);
+            renderCategoryPills();
+            setDashboardView(key);
+        }
+
+        function updateCardCategory(cardId, newCatKey) {
+            const card = document.getElementById(cardId);
+            if(!card) return;
+            
+            card.setAttribute('data-category', newCatKey);
+            if(!appData.cardCategories) appData.cardCategories = {};
+            appData.cardCategories[cardId] = newCatKey;
+            
+            saveData(false);
+            setDashboardView(appData.settings.activeDashboardView);
+        }
+
+        /* --- MODO EDICIÓN & VISIBILIDAD DE TARJETAS --- */
+        function toggleEditMode() {
+            appData.settings.editMode = !appData.settings.editMode;
+            document.body.classList.toggle('edit-mode-active', appData.settings.editMode);
+            const btn = document.getElementById('btn-toggle-edit-mode');
+            if(btn) btn.classList.toggle('active', appData.settings.editMode);
+            saveData(false);
+        }
+
+        function toggleCardVisibility(cardId) {
+            const card = document.getElementById(cardId);
+            if(!card) return;
+
+            if(!appData.settings.hiddenCards) appData.settings.hiddenCards = [];
+            
+            const isHidden = appData.settings.hiddenCards.includes(cardId);
+            if(isHidden) {
+                appData.settings.hiddenCards = appData.settings.hiddenCards.filter(id => id !== cardId);
+                card.classList.remove('hidden-card');
+            } else {
+                appData.settings.hiddenCards.push(cardId);
+                card.classList.add('hidden-card');
+            }
+            
+            saveData(false);
+            if(document.getElementById('card-visibility-modal').style.display === 'flex') {
+                renderVisibilityModalControls();
+            }
+        }
+
+        function openVisibilityModal() {
+            document.getElementById('card-visibility-modal').style.display = 'flex';
+            renderVisibilityModalControls();
+        }
+
+        function closeVisibilityModal() {
+            document.getElementById('card-visibility-modal').style.display = 'none';
+        }
+
+        function showAllCards() {
+            appData.settings.hiddenCards = [];
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('hidden-card'));
+            saveData(false);
+            renderVisibilityModalControls();
+        }
+
+        function renderVisibilityModalControls() {
+            const container = document.getElementById('visibility-controls-container');
+            if(!container) return;
+
+            const cards = document.querySelectorAll('.card');
+            const hiddenSet = new Set(appData.settings.hiddenCards || []);
+
+            container.innerHTML = [...cards].map(card => {
+                const title = card.querySelector('.card-title-text')?.textContent.trim() || card.id;
+                const isVisible = !hiddenSet.has(card.id);
+
+                return `
+                <div class="visibility-item">
+                    <span>${title}</span>
+                    <button onclick="toggleCardVisibility('${card.id}')" class="${isVisible ? 'btn-green' : 'btn-danger'}">
+                        ${isVisible ? '👁️ Visible' : '🙈 Oculto'}
+                    </button>
+                </div>`;
+            }).join('');
+        }
+
+        /* --- CREACIÓN DE TARJETAS PERSONALIZADAS --- */
+        function createCustomCard() {
+            const title = document.getElementById('new-card-title').value.trim();
+            const category = document.getElementById('new-card-category').value;
+            const type = document.getElementById('new-card-type').value;
+
+            if(!title) return alert("Por favor introduce un título para la tarjeta.");
+
+            const cardId = 'custom-card-' + Date.now();
+            const cardData = { id: cardId, title, category, type, content: type === 'checklist' ? [] : '' };
+
+            if(!appData.customCards) appData.customCards = [];
+            appData.customCards.push(cardData);
+            
+            if(!appData.cardCategories) appData.cardCategories = {};
+            appData.cardCategories[cardId] = category;
+
+            // Insertar en columna izquierda por defecto
+            if(!appData.settings.layout.colLeft) appData.settings.layout.colLeft = [];
+            appData.settings.layout.colLeft.push(cardId);
+
+            saveData();
+            document.getElementById('new-card-title').value = '';
+            toggleForm('form-create-card-panel');
+            
+            renderCustomCards();
+            populateCategorySelectors();
+            setDashboardView(appData.settings.activeDashboardView);
+        }
+
+        function renderCustomCards() {
+            (appData.customCards || []).forEach(cData => {
+                let card = document.getElementById(cData.id);
+                if(!card) {
+                    card = document.createElement('div');
+                    card.className = 'card';
+                    card.id = cData.id;
+                    card.setAttribute('data-category', appData.cardCategories[cData.id] || cData.category);
+
+                    const colLeft = document.getElementById('col-left');
+                    colLeft.appendChild(card);
+                }
+
+                let bodyHtml = '';
+                if(cData.type === 'notes') {
+                    bodyHtml = `<textarea class="notes-area" oninput="updateCustomCardContent('${cData.id}', this.value)" placeholder="Escribe tu contenido aquí...">${cData.content || ''}</textarea>`;
+                } else if(cData.type === 'iframe') {
+                    bodyHtml = `
+                        <input type="url" value="${cData.content || ''}" placeholder="https://..." onchange="updateCustomCardContent('${cData.id}', this.value)">
+                        <iframe src="${cData.content || ''}" style="width:100%; height:180px; border:1px solid var(--card-border); border-radius:4px; margin-top:4px;" frameborder="0"></iframe>
+                    `;
+                } else if(cData.type === 'checklist') {
+                    const items = Array.isArray(cData.content) ? cData.content : [];
+                    bodyHtml = `
+                        <ul style="max-height:140px;">
+                            ${items.map((it, idx) => `
+                                <li>
+                                    <span onclick="toggleCustomChecklistItem('${cData.id}', ${idx})" style="cursor:pointer; ${it.done?'text-decoration:line-through;opacity:0.6;':''}">
+                                        ${it.done ? '✅' : '⬜'} ${escapeHtml(it.text)}
+                                    </span>
+                                    <button onclick="deleteCustomChecklistItem('${cData.id}', ${idx})" class="btn-icon">✖</button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                        <div style="display:flex; gap:4px; margin-top:4px;">
+                            <input type="text" id="input-check-${cData.id}" placeholder="Nueva entrada..." onkeypress="if(event.key==='Enter') addCustomChecklistItem('${cData.id}')">
+                            <button onclick="addCustomChecklistItem('${cData.id}')">✚</button>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span class="card-title-text">📌 ${escapeHtml(cData.title)}</span>
+                        <div class="card-actions">
+                            <div class="edit-controls">
+                                <select class="card-category-select" onchange="updateCardCategory('${cData.id}', this.value)"></select>
+                                <button class="btn-icon" onclick="toggleCardVisibility('${cData.id}')" title="Ocultar Tarjeta">👁️</button>
+                                <button class="btn-icon" onclick="deleteCustomCard('${cData.id}')" title="Eliminar Tarjeta Personalizada">🗑️</button>
+                            </div>
+                            <button class="btn-icon" onclick="toggleCardCollapse('${cData.id}')">_</button>
+                            <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, '${cData.id}')">⋮⋮</span>
+                        </div>
+                    </div>
+                    <div class="card-body">${bodyHtml}</div>
+                `;
+            });
+        }
+
+        function updateCustomCardContent(cardId, content) {
+            const card = appData.customCards.find(c => c.id === cardId);
+            if(card) {
+                card.content = content;
+                saveData(true);
+            }
+        }
+
+        function addCustomChecklistItem(cardId) {
+            const input = document.getElementById(`input-check-${cardId}`);
+            if(!input || !input.value.trim()) return;
+            const card = appData.customCards.find(c => c.id === cardId);
+            if(card) {
+                if(!Array.isArray(card.content)) card.content = [];
+                card.content.push({ text: input.value.trim(), done: false });
+                saveData();
+                renderCustomCards();
+            }
+        }
+
+        function toggleCustomChecklistItem(cardId, idx) {
+            const card = appData.customCards.find(c => c.id === cardId);
+            if(card && Array.isArray(card.content) && card.content[idx]) {
+                card.content[idx].done = !card.content[idx].done;
+                saveData();
+                renderCustomCards();
+            }
+        }
+
+        function deleteCustomChecklistItem(cardId, idx) {
+            const card = appData.customCards.find(c => c.id === cardId);
+            if(card && Array.isArray(card.content)) {
+                card.content.splice(idx, 1);
+                saveData();
+                renderCustomCards();
+            }
+        }
+
+        function deleteCustomCard(cardId) {
+            if(!confirm("¿Deseas borrar permanentemente esta tarjeta personalizada?")) return;
+            appData.customCards = (appData.customCards || []).filter(c => c.id !== cardId);
+            delete appData.cardCategories[cardId];
+            const cardEl = document.getElementById(cardId);
+            if(cardEl) cardEl.remove();
+            saveData();
+        }
+
         function toggleCardCollapse(cardId) {
             const card = document.getElementById(cardId);
             if (!card) return;
@@ -1328,7 +1736,7 @@
         }
 
         function toggleAllCards() {
-            const cards = document.querySelectorAll('.card');
+            const cards = document.querySelectorAll('.card:not(.hidden-card)');
             const shouldCollapse = [...cards].some(c => !c.classList.contains('collapsed'));
             cards.forEach(c => {
                 if (shouldCollapse) c.classList.add('collapsed');
@@ -1340,17 +1748,27 @@
 
         function setDashboardView(viewKey) {
             appData.settings.activeDashboardView = viewKey;
-            document.querySelectorAll('.view-pill').forEach(btn => btn.classList.remove('active'));
-            const targetBtn = [...document.querySelectorAll('.view-pill')].find(b => b.getAttribute('onclick')?.includes(viewKey));
+            
+            document.querySelectorAll('#view-pills-container .view-pill').forEach(btn => btn.classList.remove('active'));
+            const targetBtn = [...document.querySelectorAll('#view-pills-container .view-pill')].find(b => b.getAttribute('onclick')?.includes(viewKey));
             if (targetBtn) targetBtn.classList.add('active');
 
+            const hiddenSet = new Set(appData.settings.hiddenCards || []);
             const cards = document.querySelectorAll('.card');
+
             cards.forEach(card => {
-                const cat = card.getAttribute('data-category');
-                if (viewKey === 'all' || cat === viewKey) {
-                    card.style.display = 'flex';
+                const cat = appData.cardCategories[card.id] || card.getAttribute('data-category');
+                const isHiddenByPref = hiddenSet.has(card.id);
+
+                if (isHiddenByPref) {
+                    card.classList.add('hidden-card');
                 } else {
-                    card.style.display = 'none';
+                    card.classList.remove('hidden-card');
+                    if (viewKey === 'all' || cat === viewKey) {
+                        card.style.display = 'flex';
+                    } else {
+                        card.style.display = 'none';
+                    }
                 }
             });
             saveData(false);
@@ -1532,6 +1950,11 @@
             (appData.settings.collapsedCards || []).forEach(cardId => {
                 const card = document.getElementById(cardId);
                 if (card) card.classList.add('collapsed');
+            });
+
+            (appData.settings.hiddenCards || []).forEach(cardId => {
+                const card = document.getElementById(cardId);
+                if (card) card.classList.add('hidden-card');
             });
         }
 
@@ -2533,6 +2956,7 @@
             if (e.key === 'Escape') {
                 closeGlobalSearch();
                 closeScheduleModal();
+                closeVisibilityModal();
             }
         });
 
@@ -2737,6 +3161,8 @@
             renderTasks();
             renderBookmarks();
             renderServers();
+            renderCustomCards();
+            renderCategoryPills();
             updateClockDisplay();
             updateStats();
         }
@@ -2764,6 +3190,11 @@
             renderAll();
             setNotesTab('general');
             fetchGistFileList();
+
+            if (appData.settings.editMode) {
+                document.body.classList.add('edit-mode-active');
+                document.getElementById('btn-toggle-edit-mode')?.classList.add('active');
+            }
 
             if (appData.settings.activeDashboardView) {
                 setDashboardView(appData.settings.activeDashboardView);
