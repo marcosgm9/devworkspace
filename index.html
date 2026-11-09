@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.5</title>
+    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.6</title>
     <style>
         :root {
             --bg-color: #05080f;
@@ -207,7 +207,6 @@
             width: 75px; margin-bottom: 0; font-size: 0.7rem; padding: 1px 4px;
         }
 
-        /* --- BARRA DE FILTROS & MODOS DE EDICIÓN --- */
         .view-filter-bar {
             display: flex;
             gap: 4px;
@@ -242,7 +241,6 @@
             color: var(--accent-yellow);
         }
 
-        /* --- GRID DE DASHBOARD --- */
         .dashboard-container {
             display: grid; 
             grid-template-columns: 1fr 1fr; 
@@ -304,7 +302,6 @@
         .drag-handle { cursor: grab; color: var(--text-muted); font-size: 0.72rem; padding: 1px 3px; border-radius: 3px; }
         .drag-handle:active { cursor: grabbing; }
 
-        /* MODO EDICIÓN CSS VISIBILIDAD */
         .edit-controls { display: none; align-items: center; gap: 3px; background: rgba(0,0,0,0.4); padding: 1px 4px; border-radius: 4px; border: 1px solid var(--accent-yellow); }
         body.edit-mode-active .edit-controls { display: flex; }
         body.edit-mode-active .card { border-style: dashed; border-color: var(--accent-yellow); }
@@ -374,13 +371,11 @@
         .btn-copy:hover { border-color: var(--accent-cyan); }
         .empty-state { text-align: center; padding: 8px; color: var(--text-muted); font-family: var(--font-mono); font-style: italic; font-size: 0.72rem; border: 1px dashed var(--card-border); border-radius: 4px; }
 
-        /* --- STATS GRID --- */
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; text-align: center; }
         .stat-box { background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 4px; padding: 4px 2px; }
         .stat-val { font-size: 1.05rem; font-family: var(--font-mono); font-weight: bold; color: var(--accent-cyan); }
         .stat-lbl { font-size: 0.58rem; color: var(--text-muted); text-transform: uppercase; font-family: var(--font-mono); margin-top: 1px; }
 
-        /* --- TASK FILTERS & BADGES --- */
         .task-filters { display: flex; gap: 3px; margin-bottom: 2px; flex-shrink: 0; }
         .task-filters button { flex: 1; padding: 2px; font-size: 0.65rem; border-color: var(--card-border); color: var(--text-muted); }
         .task-filters button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: var(--accent-cyan-glow); }
@@ -395,7 +390,6 @@
         .bg-medium { background: rgba(234, 179, 8, 0.15); color: var(--accent-yellow); }
         .bg-low { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
 
-        /* --- SCRATCHPAD & APUNTES --- */
         .scratchpad-header { display: flex; justify-content: space-between; align-items: center; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
         .tabs { display: flex; gap: 2px; }
         .tab-btn { border: none; border-bottom: 2px solid transparent; padding: 2px 5px; color: var(--text-muted); background: transparent; text-transform: none; font-size: 0.7rem; }
@@ -407,7 +401,6 @@
         .tool-btn-danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: transparent; }
         .notes-area { flex: 1; resize: none; margin-bottom: 0; border-color: transparent; background: rgba(0,0,0,0.2); min-height: 80px; font-size: 0.75rem; }
 
-        /* --- HORARIO & POMODORO --- */
         .schedule-widget { 
             background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); 
             border-radius: 4px; padding: 6px; text-align: center;
@@ -429,7 +422,6 @@
         .pomo-preset-row select { width: 48%; margin-bottom: 0; font-size: 0.68rem; padding: 2px 4px; }
         .pomo-target-info { font-size: 0.68rem; color: var(--accent-violet); text-align: center; font-family: var(--font-mono); min-height: 14px; }
 
-        /* --- CLOUD SYNC & STATUS --- */
         .sync-status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); background: rgba(0,0,0,0.2); padding: 3px 6px; border-radius: 4px; }
         .led { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
         .led-green { background-color: var(--accent-green); box-shadow: 0 0 4px var(--accent-green); }
@@ -439,7 +431,6 @@
         .sync-row { display: flex; gap: 5px; }
         .auto-sync-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; color: var(--text-main); cursor: pointer; font-family: var(--font-mono); }
 
-        /* --- CALCULADORA DE CALIFICACIONES --- */
         .grade-calc-subject {
             background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
             border-radius: 4px; padding: 6px; margin-bottom: 6px;
@@ -455,7 +446,6 @@
         .eval-item-row { display: flex; gap: 4px; align-items: center; margin-bottom: 3px; font-size: 0.68rem; }
         .eval-item-row input { margin-bottom: 0; padding: 2px 4px; }
 
-        /* --- GESTOR DE ENTREGAS --- */
         .deadline-card-item {
             display: flex; justify-content: space-between; align-items: center;
             padding: 5px 7px; border-radius: 4px; margin-bottom: 3px;
@@ -481,7 +471,6 @@
             padding: 1px 5px; border-radius: 3px; display: inline-flex; align-items: center; gap: 3px;
         }
 
-        /* --- SNIPPET & COMMAND LAB --- */
         .snippet-grid {
             display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; padding-right: 2px;
         }
@@ -500,7 +489,6 @@
             white-space: pre-wrap; word-break: break-all; user-select: all;
         }
 
-        /* --- SINTETIZADOR WEB AUDIO API --- */
         .audio-player-widget {
             display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.25);
             border: 1px solid var(--card-border); border-radius: 4px; padding: 8px 10px;
@@ -529,7 +517,6 @@
             100% { height: 16px; }
         }
 
-        /* --- KANBAN --- */
         .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
         .kanban-col {
             background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
@@ -550,7 +537,6 @@
         .kanban-card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.58rem; color: var(--text-muted); font-family: var(--font-mono); }
         .kanban-card-actions { display: flex; gap: 2px; justify-content: flex-end; margin-top: 2px; }
 
-        /* --- ESTADÍSTICAS --- */
         .chart-container {
             background: rgba(0,0,0,0.25); border: 1px solid var(--card-border);
             border-radius: 4px; padding: 6px; display: flex; flex-direction: column; gap: 4px;
@@ -568,7 +554,6 @@
         }
         .bar-label { font-size: 0.55rem; font-family: var(--font-mono); color: var(--text-muted); }
 
-        /* --- MODALES --- */
         .modal-overlay { 
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
             background: rgba(0,0,0,0.85); z-index: 1000; display: none; 
@@ -617,10 +602,9 @@
 </head>
 <body>
 
-    <!-- HEADER ULTRA-COMPACTO -->
     <header>
         <div class="header-title-zone">
-            <h1>DevWorkspace_ <span class="badge-version">v5.5 DAM/SMR</span></h1>
+            <h1>DevWorkspace_ <span class="badge-version">v5.6 Ultra</span></h1>
         </div>
         <div class="header-controls">
             <button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
@@ -646,7 +630,7 @@
 
             <select id="timezone-select" class="tz-select">
                 <option value="local">Local (Sistema)</option>
-                <option value="UTC">UTC (GMT+0)</option>
+                <option value="UTC">UTC (Global)</option>
                 <option value="Europe/Madrid">Madrid (CET)</option>
                 <option value="Europe/London">Londres (GMT)</option>
                 <option value="America/New_York">Nueva York (EST)</option>
@@ -663,12 +647,9 @@
         </div>
     </header>
 
-    <!-- BARRA DE FILTRADO POR ÁREAS Y GESTIÓN DE EDICIÓN -->
     <div class="view-filter-bar">
         <span style="font-size:0.65rem; color:var(--text-muted); font-family:var(--font-mono); margin-right:2px;">Vistas:</span>
-        <div id="view-pills-container" style="display:flex; gap:4px; align-items:center;">
-            <!-- Renderizado dinámico de pills -->
-        </div>
+        <div id="view-pills-container" style="display:flex; gap:4px; align-items:center;"></div>
         <button class="view-pill btn-violet" onclick="addCustomCategoryPrompt()" title="Añadir nueva categoría/sección">[+] Sección</button>
         <div style="flex:1;"></div>
         <button class="view-pill btn-edit-mode" id="btn-toggle-edit-mode" onclick="toggleEditMode()">✏️ Modo Edición</button>
@@ -677,7 +658,6 @@
         <button class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕ Colapsar/Expandir</button>
     </div>
 
-    <!-- PANEL INLINE PARA CREAR TARJETA PERSONALIZADA -->
     <div id="form-create-card-panel" class="hidden-form" style="background:var(--card-bg); border:1px solid var(--accent-cyan); padding:8px; border-radius:var(--radius); margin-bottom:4px; flex-shrink:0;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
             <span style="font-family:var(--font-mono); font-size:0.78rem; color:var(--accent-cyan); font-weight:bold;">🛠️ Crear Tarjeta Personalizada</span>
@@ -695,13 +675,9 @@
         </div>
     </div>
 
-    <!-- CONTENEDOR GRID CON COLUMNAS INDEPENDIENTES -->
     <div class="dashboard-container" id="dashboard-container">
-        
-        <!-- COLUMNA IZQUIERDA -->
         <div class="col-left" id="col-left">
 
-            <!-- TARJETA: PLANIFICADOR KANBAN DE ESTUDIO -->
             <div class="card" id="card-kanban" data-category="study">
                 <div class="card-header">
                     <span class="card-title-text">📅 Kanban de Estudio</span>
@@ -756,7 +732,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: CALCULADORA DE CALIFICACIONES PONDERADAS -->
             <div class="card" id="card-grades" data-category="study">
                 <div class="card-header">
                     <span class="card-title-text">🧮 Calculadora de Calificaciones Ponderadas</span>
@@ -783,7 +758,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: GESTOR DE ENTREGAS Y EXÁMENES -->
             <div class="card" id="card-deliveries" data-category="study">
                 <div class="card-header">
                     <span class="card-title-text">⏳ Entregas & Exámenes con Cuenta Regresiva</span>
@@ -826,7 +800,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: TAREAS GENERALES -->
             <div class="card" id="card-tasks" data-category="focus">
                 <div class="card-header">
                     <span class="card-title-text">📋 Tareas Generales</span>
@@ -859,7 +832,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: SCRATCHPAD & APUNTES -->
             <div class="card" id="card-notes" data-category="dev">
                 <div class="card-header">
                     <span class="card-title-text">📝 Scratchpad & Apuntes</span>
@@ -893,7 +865,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: STICKY BUFFER -->
             <div class="card" id="card-sticky" data-category="dev" style="min-height: 75px;">
                 <div class="card-header">
                     <span class="card-title-text">📌 Sticky Note / Buffer Temporal</span>
@@ -913,10 +884,8 @@
 
         </div>
 
-        <!-- COLUMNA DERECHA -->
         <div class="col-right" id="col-right">
 
-            <!-- TARJETA: ESTADÍSTICAS AVANZADAS DEL ESTUDIANTE -->
             <div class="card" id="card-study-stats" data-category="focus">
                 <div class="card-header">
                     <span class="card-title-text">📈 Métricas & Progreso del Estudiante</span>
@@ -965,7 +934,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: POMODORO PRO -->
             <div class="card" id="card-pomodoro" data-category="focus">
                 <div class="card-header">
                     <span class="card-title-text">⏱️ Pomodoro Pro</span>
@@ -1004,7 +972,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: REPRODUCTOR DE RUIDO BLANCO / BINAURAL -->
             <div class="card" id="card-audio" data-category="focus">
                 <div class="card-header">
                     <span class="card-title-text">🎧 Ruido Blanco / Lofi & Ondas Binaurales</span>
@@ -1049,7 +1016,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: SNIPPET & COMMAND LAB -->
             <div class="card" id="card-snippets" data-category="dev">
                 <div class="card-header">
                     <span class="card-title-text">💻 Snippet & Command Lab</span>
@@ -1091,7 +1057,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: CLASES / HORARIO -->
             <div class="card" id="card-schedule" data-category="study">
                 <div class="card-header">
                     <span class="card-title-text">📅 Horario & Clases</span>
@@ -1113,7 +1078,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: ENLACES -->
             <div class="card" id="card-bookmarks" data-category="dev">
                 <div class="card-header">
                     <span class="card-title-text">🔖 Enlaces & Documentación</span>
@@ -1138,7 +1102,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: SERVIDORES & LABS -->
             <div class="card" id="card-servers" data-category="dev">
                 <div class="card-header">
                     <span class="card-title-text">🖥️ Servidores & VMs</span>
@@ -1166,7 +1129,6 @@
                 </div>
             </div>
 
-            <!-- TARJETA: GITHUB SYNC -->
             <div class="card" id="card-sync" data-category="focus">
                 <div class="card-header">
                     <span class="card-title-text">☁️ Sincronización GitHub Gist</span>
@@ -1202,7 +1164,6 @@
         </div>
     </div>
 
-    <!-- MODAL DE GESTIÓN DE VISIBILIDAD DE TARJETAS -->
     <div class="modal-overlay" id="card-visibility-modal">
         <div class="modal-content" style="max-width: 580px;">
             <div class="modal-header">
@@ -1219,7 +1180,6 @@
         </div>
     </div>
 
-    <!-- MODAL BUSCADOR GLOBAL (CTRL + K) -->
     <div class="modal-overlay" id="global-search-modal">
         <div class="modal-content" style="max-width: 520px;">
             <div class="modal-header">
@@ -1233,7 +1193,6 @@
         </div>
     </div>
 
-    <!-- MODAL EDITOR DE HORARIO SEMANAL -->
     <div class="modal-overlay" id="schedule-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1279,9 +1238,8 @@
         </div>
     </div>
 
-    <!-- FOOTER -->
     <footer>
-        <div>DevWorkspace v5.5 Ultimate &bull; DAM / DAW / SMR / Uni Suite</div>
+        <div>DevWorkspace v5.6 Ultra &bull; DAM / DAW / SMR / Uni Suite</div>
         <div>
             <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none; margin-right: 12px;">[Exportar JSON]</a>
             <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" style="color:var(--accent-violet); text-decoration:none;">[Importar JSON]</a>
@@ -1289,7 +1247,6 @@
         </div>
     </footer>
 
-    <!-- SCRIPT PRINCIPAL AUDITADO Y OPTIMIZADO -->
     <script>
         function debounce(func, wait) {
             let timeout;
@@ -1449,7 +1406,29 @@
             if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
         }
 
-        /* --- GESTIÓN DE SECCIONES / CATEGORÍAS PERSONALIZADAS --- */
+        /* --- CÁLCULO DE HORA INDEPENDIENTE DEL SISTEMA LOCAL --- */
+        function getClockDate() {
+            const nowMs = Date.now(); 
+            const tz = appData.settings.timezone;
+
+            if (!tz || tz === 'local') {
+                return new Date(); 
+            }
+
+            try {
+                const formatOptions = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+                const formatter = new Intl.DateTimeFormat('en-US', formatOptions);
+                const parts = formatter.formatToParts(new Date(nowMs));
+                const map = {};
+                parts.forEach(p => { if (p.type !== 'literal') map[p.type] = p.value; });
+
+                const hourNum = map.hour === '24' ? '00' : map.hour;
+                return new Date(`${map.year}-${map.month}-${map.day}T${hourNum}:${map.minute}:${map.second}`);
+            } catch (e) {
+                return new Date(nowMs);
+            }
+        }
+
         function getAllCategories() {
             return [...defaultCategories, ...(appData.customCategories || [])];
         }
@@ -1472,13 +1451,11 @@
         function populateCategorySelectors() {
             const categories = getAllCategories().filter(c => c.key !== 'all');
             
-            // Selector del panel de creación de tarjetas
             const createSelect = document.getElementById('new-card-category');
             if(createSelect) {
                 createSelect.innerHTML = categories.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
             }
 
-            // Selectores inline de edición por tarjeta
             document.querySelectorAll('.card').forEach(card => {
                 const select = card.querySelector('.card-category-select');
                 if(select) {
@@ -1518,7 +1495,6 @@
             setDashboardView(appData.settings.activeDashboardView);
         }
 
-        /* --- MODO EDICIÓN & VISIBILIDAD DE TARJETAS --- */
         function toggleEditMode() {
             appData.settings.editMode = !appData.settings.editMode;
             document.body.classList.toggle('edit-mode-active', appData.settings.editMode);
@@ -1585,7 +1561,6 @@
             }).join('');
         }
 
-        /* --- CREACIÓN DE TARJETAS PERSONALIZADAS --- */
         function createCustomCard() {
             const title = document.getElementById('new-card-title').value.trim();
             const category = document.getElementById('new-card-category').value;
@@ -1602,7 +1577,6 @@
             if(!appData.cardCategories) appData.cardCategories = {};
             appData.cardCategories[cardId] = category;
 
-            // Insertar en columna izquierda por defecto
             if(!appData.settings.layout.colLeft) appData.settings.layout.colLeft = [];
             appData.settings.layout.colLeft.push(cardId);
 
@@ -1830,36 +1804,10 @@
             saveData(false);
         }, 150);
 
-        let cachedFormatter = null;
-        let cachedTz = null;
-
         function changeTimezone(tzVal) {
             appData.settings.timezone = tzVal;
-            cachedFormatter = null;
             saveData(false);
             updateClockDisplay();
-        }
-
-        function getClockDate() {
-            const now = new Date();
-            const tz = appData.settings.timezone;
-            if (!tz || tz === 'local') return now;
-            
-            try {
-                if (!cachedFormatter || cachedTz !== tz) {
-                    cachedTz = tz;
-                    cachedFormatter = new Intl.DateTimeFormat('en-US', {
-                        timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric',
-                        hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
-                    });
-                }
-                const map = {};
-                cachedFormatter.formatToParts(now).forEach(p => { if (p.type !== 'literal') map[p.type] = parseInt(p.value, 10); });
-                if (map.hour === 24) map.hour = 0;
-                return new Date(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
-            } catch (e) {
-                return now;
-            }
         }
 
         function updateClockDisplay() {
@@ -1958,7 +1906,6 @@
             });
         }
 
-        // --- SINTETIZADOR WEB AUDIO API ---
         class NoiseSynth {
             constructor() {
                 this.ctx = null;
@@ -2149,7 +2096,6 @@
             } catch(e){}
         }
 
-        // --- CALCULADORA DE CALIFICACIONES ---
         function renderGradesCalculator() {
             const container = document.getElementById('grades-subjects-container');
             if (!container) return;
@@ -2272,7 +2218,6 @@
             }
         }
 
-        // --- GESTOR DE ENTREGAS Y EXÁMENES ---
         function setDeliveriesFilter(filter) {
             currentDelivFilter = filter;
             ['all', 'exam', 'practice', 'pending'].forEach(f => {
@@ -2392,7 +2337,6 @@
             updateStats();
         }
 
-        // --- SNIPPET & COMMAND LAB ---
         function renderSnippets() {
             const container = document.getElementById('snippet-list-container');
             if (!container) return;
@@ -2481,7 +2425,6 @@
             return div.innerHTML;
         }
 
-        // --- KANBAN DE ESTUDIO ---
         function renderKanban() {
             const cols = { todo: [], doing: [], done: [] };
             (appData.studyKanban || []).forEach(task => {
@@ -2574,7 +2517,6 @@
             alert(`Objetivo fijado en Pomodoro: "${task.title}"`);
         }
 
-        // --- ESTADÍSTICAS Y MÉTRICAS ---
         function updateAdvancedStats() {
             const stats = appData.studyStats;
             const todayMins = stats.todayFocusMinutes || 0;
@@ -2677,7 +2619,6 @@
             updateAdvancedStats();
         }
 
-        // --- POMODORO PRO ---
         function startCustomPomodoro(type) {
             if ("Notification" in window && Notification.permission === "default") {
                 Notification.requestPermission();
@@ -2726,7 +2667,6 @@
             document.getElementById('pomodoro-display').textContent = "25:00"; 
         }
 
-        // --- TAREAS RÁPIDAS ---
         function setTaskFilter(filter) { 
             currentTaskFilter = filter; 
             ['all', 'pending', 'done'].forEach(f => document.getElementById('filter-' + f)?.classList.remove('active')); 
@@ -2773,7 +2713,6 @@
             updateAdvancedStats();
         }
 
-        // --- SCRATCHPAD & APUNTES ---
         function setNotesTab(tab) { 
             currentNotesTab = tab; 
             ['general', 'comandos', 'clases'].forEach(t => document.getElementById('tab-' + t)?.classList.remove('active')); 
@@ -2800,7 +2739,6 @@
             a.download = `${yyyy}${mm}${dd}_${currentNotesTab}.txt`; a.click(); 
         }
 
-        // --- HORARIO & CLASES ---
         function toggleScheduleViewMode() { 
             appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table'; 
             saveData(false); 
@@ -2893,7 +2831,6 @@
         function deleteScheduleClass(id) { appData.schedule = appData.schedule.filter(c => c.id !== id); saveData(); renderScheduleEditor(); }
         function clearSchedule() { if(confirm("¿Limpiar todo el horario semanal?")) { appData.schedule = []; saveData(); renderScheduleEditor(); } }
 
-        // --- ENLACES & SERVIDORES ---
         function renderBookmarks() {
             const filter = (document.getElementById('bm-search-filter')?.value || '').toLowerCase();
             const list = document.getElementById('bookmarks-list');
@@ -2941,7 +2878,6 @@
         }
         function deleteServer(id) { appData.servers = appData.servers.filter(x => x.id !== id); saveData(); renderServers(); }
 
-        // --- BUSCADOR GLOBAL (CTRL + K) ---
         function openGlobalSearch() { 
             document.getElementById('global-search-modal').style.display = 'flex'; 
             document.getElementById('global-search-input').focus(); 
@@ -2977,7 +2913,6 @@
             resultsEl.innerHTML = results.map(r => `<li><b>${r.type}:</b> <span style="margin-left:6px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(r.text)}</span></li>`).join('');
         }
 
-        // --- GITHUB GIST SYNC & IMPORT/EXPORT ---
         function setLog(msg, color, ledClass) { 
             const log = document.getElementById('cloud-log'); 
             if (log) {
@@ -3167,7 +3102,6 @@
             updateStats();
         }
 
-        // --- INICIALIZACIÓN ---
         window.addEventListener('DOMContentLoaded', () => {
             checkDailyStreak();
 
