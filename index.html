@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.6</title>
+    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.8</title>
     <style>
         :root {
             --bg-color: #05080f;
@@ -140,8 +140,8 @@
         .btn-quick-search:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
         kbd { background: rgba(255,255,255,0.1); border-radius: 3px; padding: 1px 4px; font-size: 0.6rem; }
 
-        .theme-select, .tz-select {
-            width: 125px !important;
+        .theme-select, .tz-select, .skew-select {
+            width: 110px !important;
             background: rgba(0,0,0,0.4); 
             border: 1px solid var(--card-border);
             color: var(--accent-cyan); 
@@ -152,6 +152,7 @@
             cursor: pointer; 
             outline: none;
         }
+        .skew-select { color: var(--accent-yellow); width: 105px !important; }
 
         #clock-container { 
             text-align: right; 
@@ -162,8 +163,9 @@
             line-height: 1.05;
             padding-left: 8px;
             border-left: 1px solid var(--card-border);
-            min-width: 85px;
+            min-width: 95px;
             flex-shrink: 0;
+            cursor: pointer;
         }
 
         #time { 
@@ -604,7 +606,7 @@
 
     <header>
         <div class="header-title-zone">
-            <h1>DevWorkspace_ <span class="badge-version">v5.6 Ultra</span></h1>
+            <h1>DevWorkspace_ <span class="badge-version">v5.8 Ultra</span></h1>
         </div>
         <div class="header-controls">
             <button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
@@ -639,10 +641,22 @@
                 <option value="Asia/Tokyo">Tokio (JST)</option>
             </select>
 
-            <div id="clock-container">
+            <select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual si tu PC tiene la hora mal y no hay internet">
+                <option value="0">⏱️ Desfase 0h</option>
+                <option value="3600000">+1 hora</option>
+                <option value="7200000">+2 horas</option>
+                <option value="10800000">+3 horas</option>
+                <option value="14400000">+4 horas</option>
+                <option value="-3600000">-1 hora</option>
+                <option value="-7200000">-2 horas</option>
+                <option value="-10800000">-3 horas</option>
+                <option value="-14400000">-4 horas</option>
+            </select>
+
+            <div id="clock-container" onclick="syncRealTimeNetwork()" title="Hacer clic para forzar sincronización con servidor de tiempo real">
                 <div id="time">00:00:00</div>
                 <div id="date">--/--/----</div>
-                <div id="net-status" class="net-status">🌐 Sincronizado</div>
+                <div id="net-status" class="net-status">🌐 Sincronizando...</div>
             </div>
         </div>
     </header>
@@ -1239,7 +1253,7 @@
     </div>
 
     <footer>
-        <div>DevWorkspace v5.6 Ultra &bull; DAM / DAW / SMR / Uni Suite</div>
+        <div>DevWorkspace v5.8 Ultra &bull; DAM / DAW / SMR / Uni Suite</div>
         <div>
             <a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan); text-decoration:none; margin-right: 12px;">[Exportar JSON]</a>
             <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" style="color:var(--accent-violet); text-decoration:none;">[Importar JSON]</a>
@@ -1319,7 +1333,7 @@
             customCards: [],
             cardCategories: {},
             settings: { 
-                autoSync: false, lastSync: null, timezone: 'local', theme: 'cyberpunk',
+                autoSync: false, lastSync: null, timezone: 'local', theme: 'cyberpunk', manualSkewOffsetMs: 0,
                 customTheme: { name: 'Mi Tema', bg: '#05080f', card: '#0d131f', border: '#1e293b', text: '#f8fafc', cyan: '#38bdf8', violet: '#a855f7' },
                 scheduleViewMode: 'widget',
                 activeDashboardView: 'all',
@@ -1348,6 +1362,7 @@
                 appData.customCards = parsed.customCards || [];
                 appData.cardCategories = parsed.cardCategories || {};
                 if (!appData.settings.hiddenCards) appData.settings.hiddenCards = [];
+                if (!appData.settings.manualSkewOffsetMs) appData.settings.manualSkewOffsetMs = 0;
 
                 if (!appData.settings.statsResetDone) {
                     appData.studyStats = {
@@ -1379,6 +1394,115 @@
         let pomoInterval = null;
         let countdownInterval = null;
 
+        /* --- MOTOR DE HORA RESISTENTE SIN CONEXIÓN Y CON AJUSTE MANUAL --- */
+        let realTimeOffsetMs = 0;
+        let isNetworkTimeSynced = false;
+
+        async function syncRealTimeNetwork() {
+            const statusEl = document.getElementById('net-status');
+            if (statusEl) {
+                statusEl.textContent = '🌐 Sincronizando...';
+                statusEl.style.color = 'var(--text-muted)';
+            }
+
+            const timeApis = [
+                async () => {
+                    const start = Date.now();
+                    const res = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC', { cache: 'no-store' });
+                    const data = await res.json();
+                    const end = Date.now();
+                    const serverUtcMs = new Date(data.utc_datetime).getTime();
+                    return serverUtcMs + Math.round((end - start) / 2);
+                },
+                async () => {
+                    const start = Date.now();
+                    const res = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=UTC', { cache: 'no-store' });
+                    const data = await res.json();
+                    const end = Date.now();
+                    const serverUtcMs = new Date(`${data.year}-${String(data.month).padStart(2,'0')}-${String(data.day).padStart(2,'0')}T${String(data.hour).padStart(2,'0')}:${String(data.minute).padStart(2,'0')}:${String(data.seconds).padStart(2,'0')}Z`).getTime();
+                    return serverUtcMs + Math.round((end - start) / 2);
+                },
+                async () => {
+                    const start = Date.now();
+                    const res = await fetch('https://httpbin.org/date', { cache: 'no-store' });
+                    const dateHeader = res.headers.get('date');
+                    const end = Date.now();
+                    if (!dateHeader) throw new Error("Sin header Date");
+                    return new Date(dateHeader).getTime() + Math.round((end - start) / 2);
+                }
+            ];
+
+            for (const apiFn of timeApis) {
+                try {
+                    const trueUtcMs = await apiFn();
+                    const localMs = Date.now();
+                    realTimeOffsetMs = trueUtcMs - localMs;
+                    isNetworkTimeSynced = true;
+
+                    if (statusEl) {
+                        statusEl.textContent = '🌐 Hora Real API';
+                        statusEl.style.color = 'var(--accent-green)';
+                    }
+                    updateClockDisplay();
+                    return;
+                } catch (e) {
+                    continue;
+                }
+            }
+
+            isNetworkTimeSynced = false;
+            if (statusEl) {
+                const skew = appData.settings.manualSkewOffsetMs || 0;
+                if (skew !== 0) {
+                    statusEl.textContent = '⏱️ Calibrado Manual';
+                    statusEl.style.color = 'var(--accent-yellow)';
+                } else {
+                    statusEl.textContent = '⚠️ Hora PC Local';
+                    statusEl.style.color = 'var(--accent-red)';
+                }
+            }
+            updateClockDisplay();
+        }
+
+        function applyManualSkewOffset(valMsStr) {
+            const valMs = parseInt(valMsStr, 10);
+            appData.settings.manualSkewOffsetMs = valMs;
+            saveData(false);
+
+            if (!isNetworkTimeSynced) {
+                const statusEl = document.getElementById('net-status');
+                if (statusEl) {
+                    statusEl.textContent = valMs !== 0 ? '⏱️ Calibrado Manual' : '⚠️ Hora PC Local';
+                    statusEl.style.color = valMs !== 0 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+                }
+            }
+            updateClockDisplay();
+        }
+
+        function getClockDate() {
+            const manualOffset = appData.settings.manualSkewOffsetMs || 0;
+            const effectiveOffset = isNetworkTimeSynced ? realTimeOffsetMs : manualOffset;
+            const baseMs = Date.now() + effectiveOffset;
+            const tz = appData.settings.timezone;
+
+            if (!tz || tz === 'local') {
+                return new Date(baseMs);
+            }
+
+            try {
+                const formatOptions = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+                const formatter = new Intl.DateTimeFormat('en-US', formatOptions);
+                const parts = formatter.formatToParts(new Date(baseMs));
+                const map = {};
+                parts.forEach(p => { if (p.type !== 'literal') map[p.type] = p.value; });
+
+                const hourNum = map.hour === '24' ? '00' : map.hour;
+                return new Date(`${map.year}-${map.month}-${map.day}T${hourNum}:${map.minute}:${map.second}`);
+            } catch (e) {
+                return new Date(baseMs);
+            }
+        }
+
         function checkDailyStreak() {
             const todayStr = new Date().toISOString().slice(0, 10);
             if (appData.studyStats.lastDate !== todayStr) {
@@ -1404,29 +1528,6 @@
         function toggleForm(id) { 
             const el = document.getElementById(id); 
             if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block'; 
-        }
-
-        /* --- CÁLCULO DE HORA INDEPENDIENTE DEL SISTEMA LOCAL --- */
-        function getClockDate() {
-            const nowMs = Date.now(); 
-            const tz = appData.settings.timezone;
-
-            if (!tz || tz === 'local') {
-                return new Date(); 
-            }
-
-            try {
-                const formatOptions = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
-                const formatter = new Intl.DateTimeFormat('en-US', formatOptions);
-                const parts = formatter.formatToParts(new Date(nowMs));
-                const map = {};
-                parts.forEach(p => { if (p.type !== 'literal') map[p.type] = p.value; });
-
-                const hourNum = map.hour === '24' ? '00' : map.hour;
-                return new Date(`${map.year}-${map.month}-${map.day}T${hourNum}:${map.minute}:${map.second}`);
-            } catch (e) {
-                return new Date(nowMs);
-            }
         }
 
         function getAllCategories() {
@@ -2244,7 +2345,7 @@
                 return;
             }
 
-            const nowMs = Date.now();
+            const nowMs = getClockDate().getTime();
 
             container.innerHTML = items.map(d => {
                 const targetMs = new Date(d.dueDate).getTime();
@@ -3109,6 +3210,7 @@
             document.getElementById('sync-gist').value = localStorage.getItem('gistId') || '';
             document.getElementById('auto-sync-check').checked = appData.settings.autoSync || false;
             document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
+            document.getElementById('skew-adjust-select').value = (appData.settings.manualSkewOffsetMs || 0).toString();
             document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
             
             document.querySelectorAll('#custom-theme-panel input').forEach(input => {
@@ -3133,6 +3235,9 @@
             if (appData.settings.activeDashboardView) {
                 setDashboardView(appData.settings.activeDashboardView);
             }
+
+            syncRealTimeNetwork();
+            setInterval(syncRealTimeNetwork, 300000);
 
             countdownInterval = setInterval(() => {
                 renderDeliveries();
