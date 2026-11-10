@@ -577,9 +577,23 @@ function toggleForm(id) {
     if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
 
-/* ===== RELOJ ONLINE REAL (NTP / WorldTimeAPI - Madrid Europe/Madrid) ===== */
+/* ===== RELOJ ONLINE REAL (Fallback en cascada: WorldTimeAPI -> TimeAPI.io) ===== */
 let networkOffsetMs = 0;
 let isTimeSyncedNtp = false;
+
+async function fetchTimeWithTimeout(url, timeoutMs = 3000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        clearTimeout(id);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } catch (err) {
+        clearTimeout(id);
+        throw err;
+    }
+}
 
 async function syncRealTimeNetwork() {
     const el = document.getElementById('net-status');
@@ -587,36 +601,49 @@ async function syncRealTimeNetwork() {
         el.textContent = '🔄 Sincronizando...';
         el.style.color = 'var(--accent-yellow)';
     }
-    
+
+    const startReq = performance.now();
+    let realTimeIso = null;
+
+    // Intentar servidor primario: WorldTimeAPI
     try {
-        const startReq = performance.now();
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store' });
-        if (!res.ok) throw new Error('HTTP Error ' + res.status);
-        const data = await res.json();
+        const data = await fetchTimeWithTimeout('https://worldtimeapi.org/api/timezone/Europe/Madrid', 3500);
+        realTimeIso = data.datetime;
+    } catch (primaryErr) {
+        console.warn('WorldTimeAPI falló, intentando servidor secundario (TimeAPI.io)...', primaryErr);
+        
+        // Intentar servidor secundario: TimeAPI.io
+        try {
+            const dataSec = await fetchTimeWithTimeout('https://timeapi.io/api/v1/time/current/zone?timeZone=Europe/Madrid', 3500);
+            realTimeIso = dataSec.dateTime || `${dataSec.year}-${String(dataSec.month).padStart(2,'0')}-${String(dataSec.day).padStart(2,'0')}T${String(dataSec.hour).padStart(2,'0')}:${String(dataSec.minute).padStart(2,'0')}:${String(dataSec.second).padStart(2,'0')}`;
+        } catch (secondaryErr) {
+            console.warn('Todos los servidores NTP/API fallaron. Usando reloj local de Madrid.', secondaryErr);
+        }
+    }
+
+    if (realTimeIso) {
         const endReq = performance.now();
         const latency = (endReq - startReq) / 2;
-        
-        const realInternetTimeMs = new Date(data.datetime).getTime() + latency;
+        const realInternetTimeMs = new Date(realTimeIso).getTime() + latency;
         const systemTimeMs = Date.now();
-        
+
         networkOffsetMs = realInternetTimeMs - systemTimeMs;
         isTimeSyncedNtp = true;
-        
+
         if (el) {
             el.textContent = '🌐 Hora Real (API Madrid)';
             el.style.color = 'var(--accent-green)';
         }
-    } catch (err) {
-        console.warn('No se pudo obtener la hora de Internet, usando fallback con UTC Madrid:', err);
+    } else {
         isTimeSyncedNtp = false;
         if (el) {
             el.textContent = '⚠️ Hora Red No Disponible (Local Madrid)';
             el.style.color = 'var(--accent-red)';
         }
     }
+
     updateClockDisplay();
 }
-
 // Resincronizar hora real de internet cada 1 hora automáticamente
 setInterval(syncRealTimeNetwork, 3600000);
 
