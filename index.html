@@ -55,7 +55,7 @@ h1 { color:var(--accent-cyan); font-family:var(--font-mono); font-size:1.25rem; 
 .btn-quick-search:hover { border-color:var(--accent-cyan); color:var(--accent-cyan); }
 kbd { background:rgba(255,255,255,0.1); border-radius:3px; padding:1px 4px; font-size:0.6rem; }
 .theme-select, .tz-select, .skew-select { width:110px !important; background:rgba(0,0,0,0.4); border:1px solid var(--card-border); color:var(--accent-cyan); font-family:var(--font-mono); font-size:0.72rem; padding:3px 6px; border-radius:4px; cursor:pointer; outline:none; }
-.skew-select { color:var(--accent-yellow); width:105px !important; }
+.skew-select { color:var(--accent-yellow); width:135px !important; }
 #clock-container { text-align:right; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; line-height:1.05; padding-left:8px; border-left:1px solid var(--card-border); min-width:95px; flex-shrink:0; cursor:pointer; }
 #time { font-size:1.15rem; font-family:var(--font-mono); color:var(--accent-violet); font-weight:bold; text-shadow:0 0 8px var(--accent-violet-glow); line-height:1; }
 #date { color:var(--text-muted); font-size:0.58rem; text-transform:uppercase; letter-spacing:0.5px; margin-top:1px; }
@@ -226,15 +226,35 @@ footer { padding-top:4px; border-top:1px solid var(--card-border); text-align:ce
 <input type="text" id="custom-theme-name" placeholder="Nombre" title="Nombre del tema">
 <input type="color" id="cp-bg" title="Fondo"><input type="color" id="cp-card" title="Tarjeta"><input type="color" id="cp-border" title="Borde"><input type="color" id="cp-text" title="Texto"><input type="color" id="cp-cyan" title="Cyan"><input type="color" id="cp-violet" title="Violeta">
 </div>
-<select id="timezone-select" class="tz-select">
-<option value="Europe/Madrid">Madrid (CET/CEST)</option>
+
+<!-- ================= MODULO RELOJ MEJORADO ================= -->
+<select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual de hora (horas o minutos)">
+    <option value="0">⏱️ Auto (API Madrid)</option>
+    <optgroup label="Ajuste por Minutos">
+      <option value="300000">+5 minutos</option>
+      <option value="600000">+10 minutos</option>
+      <option value="900000">+15 minutos</option>
+      <option value="1800000">+30 minutos</option>
+      <option value="-300000">-5 minutos</option>
+      <option value="-600000">-10 minutos</option>
+      <option value="-900000">-15 minutos</option>
+      <option value="-1800000">-30 minutos</option>
+    </optgroup>
+    <optgroup label="Ajuste por Horas">
+      <option value="3600000">+1 hora</option>
+      <option value="7200000">+2 horas</option>
+      <option value="-3600000">-1 hora</option>
+      <option value="-7200000">-2 horas</option>
+    </optgroup>
+    <optgroup label="Personalizado">
+      <option value="custom">✏️ Escribir hora exacta...</option>
+    </optgroup>
 </select>
-<select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual si deseas forzar desfase">
-<option value="0">⏱️ Desfase 0h</option><option value="3600000">+1 hora</option><option value="7200000">+2 horas</option><option value="10800000">+3 horas</option><option value="14400000">+4 horas</option><option value="-3600000">-1 hora</option><option value="-7200000">-2 horas</option><option value="-10800000">-3 horas</option><option value="-14400000">-4 horas</option>
-</select>
-<div id="clock-container" onclick="syncRealTimeNetwork()" title="Haga clic para resincronizar hora de internet con Madrid">
+<div id="clock-container" onclick="syncRealTimeNetwork()" title="Haz clic para resincronizar hora de internet (Madrid)">
 <div id="time">00:00:00</div><div id="date">--/--/----</div><div id="net-status" class="net-status">🌐 Sincronizando...</div>
 </div>
+<!-- ================= FIN MODULO RELOJ ================= -->
+
 </div>
 </header>
 
@@ -576,47 +596,13 @@ function toggleForm(id) {
     const el = document.getElementById(id);
     if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
-// reloj
-<div class="header-controls">
-  <!-- Selector de ajuste manual de hora -->
-  <select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual de hora (horas o minutos)">
-    <option value="0">⏱️ Auto (API Madrid)</option>
-    <optgroup label="Ajuste por Minutos">
-      <option value="300000">+5 minutos</option>
-      <option value="600000">+10 minutos</option>
-      <option value="900000">+15 minutos</option>
-      <option value="1800000">+30 minutos</option>
-      <option value="-300000">-5 minutos</option>
-      <option value="-600000">-10 minutos</option>
-      <option value="-900000">-15 minutos</option>
-      <option value="-1800000">-30 minutos</option>
-    </optgroup>
-    <optgroup label="Ajuste por Horas">
-      <option value="3600000">+1 hora</option>
-      <option value="7200000">+2 horas</option>
-      <option value="-3600000">-1 hora</option>
-      <option value="-7200000">-2 horas</option>
-    </optgroup>
-    <optgroup label="Personalizado">
-      <option value="custom">✏️ Escribir hora exacta...</option>
-    </optgroup>
-  </select>
 
-  <!-- Panel visualizador del reloj -->
-  <div id="clock-container" onclick="syncRealTimeNetwork()" title="Haz clic para resincronizar hora de internet (Madrid)">
-    <div id="time">00:00:00</div>
-    <div id="date">--/--/----</div>
-    <div id="net-status" class="net-status">🌐 Sincronizando...</div>
-  </div>
-</div>
-
-<script>
-/* ===== LÓGICA DEL RELOJ ONLINE / MANUAL MADRID ===== */
+/* ===== CONTROL DEL RELOJ (API MADRID + FALLBACK CASCADA + MANUAL) ===== */
 let networkOffsetMs = 0;
 let manualOverrideMs = 0;
 let isManualMode = false;
 
-// Cargar estado previo de ajuste manual desde localStorage si existe
+// Cargar estado manual previo si existe en localStorage
 try {
     const savedManual = localStorage.getItem('dw_clock_manualMs');
     const savedIsManual = localStorage.getItem('dw_clock_isManual');
@@ -626,7 +612,6 @@ try {
     }
 } catch (e) {}
 
-// Petición fetch con timeout de seguridad
 async function fetchTimeWithTimeout(url, timeoutMs = 3500) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -641,10 +626,8 @@ async function fetchTimeWithTimeout(url, timeoutMs = 3500) {
     }
 }
 
-// Resincronización: WorldTimeAPI -> TimeAPI.io -> Fallback / Manual
 async function syncRealTimeNetwork() {
     const el = document.getElementById('net-status');
-    const selectEl = document.getElementById('skew-adjust-select');
 
     if (isManualMode) {
         if (el) {
@@ -663,19 +646,19 @@ async function syncRealTimeNetwork() {
     const startReq = performance.now();
     let realTimeIso = null;
 
-    // Servidor primario: WorldTimeAPI
+    // Servidor 1: WorldTimeAPI
     try {
         const data = await fetchTimeWithTimeout('https://worldtimeapi.org/api/timezone/Europe/Madrid', 3500);
         realTimeIso = data.datetime;
     } catch (primaryErr) {
-        console.warn('WorldTimeAPI falló, probando servidor secundario TimeAPI.io...', primaryErr);
+        console.warn('WorldTimeAPI falló, probando TimeAPI.io...', primaryErr);
         
-        // Servidor secundario: TimeAPI.io
+        // Servidor 2: TimeAPI.io
         try {
             const dataSec = await fetchTimeWithTimeout('https://timeapi.io/api/v1/time/current/zone?timeZone=Europe/Madrid', 3500);
             realTimeIso = dataSec.dateTime || `${dataSec.year}-${String(dataSec.month).padStart(2,'0')}-${String(dataSec.day).padStart(2,'0')}T${String(dataSec.hour).padStart(2,'0')}:${String(dataSec.minute).padStart(2,'0')}:${String(dataSec.second).padStart(2,'0')}`;
         } catch (secondaryErr) {
-            console.warn('Ambas APIs de tiempo fallaron.', secondaryErr);
+            console.warn('Servidores de hora offline o sin red.', secondaryErr);
         }
     }
 
@@ -701,7 +684,6 @@ async function syncRealTimeNetwork() {
     updateClockDisplay();
 }
 
-// Lógica para cambiar desfases o fijar la hora manual
 function applyManualSkewOffset(val) {
     const el = document.getElementById('net-status');
 
@@ -753,7 +735,6 @@ function saveClockManualState() {
     } catch (e) {}
 }
 
-// Formateo del objeto Date forzado a zona horaria Europe/Madrid
 function getClockDate() {
     const baseMs = Date.now() + networkOffsetMs + manualOverrideMs;
     try {
@@ -772,31 +753,27 @@ function getClockDate() {
     }
 }
 
-// Renderizar hora y fecha en pantalla
+function checkDailyStreak() {
+    const todayStr = getClockDate().toISOString().slice(0, 10);
+    if (appData.studyStats.lastDate !== todayStr) {
+        const yesterday = new Date(getClockDate().getTime() - 86400000).toISOString().slice(0, 10);
+        if (appData.studyStats.lastDate < yesterday) appData.studyStats.streakDays = 0;
+        appData.studyStats.todayFocusMinutes = 0;
+        appData.studyStats.lastDate = todayStr;
+        saveData();
+    }
+}
+
 function updateClockDisplay() {
     const d = getClockDate();
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
-    
     if (timeEl) timeEl.textContent = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     if (dateEl) dateEl.textContent = d.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    
-    if (typeof updateScheduleWidget === 'function') {
-        updateScheduleWidget(d);
-    }
+    updateScheduleWidget(d);
 }
+setInterval(updateClockDisplay, 1000);
 
-// Iniciar eventos del reloj
-window.addEventListener('DOMContentLoaded', () => {
-    const selectEl = document.getElementById('skew-adjust-select');
-    if (selectEl && isManualMode) {
-        selectEl.value = String(manualOverrideMs);
-    }
-    syncRealTimeNetwork();
-    setInterval(updateClockDisplay, 1000);
-    setInterval(syncRealTimeNetwork, 3600000); // Resincronizar API cada 1 hora
-});
-<!-- ================= FIN CONJUNTO RELOJ ================= -->
 /* ===== CATEGORÍAS / VISTAS ===== */
 function getAllCategories() { return [...defaultCategories, ...(appData.customCategories || [])]; }
 
@@ -1071,7 +1048,7 @@ function applyLayoutState() {
     (appData.settings.hiddenCards || []).forEach(id => document.getElementById(id)?.classList.add('hidden-card'));
 }
 
-/* ===== AUDIO (Web Audio API) con desconexión limpia ===== */
+/* ===== AUDIO (Web Audio API) ===== */
 class NoiseSynth {
     constructor() {
         this.ctx = null; this.source = null; this.gainNode = null;
@@ -1341,7 +1318,7 @@ function deleteDelivery(id) {
     saveData(); renderDeliveries(); updateStats();
 }
 
-/* ===== SNIPPETS (con delegación de eventos para copiar) ===== */
+/* ===== SNIPPETS ===== */
 function renderSnippets() {
     const container = document.getElementById('snippet-list-container');
     if (!container) return;
@@ -1774,16 +1751,17 @@ function importData(event) {
     reader.readAsText(file);
 }
 
-/* ===== INICIO ===== */
+/* ===== INICIO Y EVENTOS ===== */
 function renderAll() {
     renderGradesCalculator(); renderDeliveries(); renderSnippets(); renderKanban(); renderTasks();
     renderBookmarks(); renderServers(); renderCustomCards(); renderCategoryPills(); updateClockDisplay(); updateStats();
 }
 window.addEventListener('DOMContentLoaded', () => {
     checkDailyStreak();
-    appData.settings.timezone = 'Europe/Madrid';
-    document.getElementById('timezone-select').value = 'Europe/Madrid';
-    document.getElementById('skew-adjust-select').value = String(appData.settings.manualSkewOffsetMs || 0);
+    const selectSkew = document.getElementById('skew-adjust-select');
+    if (selectSkew && isManualMode) {
+        selectSkew.value = String(manualOverrideMs);
+    }
     document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
     document.querySelectorAll('#custom-theme-panel input').forEach(i => i.addEventListener('input', updateCustomThemeParams));
     document.getElementById('theme-select').addEventListener('change', e => changeTheme(e.target.value));
