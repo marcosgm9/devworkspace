@@ -227,13 +227,13 @@ footer { padding-top:4px; border-top:1px solid var(--card-border); text-align:ce
 <input type="color" id="cp-bg" title="Fondo"><input type="color" id="cp-card" title="Tarjeta"><input type="color" id="cp-border" title="Borde"><input type="color" id="cp-text" title="Texto"><input type="color" id="cp-cyan" title="Cyan"><input type="color" id="cp-violet" title="Violeta">
 </div>
 <select id="timezone-select" class="tz-select">
-<option value="local">Local (Sistema)</option><option value="UTC">UTC (Global)</option><option value="Europe/Madrid">Madrid (CET)</option><option value="Europe/London">Londres (GMT)</option><option value="America/New_York">Nueva York (EST)</option><option value="America/Chicago">Chicago (CST)</option><option value="America/Los_Angeles">Los Ángeles (PST)</option><option value="Asia/Tokyo">Tokio (JST)</option>
+<option value="Europe/Madrid">Madrid (CET/CEST)</option>
 </select>
-<select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual si tu PC tiene la hora mal">
+<select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual si deseas forzar desfase">
 <option value="0">⏱️ Desfase 0h</option><option value="3600000">+1 hora</option><option value="7200000">+2 horas</option><option value="10800000">+3 horas</option><option value="14400000">+4 horas</option><option value="-3600000">-1 hora</option><option value="-7200000">-2 horas</option><option value="-10800000">-3 horas</option><option value="-14400000">-4 horas</option>
 </select>
-<div id="clock-container" onclick="syncRealTimeNetwork()" title="Hora del sistema (ajusta el desfase con el selector)">
-<div id="time">00:00:00</div><div id="date">--/--/----</div><div id="net-status" class="net-status">🕒 Hora del Sistema</div>
+<div id="clock-container" onclick="syncRealTimeNetwork()" title="Haga clic para resincronizar hora de internet con Madrid">
+<div id="time">00:00:00</div><div id="date">--/--/----</div><div id="net-status" class="net-status">🌐 Sincronizando...</div>
 </div>
 </div>
 </header>
@@ -535,7 +535,7 @@ const defaultData = {
     customCards: [],
     cardCategories: {},
     settings: {
-        timezone: 'local', theme: 'cyberpunk', manualSkewOffsetMs: 0,
+        timezone: 'Europe/Madrid', theme: 'cyberpunk', manualSkewOffsetMs: 0,
         customTheme: { name: 'Mi Tema', bg: '#05080f', card: '#0d131f', border: '#1e293b', text: '#f8fafc', cyan: '#38bdf8', violet: '#a855f7' },
         scheduleViewMode: 'widget', activeDashboardView: 'all',
         collapsedCards: [], hiddenCards: [], editMode: false,
@@ -577,44 +577,86 @@ function toggleForm(id) {
     if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
 
-/* ===== RELOJ (hora del sistema + desfase manual, sin red) ===== */
-function syncRealTimeNetwork() {
+/* ===== RELOJ ONLINE REAL (NTP / WorldTimeAPI - Madrid Europe/Madrid) ===== */
+let networkOffsetMs = 0;
+let isTimeSyncedNtp = false;
+
+async function syncRealTimeNetwork() {
     const el = document.getElementById('net-status');
     if (el) {
-        const skew = appData.settings.manualSkewOffsetMs || 0;
-        el.textContent = skew ? '⏱️ Calibrado Manual' : '🕒 Hora del Sistema';
-        el.style.color = skew ? 'var(--accent-yellow)' : 'var(--accent-green)';
+        el.textContent = '🔄 Sincronizando...';
+        el.style.color = 'var(--accent-yellow)';
+    }
+    
+    try {
+        const startReq = performance.now();
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP Error ' + res.status);
+        const data = await res.json();
+        const endReq = performance.now();
+        const latency = (endReq - startReq) / 2;
+        
+        const realInternetTimeMs = new Date(data.datetime).getTime() + latency;
+        const systemTimeMs = Date.now();
+        
+        networkOffsetMs = realInternetTimeMs - systemTimeMs;
+        isTimeSyncedNtp = true;
+        
+        if (el) {
+            el.textContent = '🌐 Hora Real (API Madrid)';
+            el.style.color = 'var(--accent-green)';
+        }
+    } catch (err) {
+        console.warn('No se pudo obtener la hora de Internet, usando fallback con UTC Madrid:', err);
+        isTimeSyncedNtp = false;
+        if (el) {
+            el.textContent = '⚠️ Hora Red No Disponible (Local Madrid)';
+            el.style.color = 'var(--accent-red)';
+        }
     }
     updateClockDisplay();
 }
+
+// Resincronizar hora real de internet cada 1 hora automáticamente
+setInterval(syncRealTimeNetwork, 3600000);
+
 function applyManualSkewOffset(v) {
     appData.settings.manualSkewOffsetMs = parseInt(v, 10) || 0;
     saveData();
-    syncRealTimeNetwork();
+    updateClockDisplay();
 }
+
 function getClockDate() {
-    const baseMs = Date.now() + (appData.settings.manualSkewOffsetMs || 0);
-    const tz = appData.settings.timezone;
-    if (!tz || tz === 'local') return new Date(baseMs);
+    const baseMs = Date.now() + networkOffsetMs + (appData.settings.manualSkewOffsetMs || 0);
+    const targetTz = 'Europe/Madrid';
+    
     try {
-        const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        const fmt = new Intl.DateTimeFormat('en-US', { 
+            timeZone: targetTz, 
+            year: 'numeric', month: '2-digit', day: '2-digit', 
+            hour: '2-digit', minute: '2-digit', second: '2-digit', 
+            hour12: false 
+        });
         const map = {};
         fmt.formatToParts(new Date(baseMs)).forEach(p => { if (p.type !== 'literal') map[p.type] = p.value; });
         const hourNum = map.hour === '24' ? '00' : map.hour;
         return new Date(`${map.year}-${map.month}-${map.day}T${hourNum}:${map.minute}:${map.second}`);
-    } catch (e) { return new Date(baseMs); }
+    } catch (e) { 
+        return new Date(baseMs); 
+    }
 }
+
 function checkDailyStreak() {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getClockDate().toISOString().slice(0, 10);
     if (appData.studyStats.lastDate !== todayStr) {
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const yesterday = new Date(getClockDate().getTime() - 86400000).toISOString().slice(0, 10);
         if (appData.studyStats.lastDate < yesterday) appData.studyStats.streakDays = 0;
         appData.studyStats.todayFocusMinutes = 0;
         appData.studyStats.lastDate = todayStr;
         saveData();
     }
 }
-function changeTimezone(tzVal) { appData.settings.timezone = tzVal; saveData(); updateClockDisplay(); }
+
 function updateClockDisplay() {
     const d = getClockDate();
     document.getElementById('time').textContent = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1299,8 +1341,9 @@ function renderStudyChart() {
     const history = appData.studyStats.history || [];
     const last7 = [];
     let weekSum = 0;
+    const baseDate = getClockDate();
     for (let i = 6; i >= 0; i--) {
-        const d = new Date(Date.now() - (i * 86400000));
+        const d = new Date(baseDate.getTime() - (i * 86400000));
         const found = history.find(h => h.date === d.toISOString().slice(0, 10));
         const mins = found ? found.mins : 0;
         weekSum += mins;
@@ -1328,7 +1371,7 @@ function addManualStudyTime() {
 }
 function resetStudyStats() {
     if (confirm("¿Reiniciar todas las métricas de estudio a 0?")) {
-        appData.studyStats = { todayFocusMinutes: 0, totalFocusMinutes: 0, lastDate: new Date().toISOString().slice(0, 10), streakDays: 0, history: [] };
+        appData.studyStats = { todayFocusMinutes: 0, totalFocusMinutes: 0, lastDate: getClockDate().toISOString().slice(0, 10), streakDays: 0, history: [] };
         saveData(); updateAdvancedStats();
     }
 }
@@ -1338,7 +1381,7 @@ function recordStudyTime(mins) {
     appData.studyStats.todayFocusMinutes = (appData.studyStats.todayFocusMinutes || 0) + mins;
     appData.studyStats.totalFocusMinutes = (appData.studyStats.totalFocusMinutes || 0) + mins;
     if (first) appData.studyStats.streakDays = (appData.studyStats.streakDays || 0) + 1;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getClockDate().toISOString().slice(0, 10);
     const hist = appData.studyStats.history.find(h => h.date === todayStr);
     if (hist) hist.mins += mins;
     else { appData.studyStats.history.push({ date: todayStr, mins }); if (appData.studyStats.history.length > 30) appData.studyStats.history.shift(); }
@@ -1606,12 +1649,12 @@ function renderAll() {
 }
 window.addEventListener('DOMContentLoaded', () => {
     checkDailyStreak();
-    document.getElementById('timezone-select').value = appData.settings.timezone || 'local';
+    appData.settings.timezone = 'Europe/Madrid';
+    document.getElementById('timezone-select').value = 'Europe/Madrid';
     document.getElementById('skew-adjust-select').value = String(appData.settings.manualSkewOffsetMs || 0);
     document.getElementById('theme-select').value = appData.settings.theme || 'cyberpunk';
     document.querySelectorAll('#custom-theme-panel input').forEach(i => i.addEventListener('input', updateCustomThemeParams));
     document.getElementById('theme-select').addEventListener('change', e => changeTheme(e.target.value));
-    document.getElementById('timezone-select').addEventListener('change', e => changeTimezone(e.target.value));
     changeTheme(appData.settings.theme || 'cyberpunk');
     renderCustomCards();
     applyLayoutState();
