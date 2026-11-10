@@ -576,12 +576,58 @@ function toggleForm(id) {
     const el = document.getElementById(id);
     if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
+// reloj
+<div class="header-controls">
+  <!-- Selector de ajuste manual de hora -->
+  <select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual de hora (horas o minutos)">
+    <option value="0">⏱️ Auto (API Madrid)</option>
+    <optgroup label="Ajuste por Minutos">
+      <option value="300000">+5 minutos</option>
+      <option value="600000">+10 minutos</option>
+      <option value="900000">+15 minutos</option>
+      <option value="1800000">+30 minutos</option>
+      <option value="-300000">-5 minutos</option>
+      <option value="-600000">-10 minutos</option>
+      <option value="-900000">-15 minutos</option>
+      <option value="-1800000">-30 minutos</option>
+    </optgroup>
+    <optgroup label="Ajuste por Horas">
+      <option value="3600000">+1 hora</option>
+      <option value="7200000">+2 horas</option>
+      <option value="-3600000">-1 hora</option>
+      <option value="-7200000">-2 horas</option>
+    </optgroup>
+    <optgroup label="Personalizado">
+      <option value="custom">✏️ Escribir hora exacta...</option>
+    </optgroup>
+  </select>
 
-/* ===== RELOJ ONLINE REAL (Fallback en cascada: WorldTimeAPI -> TimeAPI.io) ===== */
+  <!-- Panel visualizador del reloj -->
+  <div id="clock-container" onclick="syncRealTimeNetwork()" title="Haz clic para resincronizar hora de internet (Madrid)">
+    <div id="time">00:00:00</div>
+    <div id="date">--/--/----</div>
+    <div id="net-status" class="net-status">🌐 Sincronizando...</div>
+  </div>
+</div>
+
+<script>
+/* ===== LÓGICA DEL RELOJ ONLINE / MANUAL MADRID ===== */
 let networkOffsetMs = 0;
-let isTimeSyncedNtp = false;
+let manualOverrideMs = 0;
+let isManualMode = false;
 
-async function fetchTimeWithTimeout(url, timeoutMs = 3000) {
+// Cargar estado previo de ajuste manual desde localStorage si existe
+try {
+    const savedManual = localStorage.getItem('dw_clock_manualMs');
+    const savedIsManual = localStorage.getItem('dw_clock_isManual');
+    if (savedIsManual === 'true') {
+        isManualMode = true;
+        manualOverrideMs = parseInt(savedManual, 10) || 0;
+    }
+} catch (e) {}
+
+// Petición fetch con timeout de seguridad
+async function fetchTimeWithTimeout(url, timeoutMs = 3500) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -595,8 +641,20 @@ async function fetchTimeWithTimeout(url, timeoutMs = 3000) {
     }
 }
 
+// Resincronización: WorldTimeAPI -> TimeAPI.io -> Fallback / Manual
 async function syncRealTimeNetwork() {
     const el = document.getElementById('net-status');
+    const selectEl = document.getElementById('skew-adjust-select');
+
+    if (isManualMode) {
+        if (el) {
+            el.textContent = '✏️ Hora Manual Activa';
+            el.style.color = 'var(--accent-yellow)';
+        }
+        updateClockDisplay();
+        return;
+    }
+
     if (el) {
         el.textContent = '🔄 Sincronizando...';
         el.style.color = 'var(--accent-yellow)';
@@ -605,19 +663,19 @@ async function syncRealTimeNetwork() {
     const startReq = performance.now();
     let realTimeIso = null;
 
-    // Intentar servidor primario: WorldTimeAPI
+    // Servidor primario: WorldTimeAPI
     try {
         const data = await fetchTimeWithTimeout('https://worldtimeapi.org/api/timezone/Europe/Madrid', 3500);
         realTimeIso = data.datetime;
     } catch (primaryErr) {
-        console.warn('WorldTimeAPI falló, intentando servidor secundario (TimeAPI.io)...', primaryErr);
+        console.warn('WorldTimeAPI falló, probando servidor secundario TimeAPI.io...', primaryErr);
         
-        // Intentar servidor secundario: TimeAPI.io
+        // Servidor secundario: TimeAPI.io
         try {
             const dataSec = await fetchTimeWithTimeout('https://timeapi.io/api/v1/time/current/zone?timeZone=Europe/Madrid', 3500);
             realTimeIso = dataSec.dateTime || `${dataSec.year}-${String(dataSec.month).padStart(2,'0')}-${String(dataSec.day).padStart(2,'0')}T${String(dataSec.hour).padStart(2,'0')}:${String(dataSec.minute).padStart(2,'0')}:${String(dataSec.second).padStart(2,'0')}`;
         } catch (secondaryErr) {
-            console.warn('Todos los servidores NTP/API fallaron. Usando reloj local de Madrid.', secondaryErr);
+            console.warn('Ambas APIs de tiempo fallaron.', secondaryErr);
         }
     }
 
@@ -628,38 +686,79 @@ async function syncRealTimeNetwork() {
         const systemTimeMs = Date.now();
 
         networkOffsetMs = realInternetTimeMs - systemTimeMs;
-        isTimeSyncedNtp = true;
 
         if (el) {
             el.textContent = '🌐 Hora Real (API Madrid)';
             el.style.color = 'var(--accent-green)';
         }
     } else {
-        isTimeSyncedNtp = false;
         if (el) {
-            el.textContent = '⚠️ Hora Red No Disponible (Local Madrid)';
+            el.textContent = '⚠️ Sin Red: Ajusta manualmente';
             el.style.color = 'var(--accent-red)';
         }
     }
 
     updateClockDisplay();
 }
-// Resincronizar hora real de internet cada 1 hora automáticamente
-setInterval(syncRealTimeNetwork, 3600000);
 
-function applyManualSkewOffset(v) {
-    appData.settings.manualSkewOffsetMs = parseInt(v, 10) || 0;
-    saveData();
+// Lógica para cambiar desfases o fijar la hora manual
+function applyManualSkewOffset(val) {
+    const el = document.getElementById('net-status');
+
+    if (val === 'custom') {
+        const inputTime = prompt("Introduce la hora real exacta en formato HH:MM o HH:MM:SS (Madrid):");
+        if (inputTime && /^\d{1,2}:\d{2}(:\d{2})?$/.test(inputTime.trim())) {
+            const parts = inputTime.trim().split(':');
+            const targetDate = getClockDate();
+            targetDate.setHours(parseInt(parts[0], 10));
+            targetDate.setMinutes(parseInt(parts[1], 10));
+            targetDate.setSeconds(parts[2] ? parseInt(parts[2], 10) : 0);
+
+            isManualMode = true;
+            manualOverrideMs = targetDate.getTime() - (Date.now() + networkOffsetMs);
+            if (el) {
+                el.textContent = '✏️ Hora Exacta Fijada';
+                el.style.color = 'var(--accent-yellow)';
+            }
+        } else {
+            document.getElementById('skew-adjust-select').value = isManualMode ? String(manualOverrideMs) : '0';
+            return;
+        }
+    } else {
+        const ms = parseInt(val, 10) || 0;
+        if (ms === 0) {
+            isManualMode = false;
+            manualOverrideMs = 0;
+            saveClockManualState();
+            syncRealTimeNetwork();
+            return;
+        } else {
+            isManualMode = true;
+            manualOverrideMs = ms;
+            if (el) {
+                el.textContent = '⏱️ Desfase Manual Activo';
+                el.style.color = 'var(--accent-yellow)';
+            }
+        }
+    }
+
+    saveClockManualState();
     updateClockDisplay();
 }
 
+function saveClockManualState() {
+    try {
+        localStorage.setItem('dw_clock_manualMs', manualOverrideMs);
+        localStorage.setItem('dw_clock_isManual', isManualMode);
+    } catch (e) {}
+}
+
+// Formateo del objeto Date forzado a zona horaria Europe/Madrid
 function getClockDate() {
-    const baseMs = Date.now() + networkOffsetMs + (appData.settings.manualSkewOffsetMs || 0);
-    const targetTz = 'Europe/Madrid';
-    
+    const baseMs = Date.now() + networkOffsetMs + manualOverrideMs;
     try {
         const fmt = new Intl.DateTimeFormat('en-US', { 
-            timeZone: targetTz, 
+            timeZone: 'Europe/Madrid', 
             year: 'numeric', month: '2-digit', day: '2-digit', 
             hour: '2-digit', minute: '2-digit', second: '2-digit', 
             hour12: false 
@@ -673,25 +772,31 @@ function getClockDate() {
     }
 }
 
-function checkDailyStreak() {
-    const todayStr = getClockDate().toISOString().slice(0, 10);
-    if (appData.studyStats.lastDate !== todayStr) {
-        const yesterday = new Date(getClockDate().getTime() - 86400000).toISOString().slice(0, 10);
-        if (appData.studyStats.lastDate < yesterday) appData.studyStats.streakDays = 0;
-        appData.studyStats.todayFocusMinutes = 0;
-        appData.studyStats.lastDate = todayStr;
-        saveData();
+// Renderizar hora y fecha en pantalla
+function updateClockDisplay() {
+    const d = getClockDate();
+    const timeEl = document.getElementById('time');
+    const dateEl = document.getElementById('date');
+    
+    if (timeEl) timeEl.textContent = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (dateEl) dateEl.textContent = d.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    
+    if (typeof updateScheduleWidget === 'function') {
+        updateScheduleWidget(d);
     }
 }
 
-function updateClockDisplay() {
-    const d = getClockDate();
-    document.getElementById('time').textContent = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    document.getElementById('date').textContent = d.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    updateScheduleWidget(d);
-}
-setInterval(updateClockDisplay, 1000);
-
+// Iniciar eventos del reloj
+window.addEventListener('DOMContentLoaded', () => {
+    const selectEl = document.getElementById('skew-adjust-select');
+    if (selectEl && isManualMode) {
+        selectEl.value = String(manualOverrideMs);
+    }
+    syncRealTimeNetwork();
+    setInterval(updateClockDisplay, 1000);
+    setInterval(syncRealTimeNetwork, 3600000); // Resincronizar API cada 1 hora
+});
+<!-- ================= FIN CONJUNTO RELOJ ================= -->
 /* ===== CATEGORÍAS / VISTAS ===== */
 function getAllCategories() { return [...defaultCategories, ...(appData.customCategories || [])]; }
 
