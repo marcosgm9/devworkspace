@@ -666,6 +666,7 @@
 <footer>
     <div>DevWorkspace v5.8 Ultra &bull; Student & Dev Cockpit</div>
     <div>
+        <a href="#" onclick="resetWorkspacePrompt(); return false;" class="footer-link-danger" title="Reiniciar todos los datos a blanco">[Limpiar Workspace]</a>
         <a href="#" onclick="exportData(); return false;" class="footer-link-cyan">[Exportar JSON]</a>
         <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" class="footer-link-violet">[Importar JSON]</a>
         <input type="file" id="import-json-input" style="display:none;" accept=".json" onchange="importData(event)">

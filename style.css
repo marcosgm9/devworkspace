@@ -733,6 +733,17 @@ button:active {
     min-height: 60px;
 }
 
+.kanban-empty-col {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.66rem;
+    font-family: var(--font-mono);
+    padding: 18px 4px;
+    font-style: italic;
+    border: 1px dashed rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-sm);
+}
+
 .kanban-card {
     background: rgba(0, 0, 0, 0.4);
     border: 1px solid var(--card-border);
@@ -1669,6 +1680,15 @@ footer {
     color: var(--text-muted);
     font-family: var(--font-mono);
     box-shadow: var(--shadow-card);
+}
+
+.footer-link-danger {
+    color: var(--accent-red);
+    text-decoration: none;
+    margin-right: 12px;
+}
+.footer-link-danger:hover {
+    text-decoration: underline;
 }
 
 .footer-link-cyan {

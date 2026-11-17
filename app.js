@@ -35,7 +35,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const LOCAL_STORAGE_KEY = 'devworkspace_ultimate_v5_8';
+const LOCAL_STORAGE_KEY = 'devworkspace_v5_8_clean';
 
 let currentUser = null;
 let isRegisterMode = false;
@@ -86,24 +86,12 @@ function showToast(message, type = 'info') {
 }
 
 /* ----------------------------------------------------------
-   SNIPPETS POR DEFECTO PARA DAM
+   SNIPPETS POR DEFECTO (Vacío para inicio en blanco)
    ---------------------------------------------------------- */
-const defaultSnippets = [
-    { id: 's1', title: 'Ver procesos Java en ejecución', cat: 'Linux', cmd: 'ps aux | grep java', isCustom: false },
-    { id: 's2', title: 'Permisos estándar directorio web', cat: 'Linux', cmd: 'chmod -R 755 /var/www/html && chown -R www-data:www-data /var/www', isCustom: false },
-    { id: 's3', title: 'Seguir logs del sistema en vivo', cat: 'Linux', cmd: 'journalctl -xeu nginx.service -f', isCustom: false },
-    { id: 's4', title: 'Procesos con mayor consumo CPU', cat: 'PowerShell', cmd: 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 5', isCustom: false },
-    { id: 's5', title: 'Testear conexión a puerto TCP', cat: 'PowerShell', cmd: 'Test-NetConnection -ComputerName 127.0.0.1 -Port 8080', isCustom: false },
-    { id: 's6', title: 'Historial gráfico en una línea', cat: 'Git', cmd: 'git log --oneline --graph --decorate --all', isCustom: false },
-    { id: 's7', title: 'Deshacer último commit sin perder cambios', cat: 'Git', cmd: 'git reset --soft HEAD~1', isCustom: false },
-    { id: 's8', title: 'Levantar contenedor con build', cat: 'Docker', cmd: 'docker-compose up -d --build', isCustom: false },
-    { id: 's9', title: 'Limpiar imágenes y volúmenes huérfanos', cat: 'Docker', cmd: 'docker system prune -af --volumes', isCustom: false },
-    { id: 's10', title: 'Consulta JOIN con Agrupación', cat: 'SQL', cmd: 'SELECT u.id, u.name, COUNT(o.id) AS total_orders FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id HAVING total_orders > 0;', isCustom: false },
-    { id: 's11', title: 'Plantilla Main con Scanner en Java', cat: 'Java', cmd: 'import java.util.Scanner;\npublic class Main {\n    public static void main(String[] args) {\n        try (Scanner sc = new Scanner(System.in)) {\n            System.out.println("DevWorkspace ready.");\n        }\n    }\n}', isCustom: false }
-];
+const defaultSnippets = [];
 
 /* ----------------------------------------------------------
-   ESTADO INICIAL Y ESQUEMA
+   ESTADO INICIAL Y ESQUEMA (100% LIMPIO EN BLANCO)
    ---------------------------------------------------------- */
 const defaultCategories = [
     { key: 'all', label: '🚀 Todo' },
@@ -113,77 +101,27 @@ const defaultCategories = [
 ];
 
 const defaultData = {
-    bookmarks: [
-        { id: 1, name: "GitHub", url: "https://github.com" },
-        { id: 2, name: "MDN Web Docs", url: "https://developer.mozilla.org" },
-        { id: 3, name: "DevDocs API Offline", url: "https://devdocs.io" },
-        { id: 4, name: "Stack Overflow", url: "https://stackoverflow.com" }
-    ],
-    tasks: [
-        { id: 1, text: "Repasar diagramas de clases UML", priority: "medium", date: new Date().toISOString().slice(0, 10), done: false },
-        { id: 2, text: "Configurar entorno Docker para Symfony/Node", priority: "high", date: new Date().toISOString().slice(0, 10), done: false }
-    ],
-    servers: [
-        { id: 1, name: "Debian 12 Lab DAM", ip: "192.168.1.150", creds: "student / pass123" },
-        { id: 2, name: "VPS Producción", ip: "10.0.0.45", creds: "admin / ssh-key" }
-    ],
-    schedule: [
-        { id: 1, day: 1, start: "08:15", end: "10:15", subject: "Programación (Java)", room: "Aula 204" },
-        { id: 2, day: 1, start: "10:30", end: "12:30", subject: "Bases de Datos (SQL)", room: "Aula 204" },
-        { id: 3, day: 2, start: "08:15", end: "10:15", subject: "Sistemas Informáticos", room: "Lab 2" },
-        { id: 4, day: 3, start: "09:15", end: "11:15", subject: "Entornos de Desarrollo", room: "Aula 204" },
-        { id: 5, day: 4, start: "11:30", end: "13:30", subject: "Lenguajes de Marcas", room: "Lab 1" }
-    ],
-    stickyNote: "IP provisional: 192.168.1.200\nPuerto MySQL: 3306\nToken dev: eyJhbGciOiJIUzI1NiIsIn...",
+    bookmarks: [],
+    tasks: [],
+    servers: [],
+    schedule: [],
+    stickyNote: "",
     notes: { 
-        general: "Apuntes generales del semestre:\n- Recordar entrega de prácticas en formato ZIP con código limpio.\n- Mantener backup de base de datos semanal.", 
-        comandos: "docker exec -it mi_contenedor bash\ngit pull origin main --rebase\nnpm run dev", 
-        clases: "Notas de clase:\n- Herencia múltiple en Java se resuelve con interfaces y default methods." 
+        general: "", 
+        comandos: "", 
+        clases: "" 
     },
     activeNotesTab: 'general',
-    grades: [
-        { 
-            id: 1, 
-            subject: "Programación (Java)", 
-            target: 5.0, 
-            items: [
-                { id: 101, name: "Práctica 1: POO & Colecciones", grade: 8.5, weight: 25 },
-                { id: 102, name: "Examen Parcial Tema 1-4", grade: 6.2, weight: 35 } 
-            ] 
-        },
-        { 
-            id: 2, 
-            subject: "Bases de Datos (SQL)", 
-            target: 6.0, 
-            items: [
-                { id: 201, name: "Práctica Consultas Multitabla", grade: 9.0, weight: 30 },
-                { id: 202, name: "Examen Normalización", grade: 7.0, weight: 40 }
-            ] 
-        }
-    ],
-    deliveries: [
-        { id: 1, title: "Práctica 2: Consultas Complejas", subject: "Bases de Datos", type: "Práctica", dueDate: new Date(Date.now() + 86400000 * 2.5).toISOString().slice(0, 16), done: false },
-        { id: 2, title: "Examen Parcial POO Avanzada", subject: "Programación", type: "Examen", dueDate: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 16), done: false }
-    ],
+    grades: [],
+    deliveries: [],
     snippets: [],
-    studyKanban: [
-        { id: 1, title: "Herencia y Polimorfismo en Java", subject: "PROG", col: "doing", pomos: 4, donePomos: 2, priority: "high" },
-        { id: 2, title: "Diagramas E/R y Normalización 3FN", subject: "BBDD", col: "todo", pomos: 3, donePomos: 0, priority: "high" },
-        { id: 3, title: "Configuración Servidor DHCP en Linux", subject: "SIST", col: "done", pomos: 2, donePomos: 2, priority: "medium" }
-    ],
+    studyKanban: [],
     studyStats: { 
-        todayFocusMinutes: 45, 
-        totalFocusMinutes: 720, 
+        todayFocusMinutes: 0, 
+        totalFocusMinutes: 0, 
         lastDate: new Date().toISOString().slice(0, 10), 
-        streakDays: 3, 
-        history: [
-            { date: new Date(Date.now() - 86400000 * 6).toISOString().slice(0, 10), minutes: 30 },
-            { date: new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10), minutes: 50 },
-            { date: new Date(Date.now() - 86400000 * 4).toISOString().slice(0, 10), minutes: 40 },
-            { date: new Date(Date.now() - 86400000 * 3).toISOString().slice(0, 10), minutes: 60 },
-            { date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), minutes: 75 },
-            { date: new Date(Date.now() - 86400000 * 1).toISOString().slice(0, 10), minutes: 50 }
-        ] 
+        streakDays: 0, 
+        history: [] 
     },
     customCategories: [],
     customCards: [],
@@ -220,15 +158,35 @@ let appData = structuredClone(defaultData);
    ---------------------------------------------------------- */
 function loadLocalData() {
     try {
+        localStorage.removeItem('devworkspace_ultimate_v5_8');
+        localStorage.removeItem('devworkspace_data_v5');
+
         const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
             appData = deepMerge(defaultData, parsed);
+        } else {
+            appData = structuredClone(defaultData);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
         }
     } catch (e) {
         console.warn("Error leyendo localStorage:", e);
+        appData = structuredClone(defaultData);
     }
 }
+
+window.resetWorkspacePrompt = function () {
+    if (confirm("¿Estás seguro de que deseas vaciar todo el workspace a blanco? Se eliminarán todas las tareas, notas y elementos creados localmente.")) {
+        appData = structuredClone(defaultData);
+        try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
+        } catch (e) {}
+        applyTheme();
+        renderAll();
+        applyLayoutState();
+        showToast("🧹 Workspace reiniciado completamente en blanco", "info");
+    }
+};
 
 async function loadCloudData() {
     if (!currentUser) return;
@@ -842,6 +800,11 @@ function renderKanban() {
         const items = appData.studyKanban.filter(t => t.col === col);
         counts[col] = items.length;
 
+        if (!items.length) {
+            box.innerHTML = `<div class="kanban-empty-col">Sin temas</div>`;
+            return;
+        }
+
         box.innerHTML = items.map(t => {
             const prioIcon = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟠' : '🔵';
             const prevCol = col === 'done' ? 'doing' : col === 'doing' ? 'todo' : null;
@@ -1327,10 +1290,10 @@ function renderStudyChart() {
     const maxMins = Math.max(...last7Days.map(d => d.minutes), 60);
 
     container.innerHTML = last7Days.map(d => {
-        const heightPct = Math.max(Math.round((d.minutes / maxMins) * 100), 6);
+        const heightPct = d.minutes > 0 ? Math.max(Math.round((d.minutes / maxMins) * 100), 8) : 4;
         return `
             <div class="chart-bar-col" title="${d.iso}: ${d.minutes} minutos de estudio">
-                <div class="chart-bar-fill" style="height: ${heightPct}%;"></div>
+                <div class="chart-bar-fill" style="height: ${heightPct}%; ${d.minutes === 0 ? 'opacity: 0.25;' : ''}"></div>
                 <span class="chart-bar-day">${escapeHtml(d.label)}</span>
             </div>
         `;
@@ -1708,7 +1671,7 @@ window.renderSnippets = function () {
     }
 
     if (!list.length) {
-        container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.7rem;padding:8px;">No hay comandos que coincidan</div>`;
+        container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:16px;">No hay comandos guardados. Haz clic en "✚ Añadir Snippet" para registrar tus comandos favoritos.</div>`;
         return;
     }
 
@@ -1742,6 +1705,14 @@ function updateScheduleWidget(now) {
     const widget = document.getElementById('schedule-widget');
     if (!widget) return;
 
+    if (!appData.schedule || appData.schedule.length === 0) {
+        widget.innerHTML = `
+            <div class="sch-status">📅 Horario Sin Clases</div>
+            <div class="sch-detail">Haz clic en ⚙️ para registrar tus asignaturas y horario semanal.</div>
+        `;
+        return;
+    }
+
     const currentDay = now.getDay(); // 0 = Dom, 1 = Lun ... 5 = Vie
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
@@ -1749,7 +1720,7 @@ function updateScheduleWidget(now) {
         const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
         widget.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-weight:700;color:var(--accent-cyan);">Horario Semanal DAM</span>
+                <span style="font-weight:700;color:var(--accent-cyan);">Horario Semanal</span>
                 <span style="font-size:0.6rem;color:var(--text-muted);cursor:pointer;" onclick="toggleScheduleViewMode()">Volver a vista actual</span>
             </div>
             <table class="sch-table">
