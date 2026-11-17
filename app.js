@@ -90,10 +90,6 @@ function debounce(func, wait) {
 }
 const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' };
 function escapeHtml(v) { return String(v ?? '').replace(/[&<>"'`]/g, c => ESC_MAP[c]); }
-function safeUrl(u) {
-    try { const x = new URL(String(u).trim()); return ['http:', 'https:'].includes(x.protocol) ? x.href : '#'; }
-    catch (e) { return '#'; }
-}
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 function deepMerge(def, src) {
     if (Array.isArray(def)) return Array.isArray(src) ? src : structuredClone(def);
@@ -250,6 +246,9 @@ function updateClockDisplay() {
 }
 setInterval(updateClockDisplay, 1000);
 
+/* ==========================================================
+   GESTIÓN DE VISTAS, CATEGORÍAS Y VISIBILIDAD
+   ========================================================== */
 function getAllCategories() { return [...defaultCategories, ...(appData.customCategories || [])]; }
 
 function renderCategoryPills() {
@@ -315,11 +314,42 @@ window.toggleCardVisibility = function(cardId) {
     if (hidden.includes(cardId)) { appData.settings.hiddenCards = hidden.filter(id => id !== cardId); card.classList.remove('hidden-card'); }
     else { hidden.push(cardId); card.classList.add('hidden-card'); }
     saveData();
+    renderVisibilityControls();
 };
 
-window.openVisibilityModal = function() { document.getElementById('card-visibility-modal').style.display = 'flex'; };
-window.closeVisibilityModal = function() { document.getElementById('card-visibility-modal').style.display = 'none'; };
-window.showAllCards = function() { appData.settings.hiddenCards = []; saveData(); closeVisibilityModal(); setDashboardView(appData.settings.activeDashboardView); };
+window.openVisibilityModal = function() {
+    renderVisibilityControls();
+    document.getElementById('card-visibility-modal').style.display = 'flex';
+};
+
+window.closeVisibilityModal = function() {
+    document.getElementById('card-visibility-modal').style.display = 'none';
+};
+
+window.showAllCards = function() {
+    appData.settings.hiddenCards = [];
+    saveData();
+    closeVisibilityModal();
+    setDashboardView(appData.settings.activeDashboardView);
+};
+
+function renderVisibilityControls() {
+    const container = document.getElementById('visibility-controls-container');
+    if (!container) return;
+    const hiddenSet = new Set(appData.settings.hiddenCards || []);
+    container.innerHTML = [...document.querySelectorAll('.card')].map(card => {
+        const title = card.querySelector('.card-title-text')?.textContent || card.id;
+        const isHidden = hiddenSet.has(card.id);
+        return `
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.2);padding:4px 6px;border-radius:4px;border:1px solid var(--card-border);">
+                <span style="font-size:0.7rem;font-family:var(--font-mono);">${escapeHtml(title)}</span>
+                <button onclick="toggleCardVisibility('${card.id}')" class="view-pill ${isHidden ? '' : 'active'}" style="font-size:0.6rem;padding:2px 6px;">
+                    ${isHidden ? '👁️ Oculta' : '👁️ Visible'}
+                </button>
+            </div>
+        `;
+    }).join('');
+}
 
 window.toggleCardCollapse = function(cardId) {
     const card = document.getElementById(cardId);
