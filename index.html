@@ -1,299 +1,675 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="cyberpunk">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DevWorkspace - Student & Dev Dashboard Ultimate v5.8</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#060810">
+    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.8</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <!-- MODAL DE LOGIN / REGISTRO CON CORREO Y CONTRASEÑA -->
-<div class="modal-overlay" id="auth-modal" style="display:flex;">
-    <div class="modal-content" style="max-width:380px;text-align:center;padding:20px;">
-        <h2 id="auth-title" style="color:var(--accent-cyan);font-family:var(--font-mono);margin-bottom:10px;">DevWorkspace Cloud</h2>
-        <p id="auth-subtitle" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px;font-family:var(--font-mono);">Inicia sesión o regístrate para sincronizar tus datos.</p>
+<div class="modal-overlay" id="auth-modal" style="display:none;">
+    <div class="modal-content auth-modal-content">
+        <div class="modal-header">
+            <h2 id="auth-title">DevWorkspace Cloud</h2>
+            <button class="btn-icon" onclick="closeAuthModal()" title="Cerrar modal">✖</button>
+        </div>
+        <p id="auth-subtitle">Inicia sesión o regístrate para sincronizar tus datos en tiempo real.</p>
         
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
-            <input type="email" id="auth-email" placeholder="Correo electrónico..." style="margin-bottom:0;">
-            <input type="password" id="auth-password" placeholder="Contraseña (mín. 6 caracteres)..." style="margin-bottom:0;">
+        <div class="auth-input-group">
+            <input type="email" id="auth-email" placeholder="Correo electrónico..." autocomplete="email">
+            <input type="password" id="auth-password" placeholder="Contraseña (mín. 6 caracteres)..." autocomplete="current-password">
         </div>
 
-        <button id="auth-main-btn" onclick="handleEmailAuth()" class="btn-green" style="width:100%;padding:8px;font-size:0.8rem;margin-bottom:8px;">
+        <button id="auth-main-btn" onclick="handleEmailAuth()" class="btn-green btn-full">
             🔑 Iniciar Sesión
         </button>
 
-        <button onclick="toggleAuthMode()" style="background:transparent;border:none;color:var(--accent-violet);font-family:var(--font-mono);font-size:0.7rem;cursor:pointer;text-decoration:underline;">
+        <button onclick="toggleAuthMode()" class="btn-link-action">
             ¿No tienes cuenta? Regístrate aquí
+        </button>
+
+        <div class="auth-divider"><span>o</span></div>
+
+        <button onclick="continueAsGuest()" class="btn-ghost btn-full">
+            ⚡ Continuar en Modo Local / Offline
         </button>
     </div>
 </div>
 
 <header>
-<div class="header-title-zone">
-    <h1>DevWorkspace_ <span class="badge-version">v5.8 Ultra</span></h1>
-    <div id="user-profile-widget" style="display:none;align-items:center;gap:6px;font-size:0.7rem;font-family:var(--font-mono);border-left:1px solid var(--card-border);padding-left:8px;">
-        <span id="user-name" style="color:var(--accent-violet);"></span>
-        <button onclick="logoutUser()" class="btn-icon" title="Cerrar sesión" style="font-size:0.75rem;">🚪</button>
+    <div class="header-title-zone">
+        <h1>DevWorkspace_ <span class="badge-version">v5.8 Ultra</span></h1>
+        <div id="user-profile-widget" class="user-profile-widget" style="display:none;">
+            <span class="user-status-dot"></span>
+            <span id="user-name"></span>
+            <button onclick="logoutUser()" class="btn-icon" title="Cerrar sesión">🚪</button>
+        </div>
+        <button id="btn-cloud-login" class="btn-cloud-toggle" onclick="openAuthModal()" title="DevWorkspace Cloud (Firebase)">
+            ☁️ <span id="cloud-status-text">Conectar Cloud</span>
+        </button>
     </div>
-</div>
-<div class="header-controls">
-<button class="btn-quick-search" onclick="openGlobalSearch()">🔍 Buscar <kbd>Ctrl+K</kbd></button>
-<select id="theme-select" class="theme-select">
-<option value="cyberpunk">🎨 Cyberpunk</option><option value="dracula">🧛 Dracula</option><option value="minecraft">⛏️ Minecraft</option><option value="valorant">🎯 Valorant</option><option value="retro">📻 Retro CRT</option><option value="custom">🛠️ Personalizado</option>
-</select>
-<div id="custom-theme-panel" class="custom-theme-panel">
-<input type="text" id="custom-theme-name" placeholder="Nombre" title="Nombre del tema">
-<input type="color" id="cp-bg" title="Fondo"><input type="color" id="cp-card" title="Tarjeta"><input type="color" id="cp-border" title="Borde"><input type="color" id="cp-text" title="Texto"><input type="color" id="cp-cyan" title="Cyan"><input type="color" id="cp-violet" title="Violeta">
-</div>
 
-<select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual de hora">
-    <option value="0">⏱️ Auto (API Madrid)</option>
-    <optgroup label="Ajuste por Minutos">
-      <option value="300000">+5 minutos</option><option value="600000">+10 minutos</option><option value="900000">+15 minutos</option><option value="1800000">+30 minutos</option>
-      <option value="-300000">-5 minutos</option><option value="-600000">-10 minutos</option><option value="-900000">-15 minutos</option><option value="-1800000">-30 minutos</option>
-    </optgroup>
-    <optgroup label="Ajuste por Horas">
-      <option value="3600000">+1 hora</option><option value="7200000">+2 horas</option><option value="-3600000">-1 hora</option><option value="-7200000">-2 horas</option>
-    </optgroup>
-    <optgroup label="Personalizado">
-      <option value="custom">✏️ Escribir hora exacta...</option>
-    </optgroup>
-</select>
-<div id="clock-container" onclick="syncRealTimeNetwork()" title="Haz clic para resincronizar hora">
-<div id="time">00:00:00</div><div id="date">--/--/----</div><div id="net-status" class="net-status">🌐 Sincronizando...</div>
-</div>
+    <div class="header-controls">
+        <button class="btn-quick-search" onclick="openGlobalSearch()" title="Buscar en todo el workspace (Ctrl+K)">
+            🔍 Buscar <kbd>Ctrl+K</kbd>
+        </button>
 
-</div>
+        <select id="theme-select" class="theme-select" title="Seleccionar Tema Visual">
+            <option value="cyberpunk">🎨 Cyberpunk</option>
+            <option value="dracula">🧛 Dracula</option>
+            <option value="minecraft">⛏️ Minecraft</option>
+            <option value="valorant">🎯 Valorant</option>
+            <option value="retro">📻 Retro CRT</option>
+            <option value="custom">🛠️ Personalizado</option>
+        </select>
+
+        <div id="custom-theme-panel" class="custom-theme-panel">
+            <input type="text" id="custom-theme-name" placeholder="Nombre" title="Nombre del tema">
+            <input type="color" id="cp-bg" title="Fondo">
+            <input type="color" id="cp-card" title="Tarjeta">
+            <input type="color" id="cp-border" title="Borde">
+            <input type="color" id="cp-text" title="Texto">
+            <input type="color" id="cp-cyan" title="Cyan Accent">
+            <input type="color" id="cp-violet" title="Violet Accent">
+        </div>
+
+        <select id="skew-adjust-select" class="skew-select" onchange="applyManualSkewOffset(this.value)" title="Ajuste manual de sincronización">
+            <option value="0">⏱️ Auto (API Madrid)</option>
+            <optgroup label="Ajuste por Minutos">
+                <option value="300000">+5 minutos</option>
+                <option value="600000">+10 minutos</option>
+                <option value="900000">+15 minutos</option>
+                <option value="1800000">+30 minutos</option>
+                <option value="-300000">-5 minutos</option>
+                <option value="-600000">-10 minutos</option>
+                <option value="-900000">-15 minutos</option>
+                <option value="-1800000">-30 minutos</option>
+            </optgroup>
+            <optgroup label="Ajuste por Horas">
+                <option value="3600000">+1 hora</option>
+                <option value="7200000">+2 horas</option>
+                <option value="-3600000">-1 hora</option>
+                <option value="-7200000">-2 horas</option>
+            </optgroup>
+            <optgroup label="Personalizado">
+                <option value="custom">✏️ Escribir hora exacta...</option>
+            </optgroup>
+        </select>
+
+        <div id="clock-container" onclick="syncRealTimeNetwork()" title="Haz clic para resincronizar hora con API Madrid">
+            <div id="time">00:00:00</div>
+            <div id="date">--/--/----</div>
+            <div id="net-status" class="net-status">🌐 Sincronizando...</div>
+        </div>
+    </div>
 </header>
 
 <div class="view-filter-bar">
-<span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono);margin-right:2px;">Vistas:</span>
-<div id="view-pills-container" style="display:flex;gap:4px;align-items:center;"></div>
-<button class="view-pill btn-violet" onclick="addCustomCategoryPrompt()" title="Añadir nueva categoría/sección">[+] Sección</button>
-<div style="flex:1;"></div>
-<button class="view-pill btn-edit-mode" id="btn-toggle-edit-mode" onclick="toggleEditMode()">✏️ Modo Edición</button>
-<button class="view-pill" onclick="openVisibilityModal()" title="Gestionar visibilidad de tarjetas">👁️ Visibilidad</button>
-<button class="view-pill" onclick="toggleForm('form-create-card-panel')" title="Crear nueva tarjeta personalizada">✚ Nueva Tarjeta</button>
-<button class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕ Colapsar/Expandir</button>
+    <span class="view-filter-label">Vistas:</span>
+    <div id="view-pills-container" class="view-pills-container"></div>
+    <button class="view-pill btn-violet" onclick="addCustomCategoryPrompt()" title="Añadir nueva categoría o sección">[+] Sección</button>
+    <div class="spacer"></div>
+    <button class="view-pill btn-edit-mode" id="btn-toggle-edit-mode" onclick="toggleEditMode()" title="Editar categorías y orden de tarjetas">✏️ Modo Edición</button>
+    <button class="view-pill" onclick="openVisibilityModal()" title="Gestionar visibilidad de tarjetas">👁️ Visibilidad</button>
+    <button class="view-pill" onclick="toggleForm('form-create-card-panel')" title="Crear nueva tarjeta personalizada">✚ Nueva Tarjeta</button>
+    <button class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕ Colapsar/Expandir</button>
 </div>
 
-<div id="form-create-card-panel" class="hidden-form" style="background:var(--card-bg);border:1px solid var(--accent-cyan);padding:8px;border-radius:var(--radius);margin-bottom:4px;flex-shrink:0;">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--accent-cyan);font-weight:bold;">🛠️ Crear Tarjeta Personalizada</span><button class="btn-icon" onclick="toggleForm('form-create-card-panel')">✖</button></div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;">
-<input type="text" id="new-card-title" placeholder="Título de la Tarjeta..." style="flex:2;min-width:140px;">
-<select id="new-card-category" style="flex:1;min-width:120px;"></select>
-<select id="new-card-type" style="width:110px;"><option value="notes">📝 Notas / Texto</option><option value="checklist">📋 Lista Checklist</option><option value="iframe">🌐 Web / Embed</option></select>
-<button onclick="createCustomCard()" class="btn-green">Crear Tarjeta</button>
-</div>
-</div>
-
-<div class="dashboard-container" id="dashboard-container">
-<div class="col-left" id="col-left">
-
-<div class="card" id="card-kanban" data-category="study">
-<div class="card-header"><span class="card-title-text">📅 Kanban de Estudio</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-kanban', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-kanban')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-kanban')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-kanban')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="kanban-board">
-<div class="kanban-col"><div class="kanban-col-title"><span>📋 Por Estudiar</span><span id="kanban-count-todo" style="color:var(--accent-cyan);">0</span></div><div id="kanban-list-todo" class="kanban-items-box"></div></div>
-<div class="kanban-col"><div class="kanban-col-title"><span>⏳ En Proceso</span><span id="kanban-count-doing" style="color:var(--accent-yellow);">0</span></div><div id="kanban-list-doing" class="kanban-items-box"></div></div>
-<div class="kanban-col"><div class="kanban-col-title"><span>✅ Repasado</span><span id="kanban-count-done" style="color:var(--accent-green);">0</span></div><div id="kanban-list-done" class="kanban-items-box"></div></div>
-</div>
-<button class="btn-toggle" onclick="toggleForm('form-kanban-add')">✚ Añadir Tema de Estudio</button>
-<div id="form-kanban-add" class="hidden-form">
-<input type="text" id="kanban-new-title" placeholder="Tema (ej: Polimorfismo)">
-<div style="display:flex;gap:4px;margin-top:3px;">
-<input type="text" id="kanban-new-subject" placeholder="Asignatura (ej: PROG)" style="flex:1;">
-<select id="kanban-new-prio" style="width:95px;"><option value="high">🔴 Alta</option><option value="medium" selected>🟠 Media</option><option value="low">🔵 Baja</option></select>
-<input type="number" id="kanban-new-pomos" min="1" max="10" value="2" title="Pomodoros estimados" style="width:55px;">
-</div>
-<button onclick="addKanbanTask()" class="btn-violet" style="width:100%;margin-top:4px;">Guardar Tarjeta</button>
-</div>
-</div></div>
-
-<div class="card" id="card-grades" data-category="study">
-<div class="card-header"><span class="card-title-text">🧮 Calculadora de Calificaciones Ponderadas</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-grades', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-grades')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-grades')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-grades')">⋮⋮</span></div></div>
-<div class="card-body">
-<div id="grades-subjects-container" style="max-height:240px;overflow-y:auto;padding-right:2px;"></div>
-<button class="btn-toggle" onclick="toggleForm('form-add-grade-subject')">✚ Añadir Módulo / Asignatura</button>
-<div id="form-add-grade-subject" class="hidden-form">
-<input type="text" id="new-grade-subj-name" placeholder="Nombre (ej: Programación / BBDD)">
-<div style="display:flex;gap:4px;margin-top:3px;"><input type="number" id="new-grade-subj-target" min="1" max="10" step="0.1" value="5.0" placeholder="Nota Deseada" style="flex:1;"><button onclick="addGradeSubject()" class="btn-green" style="flex:1;">Crear Módulo</button></div>
-</div>
-</div></div>
-
-<div class="card" id="card-deliveries" data-category="study">
-<div class="card-header"><span class="card-title-text">⏳ Entregas & Exámenes con Cuenta Regresiva</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-deliveries', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-deliveries')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-deliveries')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-deliveries')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="task-filters"><button id="deliv-filter-all" class="active" onclick="setDeliveriesFilter('all')">Todos</button><button id="deliv-filter-exam" onclick="setDeliveriesFilter('exam')">Exámenes</button><button id="deliv-filter-practice" onclick="setDeliveriesFilter('practice')">Prácticas</button><button id="deliv-filter-pending" onclick="setDeliveriesFilter('pending')">Pendientes</button></div>
-<div id="deliveries-list" style="max-height:210px;overflow-y:auto;padding-right:2px;"></div>
-<button class="btn-toggle" onclick="toggleForm('form-add-delivery')">✚ Añadir Fecha Límite</button>
-<div id="form-add-delivery" class="hidden-form">
-<input type="text" id="deliv-title" placeholder="Título (ej: Entrega Proyecto)">
-<div style="display:flex;gap:4px;margin-top:3px;"><input type="text" id="deliv-subject" placeholder="Asignatura" style="flex:1;"><select id="deliv-type" style="width:105px;"><option value="Examen">📝 Examen</option><option value="Práctica" selected>💻 Práctica</option><option value="Proyecto">🚀 Proyecto</option><option value="Tarea">📄 Tarea</option></select></div>
-<div style="display:flex;gap:4px;margin-top:3px;"><input type="datetime-local" id="deliv-datetime" style="flex:2;"><button onclick="addDelivery()" class="btn-violet" style="flex:1;">Guardar</button></div>
-</div>
-</div></div>
-
-<div class="card" id="card-tasks" data-category="focus">
-<div class="card-header"><span class="card-title-text">📋 Tareas Generales</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-tasks', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-tasks')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-tasks')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-tasks')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="task-filters"><button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button><button id="filter-pending" onclick="setTaskFilter('pending')">Pendientes</button><button id="filter-done" onclick="setTaskFilter('done')">Completadas</button></div>
-<ul id="tasks-list" style="max-height:140px;"></ul>
-<div style="display:flex;gap:4px;margin-top:3px;border-top:1px dashed var(--card-border);padding-top:4px;flex-shrink:0;">
-<input type="text" id="task-text" placeholder="Nueva tarea rápida..." style="flex:2;margin-bottom:0;" onkeypress="if(event.key==='Enter') addTask()">
-<select id="task-priority" style="width:90px;margin-bottom:0;"><option value="medium">🟠 Media</option><option value="high">🔴 Alta</option><option value="low">🔵 Baja</option></select>
-<input type="date" id="task-date" style="width:105px;margin-bottom:0;">
-<button onclick="addTask()">✚</button>
-</div>
-</div></div>
-
-<div class="card" id="card-notes" data-category="dev">
-<div class="card-header"><span class="card-title-text">📝 Scratchpad & Apuntes</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-notes', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-notes')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-notes')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-notes')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="scratchpad-header">
-<div class="tabs"><button class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button><button class="tab-btn" id="tab-comandos" onclick="setNotesTab('comandos')">Comandos</button><button class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button></div>
-<div class="quick-tools"><button class="tool-btn" onclick="toolCopy()">Copiar</button><button class="tool-btn" onclick="toolDownload()">Descargar</button></div>
-</div>
-<textarea id="scratchpad" class="notes-area" placeholder="Escribe apuntes, dudas o snippets rápidos aquí..."></textarea>
-</div></div>
-
-<div class="card" id="card-sticky" data-category="dev" style="min-height:75px;">
-<div class="card-header"><span class="card-title-text">📌 Sticky Note / Buffer Temporal</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-sticky', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-sticky')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-sticky')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-sticky')">⋮⋮</span></div></div>
-<div class="card-body">
-<textarea id="sticky-note-input" class="notes-area" style="min-height:50px;background:rgba(255,255,255,0.015);" placeholder="Pegar IPs temporales, tokens o credenciales..."></textarea>
-</div></div>
-
-</div>
-<div class="col-right" id="col-right">
-
-<div class="card" id="card-study-stats" data-category="focus">
-<div class="card-header"><span class="card-title-text">📈 Métricas & Progreso del Estudiante</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-study-stats', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-study-stats')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="resetStudyStats()" title="Reiniciar Métricas">🔄</button><button class="btn-icon" onclick="toggleCardCollapse('card-study-stats')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-study-stats')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="stats-grid">
-<div class="stat-box"><div id="stat-focus-today" class="stat-val">0m</div><div class="stat-lbl">Foco Hoy</div></div>
-<div class="stat-box"><div id="stat-focus-total" class="stat-val">0h</div><div class="stat-lbl">Total Foco</div></div>
-<div class="stat-box"><div id="stat-streak" class="stat-val">🔥 0d</div><div class="stat-lbl">Racha</div></div>
-<div class="stat-box"><div id="stat-ratio" class="stat-val">0%</div><div class="stat-lbl">Completadas</div></div>
-</div>
-<div class="chart-container">
-<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">Histórico de Estudio (Últimos 7 días)</span><span id="chart-week-sum" style="font-size:0.62rem;color:var(--accent-cyan);font-family:var(--font-mono);">0 min</span></div>
-<div class="svg-chart-bars" id="study-bars-container"></div>
-</div>
-<div style="display:flex;gap:4px;align-items:center;"><input type="number" id="manual-study-mins" min="5" max="300" placeholder="+Minutos" style="width:85px;margin-bottom:0;"><button onclick="addManualStudyTime()" class="btn-violet" style="flex:1;">+ Registrar Estudio Offline</button></div>
-</div></div>
-
-<div class="card" id="card-pomodoro" data-category="focus">
-<div class="card-header"><span class="card-title-text">⏱️ Pomodoro Pro</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-pomodoro', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-pomodoro')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-pomodoro')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-pomodoro')">⋮⋮</span></div></div>
-<div class="card-body">
-<div id="pomodoro-display">25:00</div>
-<div id="pomodoro-target" class="pomo-target-info">Objetivo: Sesión Libre</div>
-<div class="pomodoro-controls">
-<div class="pomo-preset-row">
-<select id="pomo-focus-time"><option value="15">🎯 15 Min Foco</option><option value="25" selected>🎯 25 Min Foco</option><option value="45">🎯 45 Min Foco</option><option value="60">🎯 60 Min Foco</option></select>
-<select id="pomo-break-time"><option value="5" selected>☕ 5 Min Break</option><option value="10">☕ 10 Min Break</option><option value="15">☕ 15 Min Break</option></select>
-</div>
-<div style="display:flex;gap:4px;"><button onclick="startCustomPomodoro('focus')" style="flex:1;">Iniciar Foco</button><button onclick="startCustomPomodoro('break')" class="btn-violet" style="flex:1;">Break</button><button onclick="stopPomodoro()" style="color:var(--text-muted);border-color:var(--card-border);">◼</button></div>
-</div>
-</div></div>
-
-<div class="card" id="card-audio" data-category="focus">
-<div class="card-header"><span class="card-title-text">🎧 Ruido Blanco / Lofi & Ondas Binaurales</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-audio', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-audio')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-audio')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-audio')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="audio-player-widget">
-<div class="audio-controls-row">
-<select id="audio-sound-type" style="flex:2;margin-bottom:0;" onchange="handleAudioTypeChange(this.value)">
-<option value="brown">🟤 Ruido Marrón (Enfoque Profundo)</option><option value="pink">🌸 Ruido Rosa (Suave / Lluvia)</option><option value="white">⚪ Ruido Blanco (Aislamiento)</option><option value="rain">🌧️ Lluvia Sintética Relajante</option><option value="binaural-alpha">🧠 Ondas Alfa 10Hz (Concentración)</option><option value="binaural-theta">🧘 Ondas Theta 6Hz (Memoria / Calma)</option>
-</select>
-<div class="audio-wave-visualizer" id="audio-visualizer"><div class="audio-bar"></div><div class="audio-bar"></div><div class="audio-bar"></div><div class="audio-bar"></div><div class="audio-bar"></div></div>
-<button id="btn-audio-toggle" onclick="toggleNoiseGenerator()" style="width:65px;">▶ Play</button>
-</div>
-<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono);">Volumen:</span><input type="range" id="audio-volume" min="0" max="100" value="40" style="flex:1;cursor:pointer;" oninput="updateAudioVolume(this.value)"><span id="audio-vol-text" style="font-size:0.65rem;font-family:var(--font-mono);color:var(--accent-cyan);width:28px;">40%</span></div>
-</div>
-</div></div>
-
-<div class="card" id="card-snippets" data-category="dev">
-<div class="card-header"><span class="card-title-text">💻 Snippet & Command Lab</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-snippets', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-snippets')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-snippets')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-snippets')">⋮⋮</span></div></div>
-<div class="card-body">
-<div style="display:flex;gap:4px;margin-bottom:2px;">
-<input type="text" id="snippet-search" placeholder="🔍 Buscar comando o snippet..." oninput="renderSnippets()" style="margin-bottom:0;">
-<select id="snippet-filter-cat" style="width:120px;margin-bottom:0;" onchange="renderSnippets()"><option value="all">Todas categorías</option><option value="Linux">🐧 Linux / Bash</option><option value="PowerShell">⚡ PowerShell</option><option value="Git">🐙 Git</option><option value="Docker">🐳 Docker</option><option value="SQL">🗄️ SQL</option><option value="Java">☕ Java</option><option value="Custom">⭐ Mis Snippets</option></select>
-</div>
-<div class="snippet-grid" id="snippet-list-container"></div>
-<button class="btn-toggle" onclick="toggleForm('form-add-snippet')">✚ Añadir Snippet Personalizado</button>
-<div id="form-add-snippet" class="hidden-form">
-<input type="text" id="snip-new-title" placeholder="Título (ej: Backup BBDD MySQL)">
-<div style="display:flex;gap:4px;margin-top:3px;"><input type="text" id="snip-new-cat" placeholder="Categoría" style="width:110px;"><input type="text" id="snip-new-cmd" placeholder="Comando..." style="flex:1;"></div>
-<button onclick="addCustomSnippet()" class="btn-violet" style="width:100%;margin-top:4px;">Guardar Snippet</button>
-</div>
-</div></div>
-
-<div class="card" id="card-schedule" data-category="study">
-<div class="card-header"><span class="card-title-text">📅 Horario & Clases</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-schedule', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-schedule')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleScheduleViewMode()" title="Cambiar Vista">📊</button><button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button><button class="btn-icon" onclick="toggleCardCollapse('card-schedule')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-schedule')">⋮⋮</span></div></div>
-<div class="card-body">
-<div class="schedule-widget" id="schedule-widget"><div class="sch-status">Calculando horario...</div></div>
-</div></div>
-
-<div class="card" id="card-bookmarks" data-category="dev">
-<div class="card-header"><span class="card-title-text">🔖 Enlaces & Documentación</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-bookmarks', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-bookmarks')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-bookmarks')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-bookmarks')">⋮⋮</span></div></div>
-<div class="card-body">
-<input type="text" id="bm-search-filter" class="search-filter-input" placeholder="🔍 Filtrar enlaces..." oninput="renderBookmarks()">
-<ul id="bookmarks-list" style="max-height:120px;"></ul>
-<button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
-<div id="form-bookmarks" class="hidden-form"><input type="text" id="bm-name" placeholder="Nombre"><input type="url" id="bm-url" placeholder="https://..."><button onclick="addBookmark()" style="width:100%;margin-top:3px;">Guardar</button></div>
-</div></div>
-
-<div class="card" id="card-servers" data-category="dev">
-<div class="card-header"><span class="card-title-text">🖥️ Servidores & VMs</span><div class="card-actions"><div class="edit-controls"><select class="card-category-select" onchange="updateCardCategory('card-servers', this.value)"></select><button class="btn-icon" onclick="toggleCardVisibility('card-servers')" title="Ocultar Tarjeta">👁️</button></div><button class="btn-icon" onclick="toggleCardCollapse('card-servers')">_</button><span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-servers')">⋮⋮</span></div></div>
-<div class="card-body">
-<input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Filtrar servidores..." oninput="renderServers()">
-<ul id="servers-list" style="max-height:120px;"></ul>
-<button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
-<div id="form-servers" class="hidden-form">
-<input type="text" id="srv-name" placeholder="Nombre">
-<div style="display:flex;gap:4px;margin-top:3px;"><input type="text" id="srv-ip" placeholder="IP / Host" style="flex:1;"><input type="text" id="srv-creds" placeholder="Credenciales" style="width:90px;"></div>
-<button onclick="addServer()" class="btn-violet" style="width:100%;margin-top:4px;">Guardar</button>
-</div>
-</div></div>
-
-</div>
+<div id="form-create-card-panel" class="hidden-form form-create-card-panel">
+    <div class="form-header">
+        <span class="form-title">🛠️ Crear Tarjeta Personalizada</span>
+        <button class="btn-icon" onclick="toggleForm('form-create-card-panel')">✖</button>
+    </div>
+    <div class="form-row">
+        <input type="text" id="new-card-title" placeholder="Título de la Tarjeta..." style="flex:2;min-width:140px;">
+        <select id="new-card-category" style="flex:1;min-width:120px;" title="Categoría destino"></select>
+        <select id="new-card-type" style="width:130px;" title="Tipo de tarjeta">
+            <option value="notes">📝 Notas / Texto</option>
+            <option value="checklist">📋 Lista Checklist</option>
+            <option value="iframe">🌐 Web / Embed</option>
+        </select>
+        <button onclick="createCustomCard()" class="btn-green">Crear Tarjeta</button>
+    </div>
 </div>
 
-<div class="modal-overlay" id="card-visibility-modal"><div class="modal-content" style="max-width:580px;">
-<div class="modal-header"><h2 style="font-size:0.95rem;font-family:var(--font-mono);color:var(--accent-cyan);">👁️ Visibilidad de Tarjetas</h2><button class="btn-icon" onclick="closeVisibilityModal()">✖</button></div>
-<div class="modal-body"><div class="card-visibility-grid" id="visibility-controls-container"></div></div>
-<div style="display:flex;justify-content:space-between;margin-top:6px;"><button onclick="showAllCards()" class="btn-violet">Mostrar Todas</button><button onclick="closeVisibilityModal()" class="btn-green">Listo</button></div>
-</div></div>
+<main class="dashboard-container" id="dashboard-container">
+    <div class="col-left" id="col-left">
 
-<div class="modal-overlay" id="global-search-modal"><div class="modal-content" style="max-width:520px;">
-<div class="modal-header"><h2 style="font-size:0.95rem;font-family:var(--font-mono);color:var(--accent-cyan);">🔍 Buscador Global</h2><button class="btn-icon" onclick="closeGlobalSearch()">✖</button></div>
-<input type="text" id="global-search-input" placeholder="Buscar entregas, tareas, comandos, enlaces..." oninput="filterGlobalSearch()">
-<div class="modal-body"><ul id="global-search-results"></ul></div>
-</div></div>
+        <!-- KANBAN DE ESTUDIO -->
+        <div class="card" id="card-kanban" data-category="study">
+            <div class="card-header">
+                <span class="card-title-text">📅 Kanban de Estudio</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-kanban', this.value)" title="Cambiar categoría"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-kanban')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-kanban')" title="Minimizar">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-kanban')" title="Arrastrar para reordenar">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="kanban-board">
+                    <div class="kanban-col">
+                        <div class="kanban-col-title">
+                            <span>📋 Por Estudiar</span>
+                            <span id="kanban-count-todo" class="kanban-badge-count">0</span>
+                        </div>
+                        <div id="kanban-list-todo" class="kanban-items-box"></div>
+                    </div>
+                    <div class="kanban-col">
+                        <div class="kanban-col-title">
+                            <span>⏳ En Proceso</span>
+                            <span id="kanban-count-doing" class="kanban-badge-count count-yellow">0</span>
+                        </div>
+                        <div id="kanban-list-doing" class="kanban-items-box"></div>
+                    </div>
+                    <div class="kanban-col">
+                        <div class="kanban-col-title">
+                            <span>✅ Repasado</span>
+                            <span id="kanban-count-done" class="kanban-badge-count count-green">0</span>
+                        </div>
+                        <div id="kanban-list-done" class="kanban-items-box"></div>
+                    </div>
+                </div>
+                <button class="btn-toggle" onclick="toggleForm('form-kanban-add')">✚ Añadir Tema de Estudio</button>
+                <div id="form-kanban-add" class="hidden-form">
+                    <input type="text" id="kanban-new-title" placeholder="Tema (ej: Polimorfismo y Herencia)">
+                    <div class="form-inline-row">
+                        <input type="text" id="kanban-new-subject" placeholder="Asignatura (ej: PROG)" style="flex:1;">
+                        <select id="kanban-new-prio" style="width:105px;">
+                            <option value="high">🔴 Alta</option>
+                            <option value="medium" selected>🟠 Media</option>
+                            <option value="low">🔵 Baja</option>
+                        </select>
+                        <input type="number" id="kanban-new-pomos" min="1" max="10" value="2" title="Pomodoros estimados" style="width:55px;">
+                    </div>
+                    <button onclick="addKanbanTask()" class="btn-violet btn-full" style="margin-top:4px;">Guardar Tarjeta</button>
+                </div>
+            </div>
+        </div>
 
-<div class="modal-overlay" id="schedule-modal"><div class="modal-content">
-<div class="modal-header"><h2 style="font-size:0.95rem;font-family:var(--font-mono);color:var(--accent-cyan);">⚙️ Editor de Horario Semanal</h2><button class="btn-icon" onclick="closeScheduleModal()" style="font-size:1.1rem;">✖</button></div>
-<div class="modal-body">
-<div style="display:flex;gap:4px;margin-bottom:10px;align-items:flex-end;background:rgba(0,0,0,0.2);padding:6px;border-radius:4px;border:1px solid var(--card-border);flex-wrap:wrap;">
-<div style="flex:1;min-width:80px;"><label style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">Día</label><select id="sch-add-day"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option></select></div>
-<div><label style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">Inicio</label><input type="time" id="sch-add-start" style="width:75px;"></div>
-<div><label style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">Fin</label><input type="time" id="sch-add-end" style="width:75px;"></div>
-<div style="flex:2;min-width:110px;"><label style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">Asignatura</label><input type="text" id="sch-add-subject" placeholder="Asignatura"></div>
-<div style="flex:1;min-width:65px;"><label style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">Aula</label><input type="text" id="sch-add-room" placeholder="Aula"></div>
-<button onclick="addScheduleClass()" class="btn-violet" style="height:29px;">✚</button>
+        <!-- CALCULADORA DE CALIFICACIONES -->
+        <div class="card" id="card-grades" data-category="study">
+            <div class="card-header">
+                <span class="card-title-text">🧮 Calculadora de Calificaciones Ponderadas</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-grades', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-grades')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-grades')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-grades')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="grades-subjects-container" class="grades-container"></div>
+                <button class="btn-toggle" onclick="toggleForm('form-add-grade-subject')">✚ Añadir Módulo / Asignatura</button>
+                <div id="form-add-grade-subject" class="hidden-form">
+                    <input type="text" id="new-grade-subj-name" placeholder="Nombre (ej: Programación / BBDD / Sistemas)">
+                    <div class="form-inline-row">
+                        <input type="number" id="new-grade-subj-target" min="1" max="10" step="0.1" value="5.0" placeholder="Nota Deseada" style="flex:1;">
+                        <button onclick="addGradeSubject()" class="btn-green" style="flex:1;">Crear Módulo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ENTREGAS & EXÁMENES -->
+        <div class="card" id="card-deliveries" data-category="study">
+            <div class="card-header">
+                <span class="card-title-text">⏳ Entregas & Exámenes con Cuenta Regresiva</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-deliveries', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-deliveries')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-deliveries')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-deliveries')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="task-filters">
+                    <button id="deliv-filter-all" class="active" onclick="setDeliveriesFilter('all')">Todos</button>
+                    <button id="deliv-filter-exam" onclick="setDeliveriesFilter('exam')">Exámenes</button>
+                    <button id="deliv-filter-practice" onclick="setDeliveriesFilter('practice')">Prácticas</button>
+                    <button id="deliv-filter-pending" onclick="setDeliveriesFilter('pending')">Pendientes</button>
+                </div>
+                <div id="deliveries-list" class="deliveries-list"></div>
+                <button class="btn-toggle" onclick="toggleForm('form-add-delivery')">✚ Añadir Fecha Límite</button>
+                <div id="form-add-delivery" class="hidden-form">
+                    <input type="text" id="deliv-title" placeholder="Título (ej: Entrega Proyecto Trimestral)">
+                    <div class="form-inline-row">
+                        <input type="text" id="deliv-subject" placeholder="Asignatura" style="flex:1;">
+                        <select id="deliv-type" style="width:110px;">
+                            <option value="Examen">📝 Examen</option>
+                            <option value="Práctica" selected>💻 Práctica</option>
+                            <option value="Proyecto">🚀 Proyecto</option>
+                            <option value="Tarea">📄 Tarea</option>
+                        </select>
+                    </div>
+                    <div class="form-inline-row">
+                        <input type="datetime-local" id="deliv-datetime" style="flex:2;">
+                        <button onclick="addDelivery()" class="btn-violet" style="flex:1;">Guardar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAREAS GENERALES -->
+        <div class="card" id="card-tasks" data-category="focus">
+            <div class="card-header">
+                <span class="card-title-text">📋 Tareas Generales</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-tasks', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-tasks')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-tasks')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-tasks')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="task-filters">
+                    <button id="filter-all" class="active" onclick="setTaskFilter('all')">Todas</button>
+                    <button id="filter-pending" onclick="setTaskFilter('pending')">Pendientes</button>
+                    <button id="filter-done" onclick="setTaskFilter('done')">Completadas</button>
+                </div>
+                <ul id="tasks-list" class="tasks-list"></ul>
+                <div class="quick-add-task-row">
+                    <input type="text" id="task-text" placeholder="Nueva tarea rápida..." style="flex:2;" onkeypress="if(event.key==='Enter') addTask()">
+                    <select id="task-priority" style="width:95px;">
+                        <option value="medium">🟠 Media</option>
+                        <option value="high">🔴 Alta</option>
+                        <option value="low">🔵 Baja</option>
+                    </select>
+                    <input type="date" id="task-date" style="width:115px;">
+                    <button onclick="addTask()" class="btn-green" title="Añadir tarea">✚</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCRATCHPAD & APUNTES -->
+        <div class="card" id="card-notes" data-category="dev">
+            <div class="card-header">
+                <span class="card-title-text">📝 Scratchpad & Apuntes</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-notes', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-notes')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-notes')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-notes')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="scratchpad-header">
+                    <div class="tabs">
+                        <button class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button>
+                        <button class="tab-btn" id="tab-comandos" onclick="setNotesTab('comandos')">Comandos</button>
+                        <button class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button>
+                    </div>
+                    <div class="quick-tools">
+                        <button class="tool-btn" onclick="toolCopy()" title="Copiar al portapapeles">📋 Copiar</button>
+                        <button class="tool-btn" onclick="toolDownload()" title="Descargar como texto">💾 Descargar</button>
+                    </div>
+                </div>
+                <textarea id="scratchpad" class="notes-area" placeholder="Escribe apuntes, dudas o snippets rápidos aquí..."></textarea>
+            </div>
+        </div>
+
+        <!-- STICKY NOTE / BUFFER -->
+        <div class="card" id="card-sticky" data-category="dev" style="min-height:90px;">
+            <div class="card-header">
+                <span class="card-title-text">📌 Sticky Note / Buffer Temporal</span>
+                <div class="card-actions">
+                    <button class="btn-icon" onclick="copyStickyNote()" title="Copiar contenido">📋</button>
+                    <button class="btn-icon" onclick="clearStickyNote()" title="Limpiar buffer">🗑️</button>
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-sticky', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-sticky')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-sticky')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-sticky')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <textarea id="sticky-note-input" class="notes-area sticky-area" placeholder="Pegar IPs temporales, tokens JWT, credenciales o comandos de un solo uso..."></textarea>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="col-right" id="col-right">
+
+        <!-- MÉTRICAS & PROGRESO -->
+        <div class="card" id="card-study-stats" data-category="focus">
+            <div class="card-header">
+                <span class="card-title-text">📈 Métricas & Progreso del Estudiante</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-study-stats', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-study-stats')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon" onclick="resetStudyStats()" title="Reiniciar Métricas">🔄</button>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-study-stats')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-study-stats')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="stats-grid">
+                    <div class="stat-box"><div id="stat-focus-today" class="stat-val">0m</div><div class="stat-lbl">Foco Hoy</div></div>
+                    <div class="stat-box"><div id="stat-focus-total" class="stat-val">0h</div><div class="stat-lbl">Total Foco</div></div>
+                    <div class="stat-box"><div id="stat-streak" class="stat-val">🔥 0d</div><div class="stat-lbl">Racha</div></div>
+                    <div class="stat-box"><div id="stat-ratio" class="stat-val">0%</div><div class="stat-lbl">Completadas</div></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">Histórico de Estudio (Últimos 7 días)</span>
+                        <span id="chart-week-sum" class="chart-sum">0 min</span>
+                    </div>
+                    <div class="svg-chart-bars" id="study-bars-container"></div>
+                </div>
+                <div class="manual-study-row">
+                    <input type="number" id="manual-study-mins" min="5" max="300" step="5" placeholder="+Minutos" style="width:90px;">
+                    <button onclick="addManualStudyTime()" class="btn-violet" style="flex:1;">+ Registrar Estudio Offline</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- POMODORO PRO -->
+        <div class="card" id="card-pomodoro" data-category="focus">
+            <div class="card-header">
+                <span class="card-title-text">⏱️ Pomodoro Pro</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-pomodoro', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-pomodoro')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-pomodoro')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-pomodoro')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="pomodoro-display" class="pomodoro-display">25:00</div>
+                <div id="pomodoro-target" class="pomo-target-info">Objetivo: Sesión Libre</div>
+                <div class="pomodoro-controls">
+                    <div class="pomo-preset-row">
+                        <select id="pomo-focus-time">
+                            <option value="15">🎯 15 Min Foco</option>
+                            <option value="25" selected>🎯 25 Min Foco</option>
+                            <option value="45">🎯 45 Min Foco</option>
+                            <option value="60">🎯 60 Min Foco</option>
+                        </select>
+                        <select id="pomo-break-time">
+                            <option value="5" selected>☕ 5 Min Break</option>
+                            <option value="10">☕ 10 Min Break</option>
+                            <option value="15">☕ 15 Min Break</option>
+                        </select>
+                    </div>
+                    <div class="form-inline-row">
+                        <button onclick="startCustomPomodoro('focus')" class="btn-green" style="flex:1;">Iniciar Foco</button>
+                        <button onclick="startCustomPomodoro('break')" class="btn-violet" style="flex:1;">Break</button>
+                        <button onclick="stopPomodoro()" class="btn-ghost" title="Detener">◼ Stop</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AUDIO / WHITE NOISE & BINAURAL -->
+        <div class="card" id="card-audio" data-category="focus">
+            <div class="card-header">
+                <span class="card-title-text">🎧 Ruido Blanco / Lofi & Ondas Binaurales</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-audio', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-audio')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-audio')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-audio')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="audio-player-widget">
+                    <div class="audio-controls-row">
+                        <select id="audio-sound-type" style="flex:2;" onchange="handleAudioTypeChange(this.value)">
+                            <option value="brown">🟤 Ruido Marrón (Enfoque Profundo)</option>
+                            <option value="pink">🌸 Ruido Rosa (Suave / Lluvia)</option>
+                            <option value="white">⚪ Ruido Blanco (Aislamiento)</option>
+                            <option value="rain">🌧️ Lluvia Sintética Relajante</option>
+                            <option value="binaural-alpha">🧠 Ondas Alfa 10Hz (Concentración)</option>
+                            <option value="binaural-theta">🧘 Ondas Theta 6Hz (Memoria / Calma)</option>
+                        </select>
+                        <div class="audio-wave-visualizer" id="audio-visualizer">
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                        </div>
+                        <button id="btn-audio-toggle" onclick="toggleNoiseGenerator()" class="btn-cyan" style="min-width:70px;">▶ Play</button>
+                    </div>
+                    <div class="audio-volume-row">
+                        <span class="audio-vol-label">Volumen:</span>
+                        <input type="range" id="audio-volume" min="0" max="100" value="40" oninput="updateAudioVolume(this.value)">
+                        <span id="audio-vol-text" class="audio-vol-value">40%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SNIPPET & COMMAND LAB -->
+        <div class="card" id="card-snippets" data-category="dev">
+            <div class="card-header">
+                <span class="card-title-text">💻 Snippet & Command Lab</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-snippets', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-snippets')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-snippets')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-snippets')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="form-inline-row" style="margin-bottom:4px;">
+                    <input type="text" id="snippet-search" placeholder="🔍 Buscar comando o snippet..." oninput="renderSnippets()">
+                    <select id="snippet-filter-cat" style="width:130px;" onchange="renderSnippets()">
+                        <option value="all">Todas categorías</option>
+                        <option value="Linux">🐧 Linux / Bash</option>
+                        <option value="PowerShell">⚡ PowerShell</option>
+                        <option value="Git">🐙 Git</option>
+                        <option value="Docker">🐳 Docker</option>
+                        <option value="SQL">🗄️ SQL</option>
+                        <option value="Java">☕ Java</option>
+                        <option value="Custom">⭐ Mis Snippets</option>
+                    </select>
+                </div>
+                <div class="snippet-grid" id="snippet-list-container"></div>
+                <button class="btn-toggle" onclick="toggleForm('form-add-snippet')">✚ Añadir Snippet Personalizado</button>
+                <div id="form-add-snippet" class="hidden-form">
+                    <input type="text" id="snip-new-title" placeholder="Título (ej: Backup BBDD MySQL)">
+                    <div class="form-inline-row">
+                        <input type="text" id="snip-new-cat" placeholder="Categoría (ej: Linux)" style="width:110px;">
+                        <input type="text" id="snip-new-cmd" placeholder="Comando..." style="flex:1;">
+                    </div>
+                    <button onclick="addCustomSnippet()" class="btn-violet btn-full" style="margin-top:4px;">Guardar Snippet</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- HORARIO & CLASES -->
+        <div class="card" id="card-schedule" data-category="study">
+            <div class="card-header">
+                <span class="card-title-text">📅 Horario & Clases</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-schedule', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-schedule')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon" onclick="toggleScheduleViewMode()" title="Cambiar Vista (Widget / Tabla Semanal)">📊</button>
+                    <button class="btn-icon" onclick="openScheduleModal()" title="Editar Horario">⚙️</button>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-schedule')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-schedule')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="schedule-widget" id="schedule-widget">
+                    <div class="sch-status">Calculando horario...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ENLACES & DOCUMENTACIÓN -->
+        <div class="card" id="card-bookmarks" data-category="dev">
+            <div class="card-header">
+                <span class="card-title-text">🔖 Enlaces & Documentación</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-bookmarks', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-bookmarks')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-bookmarks')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-bookmarks')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <input type="text" id="bm-search-filter" class="search-filter-input" placeholder="🔍 Filtrar enlaces..." oninput="renderBookmarks()">
+                <ul id="bookmarks-list" class="bookmarks-list"></ul>
+                <button class="btn-toggle" onclick="toggleForm('form-bookmarks')">✚ Añadir Enlace</button>
+                <div id="form-bookmarks" class="hidden-form">
+                    <input type="text" id="bm-name" placeholder="Nombre (ej: Stack Overflow / GitHub)">
+                    <input type="url" id="bm-url" placeholder="https://..." style="margin-top:3px;">
+                    <button onclick="addBookmark()" class="btn-cyan btn-full" style="margin-top:3px;">Guardar Enlace</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SERVIDORES & VMS -->
+        <div class="card" id="card-servers" data-category="dev">
+            <div class="card-header">
+                <span class="card-title-text">🖥️ Servidores & VMs</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-servers', this.value)"></select>
+                        <button class="btn-icon" onclick="toggleCardVisibility('card-servers')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-servers')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-servers')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Filtrar servidores..." oninput="renderServers()">
+                <ul id="servers-list" class="servers-list"></ul>
+                <button class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
+                <div id="form-servers" class="hidden-form">
+                    <input type="text" id="srv-name" placeholder="Nombre (ej: Debian 12 Lab DAM)">
+                    <div class="form-inline-row">
+                        <input type="text" id="srv-ip" placeholder="IP / Host (192.168.1.X)" style="flex:1;">
+                        <input type="text" id="srv-creds" placeholder="Credenciales" style="width:110px;">
+                    </div>
+                    <button onclick="addServer()" class="btn-violet btn-full" style="margin-top:4px;">Guardar Servidor</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<!-- MODAL VISIBILIDAD DE TARJETAS -->
+<div class="modal-overlay" id="card-visibility-modal">
+    <div class="modal-content" style="max-width:580px;">
+        <div class="modal-header">
+            <h2>👁️ Visibilidad de Tarjetas</h2>
+            <button class="btn-icon" onclick="closeVisibilityModal()">✖</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-hint">Activa o desactiva qué tarjetas quieres tener visibles en tu dashboard:</p>
+            <div class="card-visibility-grid" id="visibility-controls-container"></div>
+        </div>
+        <div class="modal-footer-actions">
+            <button onclick="showAllCards()" class="btn-violet">Mostrar Todas</button>
+            <button onclick="closeVisibilityModal()" class="btn-green">Listo</button>
+        </div>
+    </div>
 </div>
-<div id="schedule-list-editor"></div>
+
+<!-- MODAL BUSCADOR GLOBAL (CTRL+K) -->
+<div class="modal-overlay" id="global-search-modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+            <h2>🔍 Buscador Global</h2>
+            <button class="btn-icon" onclick="closeGlobalSearch()">✖</button>
+        </div>
+        <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar entregas, tareas, comandos, notas, enlaces..." oninput="filterGlobalSearch()">
+        <div class="modal-body">
+            <ul id="global-search-results" class="global-search-results"></ul>
+        </div>
+        <div class="search-tip-footer">
+            <span>Usa <kbd>↑</kbd> <kbd>↓</kbd> para navegar o <kbd>ESC</kbd> para salir.</span>
+        </div>
+    </div>
 </div>
-<div style="display:flex;justify-content:space-between;"><button class="btn-danger" onclick="clearSchedule()">Limpiar Horario</button><button class="btn-violet" onclick="closeScheduleModal()">Listo</button></div>
-</div></div>
+
+<!-- MODAL EDITOR DE HORARIO -->
+<div class="modal-overlay" id="schedule-modal">
+    <div class="modal-content schedule-modal-content">
+        <div class="modal-header">
+            <h2>⚙️ Editor de Horario Semanal</h2>
+            <button class="btn-icon" onclick="closeScheduleModal()" style="font-size:1.1rem;">✖</button>
+        </div>
+        <div class="modal-body">
+            <div class="schedule-add-bar">
+                <div class="sch-field" style="flex:1;min-width:85px;">
+                    <label>Día</label>
+                    <select id="sch-add-day">
+                        <option value="1">Lunes</option>
+                        <option value="2">Martes</option>
+                        <option value="3">Miércoles</option>
+                        <option value="4">Jueves</option>
+                        <option value="5">Viernes</option>
+                    </select>
+                </div>
+                <div class="sch-field">
+                    <label>Inicio</label>
+                    <input type="time" id="sch-add-start" style="width:80px;">
+                </div>
+                <div class="sch-field">
+                    <label>Fin</label>
+                    <input type="time" id="sch-add-end" style="width:80px;">
+                </div>
+                <div class="sch-field" style="flex:2;min-width:120px;">
+                    <label>Asignatura</label>
+                    <input type="text" id="sch-add-subject" placeholder="ej: Programación">
+                </div>
+                <div class="sch-field" style="flex:1;min-width:70px;">
+                    <label>Aula</label>
+                    <input type="text" id="sch-add-room" placeholder="ej: 204">
+                </div>
+                <button onclick="addScheduleClass()" class="btn-violet" style="height:30px;align-self:flex-end;">✚</button>
+            </div>
+            <div id="schedule-list-editor" class="schedule-list-editor"></div>
+        </div>
+        <div class="modal-footer-actions">
+            <button class="btn-danger" onclick="clearSchedule()">Limpiar Horario</button>
+            <button class="btn-violet" onclick="closeScheduleModal()">Listo</button>
+        </div>
+    </div>
+</div>
+
+<!-- CONTENEDOR DE NOTIFICACIONES TOAST -->
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
 
 <footer>
-<div>DevWorkspace v5.8 Ultra &bull; Cloud Edition</div>
-<div>
-<a href="#" onclick="exportData(); return false;" style="color:var(--accent-cyan);text-decoration:none;margin-right:12px;">[Exportar JSON]</a>
-<a href="#" onclick="document.getElementById('import-json-input').click(); return false;" style="color:var(--accent-violet);text-decoration:none;">[Importar JSON]</a>
-<input type="file" id="import-json-input" style="display:none;" accept=".json" onchange="importData(event)">
-</div>
+    <div>DevWorkspace v5.8 Ultra &bull; Student & Dev Cockpit</div>
+    <div>
+        <a href="#" onclick="exportData(); return false;" class="footer-link-cyan">[Exportar JSON]</a>
+        <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" class="footer-link-violet">[Importar JSON]</a>
+        <input type="file" id="import-json-input" style="display:none;" accept=".json" onchange="importData(event)">
+    </div>
 </footer>
 
 <script type="module" src="app.js"></script>
