@@ -8,13 +8,23 @@
 </head>
 <body>
 
-<!-- MODAL DE LOGIN / AUTENTICACIÓN CON GOOGLE -->
+<!-- MODAL DE LOGIN / REGISTRO CON CORREO Y CONTRASEÑA -->
 <div class="modal-overlay" id="auth-modal" style="display:flex;">
-    <div class="modal-content" style="max-width:400px;text-align:center;padding:24px;">
-        <h2 style="color:var(--accent-cyan);font-family:var(--font-mono);margin-bottom:12px;">DevWorkspace Cloud</h2>
-        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:20px;font-family:var(--font-mono);">Inicia sesión con tu cuenta de Google para sincronizar tus datos en la nube en tiempo real.</p>
-        <button onclick="loginWithGoogle()" class="btn-green" style="width:100%;padding:10px;font-size:0.85rem;display:flex;align-items:center;justify-content:center;gap:8px;">
-            🔐 Acceder con Google
+    <div class="modal-content" style="max-width:380px;text-align:center;padding:20px;">
+        <h2 id="auth-title" style="color:var(--accent-cyan);font-family:var(--font-mono);margin-bottom:10px;">DevWorkspace Cloud</h2>
+        <p id="auth-subtitle" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px;font-family:var(--font-mono);">Inicia sesión o regístrate para sincronizar tus datos.</p>
+        
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+            <input type="email" id="auth-email" placeholder="Correo electrónico..." style="margin-bottom:0;">
+            <input type="password" id="auth-password" placeholder="Contraseña (mín. 6 caracteres)..." style="margin-bottom:0;">
+        </div>
+
+        <button id="auth-main-btn" onclick="handleEmailAuth()" class="btn-green" style="width:100%;padding:8px;font-size:0.8rem;margin-bottom:8px;">
+            🔑 Iniciar Sesión
+        </button>
+
+        <button onclick="toggleAuthMode()" style="background:transparent;border:none;color:var(--accent-violet);font-family:var(--font-mono);font-size:0.7rem;cursor:pointer;text-decoration:underline;">
+            ¿No tienes cuenta? Regístrate aquí
         </button>
     </div>
 </div>
@@ -23,7 +33,6 @@
 <div class="header-title-zone">
     <h1>DevWorkspace_ <span class="badge-version">v5.8 Ultra</span></h1>
     <div id="user-profile-widget" style="display:none;align-items:center;gap:6px;font-size:0.7rem;font-family:var(--font-mono);border-left:1px solid var(--card-border);padding-left:8px;">
-        <img id="user-avatar" src="" alt="Avatar" style="width:22px;height:22px;border-radius:50%;">
         <span id="user-name" style="color:var(--accent-violet);"></span>
         <button onclick="logoutUser()" class="btn-icon" title="Cerrar sesión" style="font-size:0.75rem;">🚪</button>
     </div>
