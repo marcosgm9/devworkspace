@@ -1,8 +1,8 @@
 /* ==========================================================
-   CONFIGURACIÓN DE FIREBASE (Google Auth & Firestore)
+   CONFIGURACIÓN DE FIREBASE (Google Auth Redirect & Firestore)
    ========================================================== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, signInWithRedirect, GoogleAuthProvider, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -24,10 +24,10 @@ let currentUser = null;
 
 window.loginWithGoogle = async function() {
     try {
-        await signInWithPopup(auth, provider);
+        await signInWithRedirect(auth, provider);
     } catch (error) {
         console.error("Error en el login con Google:", error);
-        alert("No se pudo iniciar sesión con Google. Revisa la consola.");
+        alert("No se pudo iniciar sesión con Google: " + error.message);
     }
 };
 
@@ -40,19 +40,36 @@ window.logoutUser = async function() {
     }
 };
 
+// Comprueba el resultado cuando Google redirige de vuelta a la app
+getRedirectResult(auth)
+    .then((result) => {
+        if (result && result.user) {
+            currentUser = result.user;
+        }
+    })
+    .catch((error) => {
+        console.error("Error al procesar la redirección de Google:", error);
+    });
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        document.getElementById('auth-modal').style.display = 'none';
-        document.getElementById('user-profile-widget').style.display = 'flex';
-        document.getElementById('user-name').textContent = user.displayName || user.email;
-        if (user.photoURL) document.getElementById('user-avatar').src = user.photoURL;
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.style.display = 'none';
+        const profileWidget = document.getElementById('user-profile-widget');
+        if (profileWidget) profileWidget.style.display = 'flex';
+        const userName = document.getElementById('user-name');
+        if (userName) userName.textContent = user.displayName || user.email;
+        const userAvatar = document.getElementById('user-avatar');
+        if (user.photoURL && userAvatar) userAvatar.src = user.photoURL;
 
         await loadCloudData();
     } else {
         currentUser = null;
-        document.getElementById('auth-modal').style.display = 'flex';
-        document.getElementById('user-profile-widget').style.display = 'none';
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.style.display = 'flex';
+        const profileWidget = document.getElementById('user-profile-widget');
+        if (profileWidget) profileWidget.style.display = 'none';
     }
 });
 
@@ -487,8 +504,10 @@ function updateScheduleWidget(now) {
 }
 
 function updateStats() {
-    document.getElementById('stat-focus-today').textContent = `${appData.studyStats.todayFocusMinutes}m`;
-    document.getElementById('stat-focus-total').textContent = `${Math.floor(appData.studyStats.totalFocusMinutes / 60)}h`;
+    const statToday = document.getElementById('stat-focus-today');
+    if (statToday) statToday.textContent = `${appData.studyStats.todayFocusMinutes}m`;
+    const statTotal = document.getElementById('stat-focus-total');
+    if (statTotal) statTotal.textContent = `${Math.floor(appData.studyStats.totalFocusMinutes / 60)}h`;
 }
 
 function renderAll() {
