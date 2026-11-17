@@ -1,8 +1,8 @@
 /* ==========================================================
-   CONFIGURACIÓN DE FIREBASE (Google Auth Redirect & Firestore)
+   CONFIGURACIÓN DE FIREBASE (Email/Password Auth & Firestore)
    ========================================================== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signInWithRedirect, GoogleAuthProvider, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -18,16 +18,37 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
 
 let currentUser = null;
+let isRegisterMode = false;
 
-window.loginWithGoogle = async function() {
+window.toggleAuthMode = function() {
+    isRegisterMode = !isRegisterMode;
+    document.getElementById('auth-title').textContent = isRegisterMode ? 'Crear Cuenta' : 'DevWorkspace Cloud';
+    document.getElementById('auth-subtitle').textContent = isRegisterMode ? 'Regístrate con tu correo y contraseña.' : 'Inicia sesión o regístrate para sincronizar tus datos.';
+    document.getElementById('auth-main-btn').textContent = isRegisterMode ? '📝 Registrarse' : '🔑 Iniciar Sesión';
+    const toggleBtn = document.querySelector('#auth-modal button:last-child');
+    if (toggleBtn) toggleBtn.textContent = isRegisterMode ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate aquí';
+};
+
+window.handleEmailAuth = async function() {
+    const email = document.getElementById('auth-email').value.trim();
+    const pass = document.getElementById('auth-password').value.trim();
+
+    if (!email || !pass) {
+        alert("Por favor, introduce el correo y la contraseña.");
+        return;
+    }
+
     try {
-        await signInWithRedirect(auth, provider);
+        if (isRegisterMode) {
+            await createUserWithEmailAndPassword(auth, email, pass);
+        } else {
+            await signInWithEmailAndPassword(auth, email, pass);
+        }
     } catch (error) {
-        console.error("Error en el login con Google:", error);
-        alert("No se pudo iniciar sesión con Google: " + error.message);
+        console.error("Error de autenticación:", error);
+        alert("Error: " + error.message);
     }
 };
 
@@ -40,17 +61,6 @@ window.logoutUser = async function() {
     }
 };
 
-// Comprueba el resultado cuando Google redirige de vuelta a la app
-getRedirectResult(auth)
-    .then((result) => {
-        if (result && result.user) {
-            currentUser = result.user;
-        }
-    })
-    .catch((error) => {
-        console.error("Error al procesar la redirección de Google:", error);
-    });
-
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
@@ -59,9 +69,7 @@ onAuthStateChanged(auth, async (user) => {
         const profileWidget = document.getElementById('user-profile-widget');
         if (profileWidget) profileWidget.style.display = 'flex';
         const userName = document.getElementById('user-name');
-        if (userName) userName.textContent = user.displayName || user.email;
-        const userAvatar = document.getElementById('user-avatar');
-        if (user.photoURL && userAvatar) userAvatar.src = user.photoURL;
+        if (userName) userName.textContent = user.email;
 
         await loadCloudData();
     } else {
@@ -188,7 +196,7 @@ window.toggleForm = function(id) {
 };
 
 /* ==========================================================
-   CONTROL DEL RELOJ
+   CONTROL DEL RELOJ Y MÓDULOS
    ========================================================== */
 let networkOffsetMs = 0;
 let manualOverrideMs = 0;
@@ -242,9 +250,6 @@ function updateClockDisplay() {
 }
 setInterval(updateClockDisplay, 1000);
 
-/* ==========================================================
-   RENDERIZADO Y GESTIÓN DE MÓDULOS
-   ========================================================== */
 function getAllCategories() { return [...defaultCategories, ...(appData.customCategories || [])]; }
 
 function renderCategoryPills() {
@@ -390,7 +395,7 @@ function applyLayoutState() {
 }
 
 /* ==========================================================
-   AUDIO & RUIDO BLANCO
+   AUDIO & MÓDULOS
    ========================================================== */
 class NoiseSynth {
     constructor() { this.ctx = null; this.source = null; this.gainNode = null; this.isPlaying = false; }
@@ -417,9 +422,6 @@ window.toggleNoiseGenerator = function() {
 };
 window.updateAudioVolume = function(val) { document.getElementById('audio-vol-text').textContent = val + '%'; audioSynth.setVolume(val); };
 
-/* ==========================================================
-   TAREAS, KANBAN, ENTREGAS, CALIFICACIONES Y NOTAS
-   ========================================================== */
 window.addTask = function() {
     const text = document.getElementById('task-text').value.trim();
     if (!text) return;
