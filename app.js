@@ -1,8 +1,8 @@
 /* ==========================================================
-   CONFIGURACIÓN DE FIREBASE (Email/Password Auth & Firestore)
+   DEVWORKSPACE APP.JS - CLOUD SYNC & OPTIMIZED ENGINE v6.1
    ========================================================== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -22,67 +22,80 @@ const db = getFirestore(app);
 let currentUser = null;
 let isRegisterMode = false;
 
+// Sistema de Notificaciones Toast
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.style.cssText = `background:var(--card-bg);border:1px solid ${type === 'error' ? 'var(--accent-red)' : type === 'success' ? 'var(--accent-green)' : 'var(--accent-cyan)'};color:var(--text-main);padding:8px 12px;border-radius:4px;font-size:0.75rem;font-family:var(--font-mono);box-shadow:0 4px 12px rgba(0,0,0,0.5);opacity:0;transition:opacity 0.3s;`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.style.opacity = '1', 10);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
 window.toggleAuthMode = function() {
     isRegisterMode = !isRegisterMode;
     document.getElementById('auth-title').textContent = isRegisterMode ? 'Crear Cuenta' : 'DevWorkspace Cloud';
     document.getElementById('auth-subtitle').textContent = isRegisterMode ? 'Regístrate con tu correo y contraseña.' : 'Inicia sesión o regístrate para sincronizar tus datos.';
     document.getElementById('auth-main-btn').textContent = isRegisterMode ? '📝 Registrarse' : '🔑 Iniciar Sesión';
-    const toggleBtn = document.querySelector('#auth-modal button:last-child');
-    if (toggleBtn) toggleBtn.textContent = isRegisterMode ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate aquí';
 };
 
 window.handleEmailAuth = async function() {
     const email = document.getElementById('auth-email').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
-
-    if (!email || !pass) {
-        alert("Por favor, introduce el correo y la contraseña.");
-        return;
-    }
-
+    if (!email || !pass) { showToast("Introduce correo y contraseña.", "error"); return; }
     try {
         if (isRegisterMode) {
             await createUserWithEmailAndPassword(auth, email, pass);
+            showToast("¡Cuenta creada con éxito!", "success");
         } else {
             await signInWithEmailAndPassword(auth, email, pass);
+            showToast("¡Sesión iniciada!", "success");
         }
     } catch (error) {
-        console.error("Error de autenticación:", error);
-        alert("Error: " + error.message);
+        showToast("Error: " + error.message, "error");
+    }
+};
+
+window.handlePasswordReset = async function() {
+    const email = document.getElementById('auth-email').value.trim();
+    if (!email) { showToast("Introduce tu correo arriba para recuperar la contraseña.", "error"); return; }
+    try {
+        await sendPasswordResetEmail(auth, email);
+        showToast("Correo de recuperación enviado a " + email, "success");
+    } catch (error) {
+        showToast("Error: " + error.message, "error");
     }
 };
 
 window.logoutUser = async function() {
     try {
         await signOut(auth);
+        localStorage.clear();
         location.reload();
-    } catch (error) {
-        console.error("Error al cerrar sesión:", error);
-    }
+    } catch (e) {}
 };
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        const modal = document.getElementById('auth-modal');
-        if (modal) modal.style.display = 'none';
-        const profileWidget = document.getElementById('user-profile-widget');
-        if (profileWidget) profileWidget.style.display = 'flex';
-        const userName = document.getElementById('user-name');
-        if (userName) userName.textContent = user.email;
-
+        document.getElementById('auth-modal').style.display = 'none';
+        document.getElementById('user-profile-widget').style.display = 'flex';
+        document.getElementById('user-name').textContent = user.email;
         await loadCloudData();
     } else {
         currentUser = null;
-        const modal = document.getElementById('auth-modal');
-        if (modal) modal.style.display = 'flex';
-        const profileWidget = document.getElementById('user-profile-widget');
-        if (profileWidget) profileWidget.style.display = 'none';
+        document.getElementById('auth-modal').style.display = 'flex';
+        document.getElementById('user-profile-widget').style.display = 'none';
     }
 });
 
 /* ==========================================================
-   UTILIDADES Y DEEP MERGE
+   ESTRUCTURA DE DATOS Y CACHÉ LOCAL HÍBRIDA
    ========================================================== */
 function debounce(func, wait) {
     let timeout;
@@ -90,11 +103,8 @@ function debounce(func, wait) {
 }
 const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' };
 function escapeHtml(v) { return String(v ?? '').replace(/[&<>"'`]/g, c => ESC_MAP[c]); }
-function safeUrl(u) {
-    try { const x = new URL(String(u).trim()); return ['http:', 'https:'].includes(x.protocol) ? x.href : '#'; }
-    catch (e) { return '#'; }
-}
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+
 function deepMerge(def, src) {
     if (Array.isArray(def)) return Array.isArray(src) ? src : structuredClone(def);
     if (isObj(def)) {
@@ -109,61 +119,28 @@ function deepMerge(def, src) {
     return (src === undefined || src === null || typeof src !== typeof def) ? def : src;
 }
 
-const defaultCategories = [
-    { key: 'all', label: '🚀 Todo' },
-    { key: 'study', label: '🎓 Academia & Estudio' },
-    { key: 'dev', label: '💻 Dev & SysAdmin Lab' },
-    { key: 'focus', label: '⚡ Foco & Productividad' }
-];
-
 const defaultData = {
-    bookmarks: [
-        { id: 1, name: "GitHub", url: "https://github.com" },
-        { id: 2, name: "MDN Web Docs", url: "https://developer.mozilla.org" },
-        { id: 3, name: "DevDocs API", url: "https://devdocs.io" }
-    ],
     tasks: [],
-    servers: [{ id: 1, name: "Debian Lab DAM", ip: "192.168.1.150", creds: "student / pass" }],
-    schedule: [],
-    stickyNote: "",
-    notes: { general: "", comandos: "", clases: "" },
-    grades: [
-        { id: 1, subject: "Programación (Java)", target: 5.0, finalWeight: 40, items: [
-            { id: 101, name: "Práctica 1 (POO)", grade: 8.5, weight: 25 },
-            { id: 102, name: "Examen Parcial 1", grade: 6.0, weight: 35 } ] },
-        { id: 2, subject: "Bases de Datos (SQL)", target: 5.0, finalWeight: 50, items: [
-            { id: 201, name: "Consultas & Normalización", grade: 7.2, weight: 50 } ] }
-    ],
-    deliveries: [
-        { id: 1, title: "Práctica 2: Consultas Multitabla", subject: "Bases de Datos", type: "Práctica", dueDate: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 16), done: false },
-        { id: 2, title: "Examen Parcial Tema 3-5", subject: "Programación", type: "Examen", dueDate: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 16), done: false }
-    ],
-    snippets: [],
     studyKanban: [
-        { id: 1, title: "Herencia y Polimorfismo en Java", subject: "PROG", col: "doing", pomos: 4, donePomos: 2, priority: "high" },
-        { id: 2, title: "Diagramas E/R y Normalización 3FN", subject: "BBDD", col: "todo", pomos: 3, donePomos: 0, priority: "high" },
-        { id: 3, title: "Configuración Servidor DHCP en Linux", subject: "SIST", col: "done", pomos: 2, donePomos: 2, priority: "medium" }
+        { id: 1, title: "Herencia y Polimorfismo en Java", subject: "PROG", col: "doing", priority: "high" },
+        { id: 2, title: "Diagramas E/R y Normalización", subject: "BBDD", col: "todo", priority: "high" }
     ],
-    studyStats: { todayFocusMinutes: 0, totalFocusMinutes: 0, lastDate: new Date().toISOString().slice(0, 10), streakDays: 0, history: [] },
-    customCategories: [],
-    customCards: [],
-    cardCategories: {},
-    settings: {
-        timezone: 'Europe/Madrid', theme: 'cyberpunk', manualSkewOffsetMs: 0,
-        customTheme: { name: 'Mi Tema', bg: '#05080f', card: '#0d131f', border: '#1e293b', text: '#f8fafc', cyan: '#38bdf8', violet: '#a855f7' },
-        scheduleViewMode: 'widget', activeDashboardView: 'all',
-        collapsedCards: [], hiddenCards: [], editMode: false,
-        layout: {
-            colLeft: ['card-kanban', 'card-grades', 'card-deliveries', 'card-tasks', 'card-notes', 'card-sticky'],
-            colRight: ['card-study-stats', 'card-pomodoro', 'card-audio', 'card-snippets', 'card-schedule', 'card-bookmarks', 'card-servers']
-        }
-    }
+    studyStats: { todayFocusMinutes: 0, totalFocusMinutes: 0 },
+    settings: { theme: 'cyberpunk', hiddenCards: [] }
 };
 
 let appData = structuredClone(defaultData);
 
 async function loadCloudData() {
     if (!currentUser) return;
+    try {
+        const cached = localStorage.getItem('devworkspace_cache_' + currentUser.uid);
+        if (cached) {
+            appData = deepMerge(defaultData, JSON.parse(cached));
+            renderAll();
+        }
+    } catch(e) {}
+
     try {
         const docRef = doc(db, "users", currentUser.uid, "workspace", "data");
         const docSnap = await getDoc(docRef);
@@ -172,21 +149,21 @@ async function loadCloudData() {
         } else {
             await setDoc(docRef, defaultData);
         }
-        appData.snippets = (appData.snippets || []).filter(s => s.isCustom);
+        localStorage.setItem('devworkspace_cache_' + currentUser.uid, JSON.stringify(appData));
         renderAll();
-        applyLayoutState();
     } catch (e) {
-        console.error("Error al cargar datos de Firestore:", e);
+        showToast("⚠️ Modo Offline: Usando caché local", "error");
     }
 }
 
 const saveData = debounce(async function() {
     if (!currentUser) return;
     try {
+        localStorage.setItem('devworkspace_cache_' + currentUser.uid, JSON.stringify(appData));
         const docRef = doc(db, "users", currentUser.uid, "workspace", "data");
         await setDoc(docRef, appData);
     } catch (e) {
-        console.error("Error al guardar en Firestore:", e);
+        showToast("⚠️ Error al guardar en la nube", "error");
     }
 }, 500);
 
@@ -196,236 +173,175 @@ window.toggleForm = function(id) {
 };
 
 /* ==========================================================
-   CONTROL DEL RELOJ Y MÓDULOS
+   SINCRONIZACIÓN DE HORA REAL (MULTI-API RESILIENTE)
    ========================================================== */
 let networkOffsetMs = 0;
-let manualOverrideMs = 0;
-let isManualMode = false;
 
 async function syncRealTimeNetwork() {
     const el = document.getElementById('net-status');
-    if (isManualMode) { if (el) el.textContent = '✏️ Hora Manual Activa'; return; }
     if (el) el.textContent = '🔄 Sincronizando...';
-    try {
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store' });
-        const data = await res.json();
-        const serverTimeMs = new Date(data.datetime).getTime();
+
+    const apis = [
+        async () => (await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store' })).json().then(d => new Date(d.datetime).getTime()),
+        async () => (await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Europe/Madrid', { cache: 'no-store' })).json().then(d => new Date(d.dateTime).getTime())
+    ];
+
+    let serverTimeMs = null;
+    for (const api of apis) {
+        try { serverTimeMs = await api(); if (serverTimeMs) break; } catch (e) {}
+    }
+
+    if (serverTimeMs) {
         networkOffsetMs = serverTimeMs - Date.now();
-        if (el) { el.textContent = '🌐 Hora Real (API Madrid)'; el.style.color = 'var(--accent-green)'; }
-    } catch (e) {
+        if (el) { el.textContent = '🌐 Hora Real'; el.style.color = 'var(--accent-green)'; }
+    } else {
         if (el) { el.textContent = '⚠️ Sin Red'; el.style.color = 'var(--accent-red)'; }
     }
-    updateClockDisplay();
 }
-
-window.applyManualSkewOffset = function(val) {
-    if (val === 'custom') {
-        const inputTime = prompt("Introduce la hora real exacta en formato HH:MM (Madrid):");
-        if (inputTime) {
-            const [h, m] = inputTime.split(':');
-            const targetDate = new Date();
-            targetDate.setHours(parseInt(h, 10) || 0);
-            targetDate.setMinutes(parseInt(m, 10) || 0);
-            isManualMode = true;
-            manualOverrideMs = targetDate.getTime() - (Date.now() + networkOffsetMs);
-        }
-    } else {
-        manualOverrideMs = parseInt(val, 10) || 0;
-        isManualMode = manualOverrideMs !== 0;
-    }
-    updateClockDisplay();
-};
-
-function getClockDate() {
-    return new Date(Date.now() + networkOffsetMs + manualOverrideMs);
-}
+setInterval(syncRealTimeNetwork, 300000);
+syncRealTimeNetwork();
 
 function updateClockDisplay() {
-    const d = getClockDate();
+    const d = new Date(Date.now() + networkOffsetMs);
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
     if (timeEl) timeEl.textContent = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     if (dateEl) dateEl.textContent = d.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    updateScheduleWidget(d);
 }
 setInterval(updateClockDisplay, 1000);
 
-function getAllCategories() { return [...defaultCategories, ...(appData.customCategories || [])]; }
-
-function renderCategoryPills() {
-    const container = document.getElementById('view-pills-container');
-    if (!container) return;
-    container.innerHTML = getAllCategories().map(cat => `
-        <button class="view-pill ${appData.settings.activeDashboardView === cat.key ? 'active' : ''}" data-view="${escapeHtml(cat.key)}" onclick="setDashboardView(this.dataset.view)">${escapeHtml(cat.label)}</button>`).join('');
-    populateCategorySelectors();
-}
-
-function populateCategorySelectors() {
-    const cats = getAllCategories().filter(c => c.key !== 'all');
-    const opts = cur => cats.map(c => `<option value="${escapeHtml(c.key)}" ${c.key === cur ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('');
-    const createSelect = document.getElementById('new-card-category');
-    if (createSelect) createSelect.innerHTML = opts();
-    document.querySelectorAll('.card').forEach(card => {
-        const select = card.querySelector('.card-category-select');
-        if (select) select.innerHTML = opts(appData.cardCategories[card.id] || card.getAttribute('data-category') || 'dev');
-    });
-}
-
-window.addCustomCategoryPrompt = function() {
-    const name = prompt("Nombre de la nueva sección / categoría:");
-    if (!name || !name.trim()) return;
-    const icon = prompt("Icono/Emoji:", "📁") || "📁";
-    const key = 'custom_cat_' + Date.now();
-    appData.customCategories.push({ key, label: `${icon} ${name.trim()}` });
-    saveData();
-    renderCategoryPills();
-    setDashboardView(key);
-};
-
-window.updateCardCategory = function(cardId, newCatKey) {
-    appData.cardCategories[cardId] = newCatKey;
-    saveData();
-    setDashboardView(appData.settings.activeDashboardView);
-};
-
-window.setDashboardView = function(viewKey) {
-    appData.settings.activeDashboardView = viewKey;
-    document.querySelectorAll('#view-pills-container .view-pill').forEach(b => b.classList.toggle('active', b.dataset.view === viewKey));
-    const hiddenSet = new Set(appData.settings.hiddenCards || []);
-    document.querySelectorAll('.card').forEach(card => {
-        const cat = appData.cardCategories[card.id] || card.getAttribute('data-category');
-        if (hiddenSet.has(card.id)) { card.classList.add('hidden-card'); return; }
-        card.classList.remove('hidden-card');
-        card.style.display = (viewKey === 'all' || cat === viewKey) ? 'flex' : 'none';
-    });
-    saveData();
-};
-
-window.toggleEditMode = function() {
-    appData.settings.editMode = !appData.settings.editMode;
-    document.body.classList.toggle('edit-mode-active', appData.settings.editMode);
-    document.getElementById('btn-toggle-edit-mode')?.classList.toggle('active', appData.settings.editMode);
-    saveData();
-};
-
-window.toggleCardVisibility = function(cardId) {
-    const card = document.getElementById(cardId);
-    if (!card) return;
-    const hidden = appData.settings.hiddenCards;
-    if (hidden.includes(cardId)) { appData.settings.hiddenCards = hidden.filter(id => id !== cardId); card.classList.remove('hidden-card'); }
-    else { hidden.push(cardId); card.classList.add('hidden-card'); }
-    saveData();
-};
-
-window.openVisibilityModal = function() { document.getElementById('card-visibility-modal').style.display = 'flex'; };
-window.closeVisibilityModal = function() { document.getElementById('card-visibility-modal').style.display = 'none'; };
-window.showAllCards = function() { appData.settings.hiddenCards = []; saveData(); closeVisibilityModal(); setDashboardView(appData.settings.activeDashboardView); };
-
-window.toggleCardCollapse = function(cardId) {
-    const card = document.getElementById(cardId);
-    if (!card) return;
-    card.classList.toggle('collapsed');
-    const list = appData.settings.collapsedCards;
-    if (card.classList.contains('collapsed')) { if (!list.includes(cardId)) list.push(cardId); }
-    else appData.settings.collapsedCards = list.filter(id => id !== cardId);
-    saveData();
-};
-
-window.toggleAllCards = function() {
-    const cards = document.querySelectorAll('.card:not(.hidden-card)');
-    const shouldCollapse = [...cards].some(c => !c.classList.contains('collapsed'));
-    cards.forEach(c => c.classList.toggle('collapsed', shouldCollapse));
-    appData.settings.collapsedCards = shouldCollapse ? [...cards].map(c => c.id) : [];
-    saveData();
-};
-
-function changeTheme(themeName) {
-    appData.settings.theme = themeName;
-    const panel = document.getElementById('custom-theme-panel');
-    if (themeName === 'custom') { panel.style.display = 'flex'; applyCustomThemeStyles(); }
-    else { panel.style.display = 'none'; document.documentElement.setAttribute('data-theme', themeName); }
-    saveData();
-}
-
-function applyCustomThemeStyles() {
-    const ct = appData.settings.customTheme;
-    document.documentElement.setAttribute('data-theme', 'custom');
-    const root = document.documentElement.style;
-    root.setProperty('--bg-color', ct.bg); root.setProperty('--card-bg', ct.card); root.setProperty('--card-border', ct.border);
-    root.setProperty('--text-main', ct.text); root.setProperty('--accent-cyan', ct.cyan); root.setProperty('--accent-violet', ct.violet);
-}
-
-// Drag & Drop
-let draggedCardId = null;
-window.handleDragStart = function(e, cardId) {
-    draggedCardId = cardId;
-    document.getElementById(cardId)?.classList.add('dragging');
-    e.dataTransfer.setData('text/plain', cardId);
-};
-function setupDragAndDrop() {
-    const container = document.getElementById('dashboard-container');
-    document.addEventListener('dragend', () => {
-        if (draggedCardId) { document.getElementById(draggedCardId)?.classList.remove('dragging'); draggedCardId = null; saveLayoutState(); }
-    });
-    container.addEventListener('dragover', e => {
-        e.preventDefault();
-        const col = e.target.closest('.col-left, .col-right');
-        const dragging = document.querySelector('.card.dragging');
-        if (!col || !dragging) return;
-        const after = [...col.querySelectorAll('.card:not(.dragging)')].reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = e.clientY - box.top - box.height / 2;
-            return (offset < 0 && offset > closest.offset) ? { offset, element: child } : closest;
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-        if (after == null) col.appendChild(dragging); else col.insertBefore(dragging, after);
-    });
-}
-function saveLayoutState() {
-    appData.settings.layout = {
-        colLeft: [...document.querySelectorAll('#col-left .card')].map(c => c.id),
-        colRight: [...document.querySelectorAll('#col-right .card')].map(c => c.id)
-    };
-    saveData();
-}
-function applyLayoutState() {
-    const layout = appData.settings.layout || defaultData.settings.layout;
-    const left = document.getElementById('col-left'), right = document.getElementById('col-right');
-    (layout.colLeft || []).forEach(id => { const c = document.getElementById(id); if (c) left.appendChild(c); });
-    (layout.colRight || []).forEach(id => { const c = document.getElementById(id); if (c) right.appendChild(c); });
-}
+document.getElementById('clock-container')?.addEventListener('click', () => {
+    syncRealTimeNetwork();
+    showToast("🔄 Resincronizando hora real...", "info");
+});
 
 /* ==========================================================
-   AUDIO & MÓDULOS
+   POMODORO AUTOMATIZADO CON ESTADÍSTICAS
    ========================================================== */
-class NoiseSynth {
-    constructor() { this.ctx = null; this.source = null; this.gainNode = null; this.isPlaying = false; }
-    init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (this.ctx.state === 'suspended') this.ctx.resume(); }
-    play(type, vol) {
-        this.init(); this.stop();
-        const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 2, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-        this.source = this.ctx.createBufferSource();
-        this.source.buffer = buffer; this.source.loop = true;
-        this.gainNode = this.ctx.createGain();
-        this.gainNode.gain.setValueAtTime(vol / 100, this.ctx.currentTime);
-        this.source.connect(this.gainNode); this.gainNode.connect(this.ctx.destination);
-        this.source.start(); this.isPlaying = true;
-    }
-    stop() { if (this.source) { try { this.source.stop(); } catch(e){} this.source.disconnect(); } this.isPlaying = false; }
-    setVolume(vol) { if (this.gainNode) this.gainNode.gain.setValueAtTime(vol / 100, this.ctx.currentTime); }
-}
-const audioSynth = new NoiseSynth();
-window.toggleNoiseGenerator = function() {
-    if (audioSynth.isPlaying) { audioSynth.stop(); document.getElementById('btn-audio-toggle').textContent = '▶ Play'; }
-    else { audioSynth.play(document.getElementById('audio-sound-type').value, document.getElementById('audio-volume').value); document.getElementById('btn-audio-toggle').textContent = '⏹ Stop'; }
+let pomoInterval = null;
+let pomoSecondsLeft = 25 * 60;
+
+window.startCustomPomodoro = function(mode) {
+    const mins = parseInt(document.getElementById('pomo-focus-time').value, 10);
+    pomoSecondsLeft = mins * 60;
+    clearInterval(pomoInterval);
+    document.getElementById('pomodoro-target').textContent = '🎯 Sesión de Foco Activa';
+    
+    pomoInterval = setInterval(() => {
+        pomoSecondsLeft--;
+        const m = Math.floor(pomoSecondsLeft / 60);
+        const s = pomoSecondsLeft % 60;
+        const display = document.getElementById('pomodoro-display');
+        if (display) display.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        
+        if (pomoSecondsLeft <= 0) {
+            clearInterval(pomoInterval);
+            appData.studyStats.todayFocusMinutes += mins;
+            appData.studyStats.totalFocusMinutes += mins;
+            saveData();
+            updateStats();
+            showToast(`🎉 ¡Pomodoro completado! +${mins} min sumados.`, "success");
+        }
+    }, 1000);
 };
-window.updateAudioVolume = function(val) { document.getElementById('audio-vol-text').textContent = val + '%'; audioSynth.setVolume(val); };
+
+window.stopPomodoro = function() {
+    clearInterval(pomoInterval);
+    pomoSecondsLeft = 25 * 60;
+    const display = document.getElementById('pomodoro-display');
+    if (display) display.textContent = "25:00";
+    document.getElementById('pomodoro-target').textContent = "Objetivo: Detenido";
+};
+
+/* ==========================================================
+   KANBAN FLUIDO CON BOTONES DE MOVIMIENTO
+   ========================================================== */
+window.moveKanbanTask = function(id, direction) {
+    const task = appData.studyKanban.find(t => t.id === id);
+    if (!task) return;
+    const cols = ['todo', 'doing', 'done'];
+    const newIndex = cols.indexOf(task.col) + direction;
+    if (newIndex >= 0 && newIndex < cols.length) {
+        task.col = cols[newIndex];
+        saveData();
+        renderKanban();
+    }
+};
+
+function renderKanban() {
+    const cols = ['todo', 'doing', 'done'];
+    const counts = { todo: 0, doing: 0, done: 0 };
+    cols.forEach(col => {
+        const list = document.getElementById(`kanban-list-${col}`);
+        const items = appData.studyKanban.filter(t => t.col === col);
+        counts[col] = items.length;
+        if (list) {
+            list.innerHTML = items.map(t => `
+                <div class="kanban-card" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-size:0.6rem;color:var(--accent-cyan);display:block;">[${escapeHtml(t.subject)}]</span>
+                        <span>${escapeHtml(t.title)}</span>
+                    </div>
+                    <div style="display:flex;gap:2px;">
+                        ${col !== 'todo' ? `<button class="btn-icon" onclick="moveKanbanTask(${t.id}, -1)">◀</button>` : ''}
+                        ${col !== 'done' ? `<button class="btn-icon" onclick="moveKanbanTask(${t.id}, 1)">▶</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+    });
+    ['todo', 'doing', 'done'].forEach(c => {
+        const countEl = document.getElementById(`kanban-count-${c}`);
+        if (countEl) countEl.textContent = counts[c];
+    });
+}
+
+window.addKanbanTask = function() {
+    const title = document.getElementById('kanban-new-title').value.trim();
+    if (!title) return;
+    appData.studyKanban.push({
+        id: Date.now(),
+        title,
+        subject: document.getElementById('kanban-new-subject').value || 'GENERAL',
+        col: 'todo',
+        priority: document.getElementById('kanban-new-prio').value
+    });
+    document.getElementById('kanban-new-title').value = '';
+    saveData();
+    renderKanban();
+};
+
+/* ==========================================================
+   BUSCADOR GLOBAL
+   ========================================================== */
+window.openGlobalSearch = function() { document.getElementById('global-search-modal').style.display = 'flex'; };
+window.closeGlobalSearch = function() { document.getElementById('global-search-modal').style.display = 'none'; };
+
+window.filterGlobalSearch = function() {
+    const query = document.getElementById('global-search-input').value.toLowerCase().trim();
+    const resultsList = document.getElementById('global-search-results');
+    if (!resultsList || !query) { resultsList.innerHTML = ''; return; }
+
+    let matches = [];
+    (appData.tasks || []).forEach(t => { if(t.text.toLowerCase().includes(query)) matches.push(`📋 Tarea: ${escapeHtml(t.text)}`); });
+    (appData.studyKanban || []).forEach(k => { if(k.title.toLowerCase().includes(query)) matches.push(`📅 Kanban: ${escapeHtml(k.title)}`); });
+
+    resultsList.innerHTML = matches.length ? matches.map(m => `<li style="padding:6px;border-bottom:1px solid var(--card-border);font-size:0.75rem;">${m}</li>`).join('') : '<li style="padding:6px;font-size:0.75rem;color:var(--text-muted);">Sin resultados.</li>';
+};
+
+/* ==========================================================
+   RENDERIZADOS Y EVENTOS
+   ========================================================== */
+function renderAll() {
+    renderKanban();
+    renderTasks();
+    updateStats();
+}
 
 window.addTask = function() {
     const text = document.getElementById('task-text').value.trim();
     if (!text) return;
-    appData.tasks.push({ id: Date.now(), text, date: document.getElementById('task-date').value, priority: document.getElementById('task-priority').value, done: false });
+    appData.tasks.push({ id: Date.now(), text, done: false });
     document.getElementById('task-text').value = '';
     saveData(); renderTasks();
 };
@@ -437,88 +353,15 @@ function renderTasks() {
     list.innerHTML = appData.tasks.map(t => `<li class="${t.done ? 'task-done' : ''}"><span onclick="toggleTask(${t.id})" style="cursor:pointer">${t.done ? '✅' : '⬜'} ${escapeHtml(t.text)}</span><button onclick="deleteTask(${t.id})" class="btn-icon">✖</button></li>`).join('');
 }
 
-window.addDelivery = function() {
-    const title = document.getElementById('deliv-title').value.trim();
-    if (!title) return;
-    appData.deliveries.push({ id: Date.now(), title, subject: document.getElementById('deliv-subject').value, type: document.getElementById('deliv-type').value, dueDate: document.getElementById('deliv-datetime').value, done: false });
-    saveData(); renderDeliveries();
-};
-function renderDeliveries() {
-    const container = document.getElementById('deliveries-list');
-    if (!container) return;
-    container.innerHTML = appData.deliveries.map(d => `<div class="deadline-card-item"><span>${escapeHtml(d.title)}</span><button onclick="appData.deliveries = appData.deliveries.filter(x => x.id !== ${d.id}); saveData(); renderDeliveries();" class="btn-icon">✖</button></div>`).join('');
-}
-
-window.addKanbanTask = function() {
-    const title = document.getElementById('kanban-new-title').value.trim();
-    if (!title) return;
-    appData.studyKanban.push({ id: Date.now(), title, subject: document.getElementById('kanban-new-subject').value, col: 'todo', pomos: 2, donePomos: 0, priority: 'medium' });
-    saveData(); renderKanban();
-};
-function renderKanban() {
-    ['todo', 'doing', 'done'].forEach(col => {
-        const box = document.getElementById(`kanban-list-${col}`);
-        if (box) box.innerHTML = appData.studyKanban.filter(t => t.col === col).map(t => `<div class="kanban-card"><span>${escapeHtml(t.title)}</span></div>`).join('');
-    });
-}
-
-function renderGradesCalculator() {
-    const container = document.getElementById('grades-subjects-container');
-    if (!container) return;
-    container.innerHTML = appData.grades.map(g => `<div class="grade-calc-subject"><strong>${escapeHtml(g.subject)}</strong></div>`).join('');
-}
-
-window.addBookmark = function() {
-    const name = document.getElementById('bm-name').value.trim();
-    const url = document.getElementById('bm-url').value.trim();
-    if (!name || !url) return;
-    appData.bookmarks.push({ id: Date.now(), name, url });
-    saveData(); renderBookmarks();
-};
-function renderBookmarks() {
-    const list = document.getElementById('bookmarks-list');
-    if (!list) return;
-    list.innerHTML = appData.bookmarks.map(b => `<li><a href="${escapeHtml(b.url)}" target="_blank">${escapeHtml(b.name)}</a></li>`).join('');
-}
-
-window.addServer = function() {
-    const name = document.getElementById('srv-name').value.trim();
-    const ip = document.getElementById('srv-ip').value.trim();
-    if (!name || !ip) return;
-    appData.servers.push({ id: Date.now(), name, ip });
-    saveData(); renderServers();
-};
-function renderServers() {
-    const list = document.getElementById('servers-list');
-    if (!list) return;
-    list.innerHTML = appData.servers.map(s => `<li><span>${escapeHtml(s.name)} (${escapeHtml(s.ip)})</span></li>`).join('');
-}
-
-function renderSnippets() {
-    const container = document.getElementById('snippet-list-container');
-    if (!container) return;
-    container.innerHTML = (appData.snippets || []).map(s => `<div class="snippet-box"><strong>${escapeHtml(s.title)}</strong></div>`).join('');
-}
-
-function updateScheduleWidget(now) {
-    const widget = document.getElementById('schedule-widget');
-    if (widget) widget.innerHTML = `<div class="sch-subject">Horario Activo</div>`;
-}
-
 function updateStats() {
-    const statToday = document.getElementById('stat-focus-today');
-    if (statToday) statToday.textContent = `${appData.studyStats.todayFocusMinutes}m`;
-    const statTotal = document.getElementById('stat-focus-total');
-    if (statTotal) statTotal.textContent = `${Math.floor(appData.studyStats.totalFocusMinutes / 60)}h`;
-}
-
-function renderAll() {
-    renderGradesCalculator(); renderDeliveries(); renderSnippets(); renderKanban();
-    renderTasks(); renderBookmarks(); renderServers(); renderCategoryPills(); updateStats();
+    document.getElementById('stat-focus-today').textContent = `${appData.studyStats.todayFocusMinutes}m`;
+    document.getElementById('stat-focus-total').textContent = `${Math.floor(appData.studyStats.totalFocusMinutes / 60)}h`;
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('theme-select')?.addEventListener('change', e => changeTheme(e.target.value));
-    setupDragAndDrop();
-    syncRealTimeNetwork();
+    document.getElementById('theme-select')?.addEventListener('change', e => {
+        appData.settings.theme = e.target.value;
+        document.documentElement.setAttribute('data-theme', e.target.value);
+        saveData();
+    });
 });
