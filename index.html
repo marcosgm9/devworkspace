@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#060810">
-    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.8</title>
+    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.9 Zen</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -41,7 +41,7 @@
 
 <header>
     <div class="header-title-zone">
-        <h1>DevWorkspace_ <span class="badge-version">v5.8 Ultra</span></h1>
+        <h1>DevWorkspace_ <span class="badge-version">v5.9 Zen</span></h1>
         <div id="user-profile-widget" class="user-profile-widget" style="display:none;">
             <span class="user-status-dot"></span>
             <span id="user-name"></span>
@@ -53,6 +53,8 @@
     </div>
 
     <div class="header-controls">
+        <button class="view-pill btn-zen-toggle" id="btn-zen-mode" onclick="toggleZenMode()" title="Modo Enfoque (Ocultar distracciones)">🧘 Zen</button>
+        
         <button class="btn-quick-search" onclick="openGlobalSearch()" title="Buscar en todo el workspace (Ctrl+K)">
             🔍 Buscar <kbd>Ctrl+K</kbd>
         </button>
@@ -280,7 +282,7 @@
                 </div>
                 <ul id="tasks-list" class="tasks-list"></ul>
                 <div class="quick-add-task-row">
-                    <input type="text" id="task-text" placeholder="Nueva tarea rápida..." style="flex:2;" onkeypress="if(event.key==='Enter') addTask()">
+                    <input type="text" id="task-text" placeholder="Nueva tarea rápida... (Ctrl+N)" style="flex:2;" onkeypress="if(event.key==='Enter') addTask()">
                     <select id="task-priority" style="width:95px;">
                         <option value="medium">🟠 Media</option>
                         <option value="high">🔴 Alta</option>
@@ -664,7 +666,7 @@
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
 <footer>
-    <div>DevWorkspace v5.8 Ultra &bull; Student & Dev Cockpit</div>
+    <div>DevWorkspace v5.9 Zen &bull; Student & Dev Cockpit</div>
     <div>
         <a href="#" onclick="resetWorkspacePrompt(); return false;" class="footer-link-danger" title="Reiniciar todos los datos a blanco">[Limpiar Workspace]</a>
         <a href="#" onclick="exportData(); return false;" class="footer-link-cyan">[Exportar JSON]</a>

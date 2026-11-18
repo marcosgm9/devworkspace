@@ -1,6 +1,6 @@
 /* ==========================================================
-   DEVWORKSPACE ULTIMATE v5.8 - CORE APPLICATION ENGINE
-   Modular Architecture & Production-Ready ES6+
+   DEVWORKSPACE ULTIMATE v5.9 - CORE APPLICATION ENGINE
+   Modular Architecture & Production-Ready ES6+ (Zen & Performance)
    ========================================================== */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -35,7 +35,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const LOCAL_STORAGE_KEY = 'devworkspace_v5_8_clean';
+const LOCAL_STORAGE_KEY = 'devworkspace_v5_9_clean';
 
 let currentUser = null;
 let isRegisterMode = false;
@@ -86,12 +86,31 @@ function showToast(message, type = 'info') {
 }
 
 /* ----------------------------------------------------------
-   SNIPPETS POR DEFECTO (Vacío para inicio en blanco)
+   NOTIFICACIONES NATIVAS DE ESCRITORIO
+   ---------------------------------------------------------- */
+function requestNotificationPermission() {
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
+}
+
+function sendDesktopNotification(title, body) {
+    if ("Notification" in window && Notification.permission === "granted") {
+        try {
+            new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/3076/3076129.png' });
+        } catch (e) {
+            console.warn("No se pudo enviar notificación nativa:", e);
+        }
+    }
+}
+
+/* ----------------------------------------------------------
+   SNIPPETS POR DEFECTO
    ---------------------------------------------------------- */
 const defaultSnippets = [];
 
 /* ----------------------------------------------------------
-   ESTADO INICIAL Y ESQUEMA (100% LIMPIO EN BLANCO)
+   ESTADO INICIAL Y ESQUEMA
    ---------------------------------------------------------- */
 const defaultCategories = [
     { key: 'all', label: '🚀 Todo' },
@@ -144,6 +163,7 @@ const defaultData = {
         collapsedCards: [],
         hiddenCards: [],
         editMode: false,
+        zenMode: false,
         layout: {
             colLeft: ['card-kanban', 'card-grades', 'card-deliveries', 'card-tasks', 'card-notes', 'card-sticky'],
             colRight: ['card-study-stats', 'card-pomodoro', 'card-audio', 'card-snippets', 'card-schedule', 'card-bookmarks', 'card-servers']
@@ -313,7 +333,7 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 /* ----------------------------------------------------------
-   RELOJ, SKEW & API MADRID
+   RELOJ, SKEW & API MADRID (ROBUSTO CON FALLBACK)
    ---------------------------------------------------------- */
 let networkOffsetMs = 0;
 let isManualMode = false;
@@ -326,7 +346,10 @@ window.syncRealTimeNetwork = async function () {
     }
     if (el) el.textContent = '🔄 Sincronizando...';
     try {
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store', signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error("Network response not ok");
         const data = await res.json();
         const serverTimeMs = new Date(data.datetime).getTime();
@@ -384,6 +407,23 @@ function updateClockDisplay() {
 }
 
 setInterval(updateClockDisplay, 1000);
+
+/* ----------------------------------------------------------
+   MODO ZEN / ENFOQUE TOTAL
+   ---------------------------------------------------------- */
+window.toggleZenMode = function () {
+    appData.settings.zenMode = !appData.settings.zenMode;
+    applyZenModeState();
+    saveData();
+    showToast(appData.settings.zenMode ? "🧘 Modo Zen activado" : "⚡ Modo Zen desactivado", "info");
+};
+
+function applyZenModeState() {
+    const isZen = !!appData.settings.zenMode;
+    const btnZen = document.getElementById('btn-zen-mode');
+    if (btnZen) btnZen.classList.toggle('active', isZen);
+    document.body.classList.toggle('zen-mode-active', isZen);
+}
 
 /* ----------------------------------------------------------
    GESTIÓN DE TEMAS & CUSTOM THEME STUDIO
@@ -643,7 +683,7 @@ window.toggleForm = function (id) {
 };
 
 /* ----------------------------------------------------------
-   DRAG & DROP ROBUSTO DE TARJETAS (COL-LEFT & COL-RIGHT)
+   DRAG & DROP ROBUSTO DE TARJETAS
    ---------------------------------------------------------- */
 let draggedCardId = null;
 
@@ -726,6 +766,7 @@ function applyLayoutState() {
             if (btn) btn.textContent = '+';
         }
     });
+    applyZenModeState();
 }
 
 /* ----------------------------------------------------------
@@ -1170,6 +1211,7 @@ window.setNotesTab = function (tabKey) {
     if (textarea) {
         textarea.value = (appData.notes && appData.notes[tabKey]) || '';
     }
+    saveData();
 };
 
 window.toolCopy = function () {
@@ -1323,7 +1365,7 @@ window.resetStudyStats = function () {
 };
 
 /* ----------------------------------------------------------
-   POMODORO PRO CON CHIME SINTETIZADO
+   POMODORO PRO CON CHIME Y NOTIFICACIÓN NATIVA
    ---------------------------------------------------------- */
 let pomodoroTimer = null;
 let pomodoroSecondsLeft = 25 * 60;
@@ -1331,6 +1373,7 @@ let pomodoroMode = 'focus';
 let pomodoroRunning = false;
 
 window.startCustomPomodoro = function (mode) {
+    requestNotificationPermission();
     clearInterval(pomodoroTimer);
     pomodoroMode = mode;
     const focusSelect = document.getElementById('pomo-focus-time');
@@ -1390,8 +1433,10 @@ function handlePomodoroComplete(mode, durationMins) {
         saveData();
         updateStats();
         showToast(`🎉 ¡Sesión de foco de ${durationMins}m completada!`, "success");
+        sendDesktopNotification("Pomodoro Finalizado", `¡Excelente trabajo! Has completado ${durationMins} minutos de enfoque.`);
     } else {
         showToast("☕ ¡Break terminado! Listo para volver a programar", "info");
+        sendDesktopNotification("Break Finalizado", "El tiempo de descanso ha terminado. ¡A por la siguiente sesión!");
     }
 }
 
@@ -1418,14 +1463,13 @@ function playNotificationChime() {
 }
 
 /* ----------------------------------------------------------
-   SINTETIZADOR DE AUDIO (RUIDO BLANCO, MARRÓN, ROSA & BINAURAL)
+   SINTETIZADOR DE AUDIO (CON LIMPIEZA ESTRICTA DE MEMORIA)
    ---------------------------------------------------------- */
 class WebAudioSynthesizer {
     constructor() {
         this.ctx = null;
         this.source = null;
         this.gainNode = null;
-        this.filterNode = null;
         this.leftOsc = null;
         this.rightOsc = null;
         this.isPlaying = false;
@@ -1487,7 +1531,6 @@ class WebAudioSynthesizer {
                 data[i] *= 2.2;
             }
         } else {
-            // White noise
             for (let i = 0; i < bufferSize; i++) {
                 data[i] = Math.random() * 2 - 1;
             }
@@ -1537,18 +1580,22 @@ class WebAudioSynthesizer {
     stop() {
         if (this.source) {
             try { this.source.stop(); } catch (e) {}
-            this.source.disconnect();
+            try { this.source.disconnect(); } catch (e) {}
             this.source = null;
         }
         if (this.leftOsc) {
             try { this.leftOsc.stop(); } catch (e) {}
-            this.leftOsc.disconnect();
+            try { this.leftOsc.disconnect(); } catch (e) {}
             this.leftOsc = null;
         }
         if (this.rightOsc) {
             try { this.rightOsc.stop(); } catch (e) {}
-            this.rightOsc.disconnect();
+            try { this.rightOsc.disconnect(); } catch (e) {}
             this.rightOsc = null;
+        }
+        if (this.gainNode) {
+            try { this.gainNode.disconnect(); } catch (e) {}
+            this.gainNode = null;
         }
         this.isPlaying = false;
         this.updateVisualizerState(false);
@@ -1713,7 +1760,7 @@ function updateScheduleWidget(now) {
         return;
     }
 
-    const currentDay = now.getDay(); // 0 = Dom, 1 = Lun ... 5 = Vie
+    const currentDay = now.getDay();
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
     if (scheduleViewTable) {
@@ -1996,7 +2043,7 @@ window.renderServers = function () {
 };
 
 /* ----------------------------------------------------------
-   TARJETAS PERSONALIZADAS (CUSTOM CARDS GENERATOR)
+   TARJETAS PERSONALIZADAS
    ---------------------------------------------------------- */
 window.createCustomCard = function () {
     const title = document.getElementById('new-card-title')?.value.trim();
@@ -2193,35 +2240,30 @@ window.filterGlobalSearch = function () {
 
     const matches = [];
 
-    // Tareas
     (appData.tasks || []).forEach(t => {
         if (t.text.toLowerCase().includes(query)) {
             matches.push({ type: 'Tarea', text: t.text, badge: t.done ? '✅ Hecha' : '⏳ Pendiente' });
         }
     });
 
-    // Entregas
     (appData.deliveries || []).forEach(d => {
         if (d.title.toLowerCase().includes(query) || d.subject.toLowerCase().includes(query)) {
             matches.push({ type: 'Entrega', text: `${d.title} (${d.subject})`, badge: d.type });
         }
     });
 
-    // Snippets
     getAllSnippets().forEach(s => {
         if (s.title.toLowerCase().includes(query) || s.cmd.toLowerCase().includes(query)) {
             matches.push({ type: 'Comando', text: `${s.title}: ${s.cmd}`, badge: s.cat });
         }
     });
 
-    // Bookmarks
     (appData.bookmarks || []).forEach(b => {
         if (b.name.toLowerCase().includes(query) || b.url.toLowerCase().includes(query)) {
             matches.push({ type: 'Enlace', text: `${b.name} (${b.url})`, badge: 'Web' });
         }
     });
 
-    // Kanban
     (appData.studyKanban || []).forEach(k => {
         if (k.title.toLowerCase().includes(query) || k.subject.toLowerCase().includes(query)) {
             matches.push({ type: 'Kanban', text: `${k.title} [${k.subject}]`, badge: k.col.toUpperCase() });
@@ -2314,11 +2356,22 @@ window.addEventListener('DOMContentLoaded', () => {
     applyLayoutState();
     syncRealTimeNetwork();
 
-    // Atajo global Ctrl+K y Escape
+    // Atajos de teclado globales amigables y avanzados
     window.addEventListener('keydown', e => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
             e.preventDefault();
             openGlobalSearch();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            const taskInput = document.getElementById('task-text');
+            if (taskInput) taskInput.focus();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+            e.preventDefault();
+            if (pomodoroRunning) {
+                stopPomodoro();
+            } else {
+                startCustomPomodoro('focus');
+            }
         } else if (e.key === 'Escape') {
             closeGlobalSearch();
             closeVisibilityModal();
@@ -2327,7 +2380,6 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Cerrar modales haciendo click fuera del contenido
     document.querySelectorAll('.modal-overlay').forEach(modal => {
         modal.addEventListener('click', e => {
             if (e.target === modal) {

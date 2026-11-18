@@ -1,6 +1,6 @@
 /* ==========================================================
-   DEVWORKSPACE ULTIMATE v5.8 - STYLESHEET
-   Cyberpunk / Terminal Glassmorphism Architecture
+   DEVWORKSPACE ULTIMATE v5.9 - STYLESHEET
+   Cyberpunk / Terminal Glassmorphism Architecture (Zen & UI)
    ========================================================== */
 
 /* ----------------------------------------------------------
@@ -135,6 +135,32 @@ body {
     flex-direction: column;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+}
+
+/* Modo Zen: Oculta elementos no esenciales */
+body.zen-mode-active #card-bookmarks,
+body.zen-mode-active #card-servers,
+body.zen-mode-active #card-snippets,
+body.zen-mode-active #card-schedule,
+body.zen-mode-active #card-grades,
+body.zen-mode-active #card-deliveries,
+body.zen-mode-active #card-kanban,
+body.zen-mode-active .view-filter-bar {
+    display: none !important;
+}
+
+body.zen-mode-active .dashboard-container {
+    grid-template-columns: 1fr;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.btn-zen-toggle.active {
+    background: var(--accent-violet);
+    color: #fff;
+    border-color: var(--accent-violet);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.45);
 }
 
 /* ----------------------------------------------------------
@@ -514,20 +540,6 @@ body.edit-mode-active .edit-controls {
     transform: scale(0.98);
     border: 2px dashed var(--accent-cyan) !important;
     box-shadow: 0 0 25px rgba(var(--accent-cyan-rgb), 0.35) !important;
-}
-
-.drag-over-indicator {
-    border: 2px dashed var(--accent-cyan);
-    background: rgba(var(--accent-cyan-rgb), 0.08);
-    border-radius: var(--radius);
-    height: 60px;
-    margin-bottom: 6px;
-    animation: pulseDrop 1.2s infinite alternate;
-}
-
-@keyframes pulseDrop {
-    0% { opacity: 0.4; }
-    100% { opacity: 0.85; }
 }
 
 .card-body {
