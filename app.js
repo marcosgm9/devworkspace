@@ -1,4 +1,4 @@
-import { calculateSubnet, getMadridClock, getMadridDateKey, getNextRepeatDate, mergeState } from './core.js';
+import { calculateSubnet, createDebouncer, getMadridClock, getMadridDateKey, getNextRepeatDate, mergeState } from './core.js';
 
 /* ==========================================================
    DEVWORKSPACE v7.0 - STUDIO EDITION (app.js)
@@ -42,6 +42,8 @@ let globalSearchSelectedIdx = 0;
 let globalSearchQuery = '';
 let globalSearchResults = [];
 let deferredInstallPrompt = null;
+const deferredStateSave = createDebouncer(() => saveState(), 250);
+const deferredGlobalSearch = createDebouncer(applyGlobalSearchFilter, 100);
 
 // Pomodoro & Audio State
 let pomoInterval = null;
@@ -142,6 +144,7 @@ function loadState() {
 let appState = loadState();
 
 function saveState(skipCloud = false) {
+    deferredStateSave.cancel();
     try {
         const serialized = JSON.stringify(appState);
         localStorage.setItem(STORAGE_KEY, serialized);
@@ -152,6 +155,14 @@ function saveState(skipCloud = false) {
     if (!skipCloud && !isApplyingRemoteUpdate) {
         syncToFirebaseCloud();
     }
+}
+
+function scheduleStateSave() {
+    deferredStateSave();
+}
+
+function flushDeferredStateSave() {
+    deferredStateSave.flush();
 }
 
 /* ----------------------------------------------------------
@@ -1401,12 +1412,13 @@ window.inspectStudioDomStructure = function () {
     showToast(ids.length ? `IDs detectados: ${ids.join(', ')}` : 'Sin atributos id en HTML', 'info');
 };
 
-function syncStudioStateFromInputs() {
+function syncStudioStateFromInputs(deferSave = false) {
     appState.studio.currentTitle = document.getElementById('studio-project-title').value;
     appState.studio.html = document.getElementById('code-html').value;
     appState.studio.css = document.getElementById('code-css').value;
     appState.studio.js = document.getElementById('code-js').value;
-    saveState();
+    if (deferSave) scheduleStateSave();
+    else saveState();
 }
 
 window.saveStudioProject = function () {
@@ -2244,7 +2256,7 @@ window.openGlobalSearch = function () {
     inp.value = '';
     globalSearchQuery = '';
     globalSearchSelectedIdx = 0;
-    filterGlobalSearch();
+    applyGlobalSearchFilter();
     inp.focus();
 };
 
@@ -2253,6 +2265,14 @@ window.closeGlobalSearch = function () {
 };
 
 window.filterGlobalSearch = function () {
+    deferredGlobalSearch();
+};
+
+function flushPendingGlobalSearch() {
+    deferredGlobalSearch.flush();
+}
+
+function applyGlobalSearchFilter() {
     const q = (document.getElementById('global-search-input').value || '').trim().toLocaleLowerCase('es-ES');
     if (q !== globalSearchQuery) {
         globalSearchQuery = q;
@@ -2306,14 +2326,18 @@ window.handleGlobalSearchKeydown = function (e) {
     if (e.key === 'Escape') {
         closeGlobalSearch();
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        flushPendingGlobalSearch();
         e.preventDefault();
         const lastIndex = Math.min(globalSearchResults.length, 15) - 1;
         if (lastIndex < 0) return;
         const delta = e.key === 'ArrowDown' ? 1 : -1;
         globalSearchSelectedIdx = (globalSearchSelectedIdx + delta + lastIndex + 1) % (lastIndex + 1);
         renderGlobalSearchResults();
-    } else if (e.key === 'Enter' && globalSearchResults[globalSearchSelectedIdx]) {
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        flushPendingGlobalSearch();
         const result = globalSearchResults[globalSearchSelectedIdx];
+        if (!result) return;
         switchWorkspace(result.ws);
         closeGlobalSearch();
     }
@@ -2546,23 +2570,26 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('scratchpad')?.addEventListener('input', (e) => {
         appState.notes[activeNotesTab] = e.target.value;
         updateScratchpadMetrics();
-        saveState();
+        scheduleStateSave();
     });
+    document.getElementById('scratchpad')?.addEventListener('blur', flushDeferredStateSave);
 
     document.getElementById('sticky-note-input')?.addEventListener('input', (e) => {
         appState.stickyNote = e.target.value;
-        saveState();
+        scheduleStateSave();
     });
+    document.getElementById('sticky-note-input')?.addEventListener('blur', flushDeferredStateSave);
 
     // Listeners Live Code Studio
     ['code-html', 'code-css', 'code-js', 'studio-project-title'].forEach(id => {
         document.getElementById(id)?.addEventListener('input', () => {
-            syncStudioStateFromInputs();
+            syncStudioStateFromInputs(true);
             if (document.getElementById('studio-autorun')?.checked) {
                 clearTimeout(studioAutoRunTimer);
                 studioAutoRunTimer = setTimeout(runStudioPreview, 350);
             }
         });
+        document.getElementById(id)?.addEventListener('blur', flushDeferredStateSave);
     });
 
     window.addEventListener('message', (ev) => {
@@ -2612,6 +2639,11 @@ document.addEventListener('DOMContentLoaded', () => {
             openShortcutsModal();
         }
     });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushDeferredStateSave();
+    });
+    window.addEventListener('pagehide', flushDeferredStateSave);
 
     updateStorageQuotaBadge((localStorage.getItem(STORAGE_KEY) || '').length);
     initFirebaseIfConfigured();

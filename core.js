@@ -12,6 +12,33 @@ export function mergeState(target, source) {
     return output;
 }
 
+export function createDebouncer(callback, delay) {
+    if (typeof callback !== 'function' || !Number.isFinite(delay) || delay < 0) {
+        throw new TypeError('Se requiere una función y un retraso válido');
+    }
+
+    let timer = null;
+    const cancel = () => {
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+    };
+    const debounced = () => {
+        cancel();
+        timer = setTimeout(() => {
+            timer = null;
+            callback();
+        }, delay);
+    };
+    debounced.cancel = cancel;
+    debounced.flush = () => {
+        if (timer === null) return false;
+        cancel();
+        callback();
+        return true;
+    };
+    return debounced;
+}
+
 export function getMadridDateKey(date = new Date()) {
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Europe/Madrid',
