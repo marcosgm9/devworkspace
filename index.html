@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#060810">
-    <title>DevWorkspace - Student & Dev Dashboard Ultimate v5.9 Zen</title>
+    <meta name="theme-color" content="#060813">
+    <meta name="description" content="DevWorkspace v6.0 Ultimate - Entorno integral para estudiantes de informática y desarrolladores">
+    <link rel="manifest" id="pwa-manifest-link">
+    <title>DevWorkspace - Student & Dev Cockpit Ultimate v6.0</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -39,28 +41,47 @@
     </div>
 </div>
 
+<!-- HEADER PRINCIPAL -->
 <header>
     <div class="header-title-zone">
-        <h1>DevWorkspace_ <span class="badge-version">v5.9 Zen</span></h1>
+        <h1>DevWorkspace_ <span class="badge-version">v6.0 Ultimate</span></h1>
+
         <div id="user-profile-widget" class="user-profile-widget" style="display:none;">
             <span class="user-status-dot"></span>
             <span id="user-name"></span>
             <span id="cloud-sync-indicator" class="sync-badge" title="Estado de sincronización">Local</span>
             <button type="button" onclick="logoutUser()" class="btn-icon" aria-label="Cerrar sesión" title="Cerrar sesión">🚪</button>
         </div>
+
         <button type="button" id="btn-cloud-login" class="btn-cloud-toggle" onclick="openAuthModal()" title="DevWorkspace Cloud (Firebase)">
             ☁️ <span id="cloud-status-text">Conectar Cloud</span>
+        </button>
+
+        <!-- Widget opcional de Clima Local (#44) -->
+        <button type="button" id="weather-badge" class="weather-badge" onclick="toggleWeatherWidget()" title="Clima local (Haz clic para activar/actualizar)">
+            🌤️ <span id="weather-text">Clima: OFF</span>
         </button>
     </div>
 
     <div class="header-controls">
-        <button type="button" class="view-pill btn-zen-toggle" id="btn-zen-mode" onclick="toggleZenMode()" title="Modo Enfoque (Ocultar distracciones)">🧘 Zen</button>
+        <!-- Perfiles de Espacio de Trabajo (#31) -->
+        <select id="workspace-preset-select" class="theme-select" aria-label="Perfil de espacio de trabajo" onchange="applyWorkspacePreset(this.value)" title="Cambiar perfil rápido de trabajo">
+            <option value="default">🧭 Perfil: Completo</option>
+            <option value="exam">🎓 Perfil: Modo Examen</option>
+            <option value="dev">💻 Perfil: Programación</option>
+            <option value="sysadmin">🌐 Perfil: SysAdmin / Redes</option>
+            <option value="class">🏫 Perfil: En Clase</option>
+        </select>
 
+        <button type="button" class="view-pill btn-zen-toggle" id="btn-zen-mode" onclick="toggleZenMode()" title="Modo Enfoque (Alt+Z)">🧘 Zen</button>
         <button type="button" class="view-pill" id="btn-density-mode" onclick="toggleDensityMode()" title="Alternar densidad compacta">📐 Compacto</button>
 
         <button type="button" class="btn-quick-search" onclick="openGlobalSearch()" title="Buscar en todo el workspace (Ctrl+K)">
             🔍 Buscar <kbd>Ctrl+K</kbd>
         </button>
+
+        <button type="button" class="view-pill" onclick="openShortcutsModal()" title="Ver atajos de teclado (?)">⌨️ ?</button>
+        <button type="button" class="view-pill" onclick="openAppearanceModal()" title="Tipografía, escala y temas">🎨 UI</button>
 
         <select id="theme-select" class="theme-select" aria-label="Seleccionar Tema Visual" title="Seleccionar Tema Visual">
             <option value="cyberpunk">🎨 Cyberpunk</option>
@@ -68,6 +89,7 @@
             <option value="minecraft">⛏️ Minecraft</option>
             <option value="valorant">🎯 Valorant</option>
             <option value="retro">📻 Retro CRT</option>
+            <option value="daylight">☀️ Alto Contraste Día</option>
             <option value="custom">🛠️ Personalizado</option>
         </select>
 
@@ -112,17 +134,21 @@
     </div>
 </header>
 
+<!-- BARRA DE VISTAS Y HERRAMIENTAS -->
 <div class="view-filter-bar" role="navigation" aria-label="Vistas y herramientas del panel">
     <span class="view-filter-label">Vistas:</span>
     <div id="view-pills-container" class="view-pills-container"></div>
     <button type="button" class="view-pill btn-violet" onclick="addCustomCategoryPrompt()" title="Añadir nueva categoría o sección">[+] Sección</button>
     <div class="spacer"></div>
-    <button type="button" class="view-pill btn-edit-mode" id="btn-toggle-edit-mode" onclick="toggleEditMode()" title="Editar categorías y orden de tarjetas">✏️ Modo Edición</button>
+    <button type="button" class="view-pill btn-cyan" onclick="generateDailySummaryModal()" title="Generar resumen automático de la jornada (#32)">📊 Resumen Día</button>
+    <button type="button" class="view-pill" onclick="openSnapshotsModal()" title="Copias de seguridad automáticas locales (#36)">🛟 Snapshots</button>
+    <button type="button" class="view-pill btn-edit-mode" id="btn-toggle-edit-mode" onclick="toggleEditMode()" title="Editar categorías y orden de tarjetas">✏️ Edición</button>
     <button type="button" class="view-pill" onclick="openVisibilityModal()" title="Gestionar visibilidad de tarjetas">👁️ Visibilidad</button>
-    <button type="button" class="view-pill" onclick="toggleForm('form-create-card-panel')" title="Crear nueva tarjeta personalizada">✚ Nueva Tarjeta</button>
-    <button type="button" class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕ Colapsar/Expandir</button>
+    <button type="button" class="view-pill" onclick="toggleForm('form-create-card-panel')" title="Crear nueva tarjeta personalizada">✚ Tarjeta</button>
+    <button type="button" class="view-pill" onclick="toggleAllCards()" title="Expandir o colapsar todas las tarjetas">↕</button>
 </div>
 
+<!-- PANEL CREAR TARJETA PERSONALIZADA -->
 <div id="form-create-card-panel" class="hidden-form form-create-card-panel">
     <div class="form-header">
         <span class="form-title">🛠️ Crear Tarjeta Personalizada</span>
@@ -140,14 +166,16 @@
     </div>
 </div>
 
+<!-- CONTENEDOR PRINCIPAL -->
 <main class="dashboard-container" id="dashboard-container">
     <div class="col-left" id="col-left">
 
-        <!-- KANBAN DE ESTUDIO -->
+        <!-- 1. KANBAN DE ESTUDIO -->
         <div class="card" id="card-kanban" data-category="study">
             <div class="card-header">
                 <span class="card-title-text">📅 Kanban de Estudio</span>
                 <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="toggleCardSpan('card-kanban')" title="Expandir a ancho completo (#39)">↔</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-kanban', this.value)" title="Cambiar categoría"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-kanban')" title="Ocultar Tarjeta">👁️</button>
@@ -197,11 +225,13 @@
             </div>
         </div>
 
-        <!-- CALCULADORA DE CALIFICACIONES -->
+        <!-- 2. CALCULADORA DE CALIFICACIONES + MEDIA GLOBAL + NOTA MÍNIMA (#19, #26) -->
         <div class="card" id="card-grades" data-category="study">
             <div class="card-header">
-                <span class="card-title-text">🧮 Calculadora de Calificaciones Ponderadas</span>
+                <span class="card-title-text">🧮 Calificaciones & Simulador de Nota</span>
                 <div class="card-actions">
+                    <span id="global-course-avg-badge" class="badge-version" title="Media global ponderada del curso (#26)">Media: --</span>
+                    <button type="button" class="btn-icon" onclick="toggleCardSpan('card-grades')" title="Expandir a ancho completo">↔</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-grades', this.value)"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-grades')" title="Ocultar Tarjeta">👁️</button>
@@ -216,18 +246,21 @@
                 <div id="form-add-grade-subject" class="hidden-form">
                     <input type="text" id="new-grade-subj-name" placeholder="Nombre (ej: Programación / BBDD / Sistemas)">
                     <div class="form-inline-row">
-                        <input type="number" id="new-grade-subj-target" min="1" max="10" step="0.1" value="5.0" placeholder="Nota Deseada" style="flex:1;">
+                        <input type="number" id="new-grade-subj-target" min="1" max="10" step="0.1" value="5.0" placeholder="Nota Obj." title="Nota objetivo" style="flex:1;">
+                        <input type="number" id="new-grade-subj-credits" min="1" max="60" step="1" value="6" placeholder="Horas/ECTS" title="Peso o créditos en el curso" style="flex:1;">
                         <button type="button" onclick="addGradeSubject()" class="btn-green" style="flex:1;">Crear Módulo</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- ENTREGAS & EXÁMENES -->
+        <!-- 3. ENTREGAS, EXÁMENES, RÚBRICAS Y PLANIFICADOR (#22, #25, #38) -->
         <div class="card" id="card-deliveries" data-category="study">
             <div class="card-header">
-                <span class="card-title-text">⏳ Entregas & Exámenes con Cuenta Regresiva</span>
+                <span class="card-title-text">⏳ Entregas, Exámenes & Planificador</span>
                 <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="toggleForm('study-planner-box')" title="Calculadora de plan de estudio hasta examen (#22)">📆</button>
+                    <button type="button" class="btn-icon" onclick="toggleCardSpan('card-deliveries')" title="Expandir a ancho completo">↔</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-deliveries', this.value)"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-deliveries')" title="Ocultar Tarjeta">👁️</button>
@@ -237,6 +270,18 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- Planificador rápido hasta examen (#22) -->
+                <div id="study-planner-box" class="hidden-form" style="margin-top:0;">
+                    <div class="form-title" style="margin-bottom:4px;">📆 Reparto de Estudio hasta Examen</div>
+                    <div class="form-inline-row">
+                        <input type="date" id="planner-exam-date" style="flex:1;">
+                        <input type="number" id="planner-topics-count" min="1" max="100" value="8" placeholder="Temas" style="width:75px;">
+                        <input type="number" id="planner-mins-topic" min="15" max="300" value="45" placeholder="Min/tema" style="width:85px;">
+                        <button type="button" onclick="calculateStudyPlan()" class="btn-cyan">Calcular</button>
+                    </div>
+                    <div id="study-planner-result" class="planner-result-box"></div>
+                </div>
+
                 <div class="task-filters">
                     <button type="button" id="deliv-filter-all" class="active" onclick="setDeliveriesFilter('all')">Todos</button>
                     <button type="button" id="deliv-filter-exam" onclick="setDeliveriesFilter('exam')">Exámenes</button>
@@ -246,7 +291,7 @@
                     <button type="button" id="deliv-filter-overdue" onclick="setDeliveriesFilter('overdue')">Vencidas</button>
                 </div>
                 <div id="deliveries-list" class="deliveries-list"></div>
-                <button type="button" class="btn-toggle" onclick="toggleForm('form-add-delivery')">✚ Añadir Fecha Límite</button>
+                <button type="button" class="btn-toggle" onclick="toggleForm('form-add-delivery')">✚ Añadir Fecha Límite / Entrega</button>
                 <div id="form-add-delivery" class="hidden-form">
                     <input type="text" id="deliv-title" placeholder="Título (ej: Entrega Proyecto Trimestral)">
                     <div class="form-inline-row">
@@ -257,6 +302,12 @@
                             <option value="Proyecto">🚀 Proyecto</option>
                             <option value="Tarea">📄 Tarea</option>
                         </select>
+                        <select id="deliv-alert-mins" style="width:110px;" title="Aviso previo (#38)">
+                            <option value="0">Sin alerta</option>
+                            <option value="30">Aviso 30m</option>
+                            <option value="120" selected>Aviso 2h</option>
+                            <option value="1440">Aviso 24h</option>
+                        </select>
                     </div>
                     <div class="form-inline-row">
                         <input type="datetime-local" id="deliv-datetime" style="flex:2;">
@@ -266,11 +317,115 @@
             </div>
         </div>
 
-        <!-- TAREAS GENERALES -->
+        <!-- 4. FLASHCARDS, BUG LOG Y DUDAS DE CLASE (#20, #23, #24) -->
+        <div class="card" id="card-study-hub" data-category="study">
+            <div class="card-header">
+                <span class="card-title-text">🧠 Repaso Activo, Bug Log & Dudas</span>
+                <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="exportStudyHubMarkdown()" title="Exportar a Markdown (#33)">📤</button>
+                    <button type="button" class="btn-icon" onclick="toggleCardSpan('card-study-hub')" title="Expandir a ancho completo">↔</button>
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-study-hub', this.value)"></select>
+                        <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-study-hub')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button type="button" class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-study-hub')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-study-hub')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="tabs" style="margin-bottom:4px;">
+                    <button type="button" class="tab-btn active" id="hub-tab-flashcards" onclick="setStudyHubTab('flashcards')">🃏 Flashcards</button>
+                    <button type="button" class="tab-btn" id="hub-tab-bugs" onclick="setStudyHubTab('bugs')">🐞 Bug Log</button>
+                    <button type="button" class="tab-btn" id="hub-tab-doubts" onclick="setStudyHubTab('doubts')">❓ Dudas Clase</button>
+                </div>
+
+                <!-- Subvista Flashcards (#20) -->
+                <div id="hub-view-flashcards" class="hub-subview">
+                    <div class="form-inline-row" style="margin-bottom:4px;">
+                        <select id="fc-filter-subject" onchange="renderFlashcards()" style="flex:1;">
+                            <option value="all">Todas las asignaturas</option>
+                        </select>
+                        <button type="button" class="tool-btn" onclick="nextFlashcard()">Siguiente ⏭️</button>
+                    </div>
+                    <div id="flashcard-stage" class="flashcard-stage" onclick="flipCurrentFlashcard()">
+                        <div class="fc-hint">Sin tarjetas aún. Añade preguntas de examen o comandos clave.</div>
+                    </div>
+                    <div class="form-inline-row" style="margin-top:4px;">
+                        <button type="button" class="btn-danger" style="flex:1;" onclick="markFlashcardStatus(false)">🔄 Repasar luego</button>
+                        <button type="button" class="btn-green" style="flex:1;" onclick="markFlashcardStatus(true)">✅ Dominada</button>
+                        <button type="button" class="btn-ghost" onclick="deleteCurrentFlashcard()" title="Eliminar tarjeta actual">🗑️</button>
+                    </div>
+                    <button type="button" class="btn-toggle" onclick="toggleForm('form-add-flashcard')">✚ Nueva Flashcard</button>
+                    <div id="form-add-flashcard" class="hidden-form">
+                        <input type="text" id="fc-new-subj" placeholder="Asignatura (ej: Redes / Java / SQL)">
+                        <input type="text" id="fc-new-q" placeholder="Pregunta / Concepto / Comando..." style="margin-top:3px;">
+                        <textarea id="fc-new-a" placeholder="Respuesta / Explicación..." style="min-height:48px;margin-top:3px;"></textarea>
+                        <button type="button" onclick="addFlashcard()" class="btn-cyan btn-full" style="margin-top:4px;">Guardar Flashcard</button>
+                    </div>
+                </div>
+
+                <!-- Subvista Bug Log (#23) -->
+                <div id="hub-view-bugs" class="hub-subview" style="display:none;">
+                    <input type="text" id="bug-search-input" placeholder="🔍 Buscar error, excepción o solución..." oninput="renderBugLogs()">
+                    <div id="bug-log-list" class="hub-list-container"></div>
+                    <button type="button" class="btn-toggle" onclick="toggleForm('form-add-bug')">✚ Registrar Error / Solución</button>
+                    <div id="form-add-bug" class="hidden-form">
+                        <div class="form-inline-row">
+                            <input type="text" id="bug-new-subj" placeholder="Módulo/Lenguaje" style="width:120px;">
+                            <input type="text" id="bug-new-error" placeholder="Error (ej: CORS / NullPointer / Port 8080)" style="flex:1;">
+                        </div>
+                        <input type="text" id="bug-new-cause" placeholder="Causa raíz..." style="margin-top:3px;">
+                        <input type="text" id="bug-new-fix" placeholder="Solución aplicada..." style="margin-top:3px;">
+                        <button type="button" onclick="addBugLog()" class="btn-violet btn-full" style="margin-top:4px;">Guardar en Post-Mortem</button>
+                    </div>
+                </div>
+
+                <!-- Subvista Dudas para Clase (#24) -->
+                <div id="hub-view-doubts" class="hub-subview" style="display:none;">
+                    <div id="doubts-list" class="hub-list-container"></div>
+                    <div class="form-inline-row" style="margin-top:4px;">
+                        <input type="text" id="doubt-new-subj" placeholder="Asig." style="width:85px;">
+                        <input type="text" id="doubt-new-text" placeholder="Escribe tu duda para preguntar en clase..." style="flex:1;" onkeydown="if(event.key==='Enter') addClassDoubt()">
+                        <button type="button" onclick="addClassDoubt()" class="btn-green">✚</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. GESTOR DE PROYECTOS EN EQUIPO (#30) -->
+        <div class="card" id="card-projects" data-category="dev">
+            <div class="card-header">
+                <span class="card-title-text">🚀 Proyectos & Prácticas en Equipo</span>
+                <div class="card-actions">
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-projects', this.value)"></select>
+                        <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-projects')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button type="button" class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-projects')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-projects')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="team-projects-list" class="hub-list-container"></div>
+                <button type="button" class="btn-toggle" onclick="toggleForm('form-add-project')">✚ Nuevo Proyecto / Práctica</button>
+                <div id="form-add-project" class="hidden-form">
+                    <div class="form-inline-row">
+                        <input type="text" id="proj-new-name" placeholder="Nombre del proyecto..." style="flex:1;">
+                        <input type="url" id="proj-new-repo" placeholder="URL Repo Git (opcional)" style="flex:1;">
+                    </div>
+                    <input type="text" id="proj-new-working" placeholder="✅ Qué funciona ya..." style="margin-top:3px;">
+                    <input type="text" id="proj-new-pending" placeholder="⚠️ Qué falta / bloqueos..." style="margin-top:3px;">
+                    <button type="button" onclick="addTeamProject()" class="btn-green btn-full" style="margin-top:4px;">Guardar Proyecto</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. TAREAS GENERALES -->
         <div class="card" id="card-tasks" data-category="focus">
             <div class="card-header">
                 <span class="card-title-text">📋 Tareas Generales</span>
                 <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="exportTasksMarkdown()" title="Exportar tareas en Markdown (#33)">📤</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-tasks', this.value)"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-tasks')" title="Ocultar Tarjeta">👁️</button>
@@ -306,11 +461,15 @@
             </div>
         </div>
 
-        <!-- SCRATCHPAD & APUNTES -->
+        <!-- 7. SCRATCHPAD & APUNTES CON MARKDOWN PREVIEW, BÚSQUEDA Y PLANTILLAS (#27, #28, #29, #34) -->
         <div class="card" id="card-notes" data-category="dev">
             <div class="card-header">
                 <span class="card-title-text">📝 Scratchpad & Apuntes</span>
                 <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="toggleScratchpadFind()" title="Buscar y reemplazar en notas (Ctrl+F) (#28)">🔎</button>
+                    <button type="button" class="btn-icon" onclick="toggleScratchpadPreview()" id="btn-notes-preview" title="Alternar vista previa Markdown (#27)">👁️ MD</button>
+                    <button type="button" class="btn-icon" onclick="openNoteHistoryModal()" title="Historial de versiones de esta pestaña (#29)">🕒</button>
+                    <button type="button" class="btn-icon" onclick="toggleCardSpan('card-notes')" title="Expandir a ancho completo">↔</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-notes', this.value)"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-notes')" title="Ocultar Tarjeta">👁️</button>
@@ -320,6 +479,17 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- Barra buscar y reemplazar interna (#28) -->
+                <div id="scratchpad-find-bar" class="hidden-form" style="margin-top:0;margin-bottom:4px;">
+                    <div class="form-inline-row">
+                        <input type="text" id="sp-find-text" placeholder="Buscar..." style="flex:1;">
+                        <input type="text" id="sp-replace-text" placeholder="Reemplazar por..." style="flex:1;">
+                        <button type="button" class="tool-btn" onclick="replaceInScratchpad(false)">1x</button>
+                        <button type="button" class="tool-btn" onclick="replaceInScratchpad(true)">Todo</button>
+                        <button type="button" class="btn-icon" onclick="toggleScratchpadFind()">✖</button>
+                    </div>
+                </div>
+
                 <div class="scratchpad-header">
                     <div class="tabs">
                         <button type="button" class="tab-btn active" id="tab-general" onclick="setNotesTab('general')">General</button>
@@ -327,18 +497,26 @@
                         <button type="button" class="tab-btn" id="tab-clases" onclick="setNotesTab('clases')">Clases</button>
                     </div>
                     <div class="quick-tools">
-                        <button type="button" class="tool-btn" onclick="insertNoteTimestamp()" title="Insertar fecha y hora actual">🕒 Hora</button>
-                        <button type="button" class="tool-btn" onclick="insertNoteCodeBlock()" title="Insertar bloque de código Markdown">``` Code</button>
-                        <button type="button" class="tool-btn" onclick="toolCopy()" title="Copiar al portapapeles">📋 Copiar</button>
-                        <button type="button" class="tool-btn" onclick="toolDownload()" title="Descargar como texto">💾 Descargar</button>
+                        <select id="note-template-select" class="tool-btn" onchange="insertNoteTemplate(this.value); this.value='';" title="Insertar plantilla rápida (#34)">
+                            <option value="">📄 Plantilla...</option>
+                            <option value="clase">Apuntes de Clase</option>
+                            <option value="comando">Ficha de Comando</option>
+                            <option value="practica">Análisis Práctica</option>
+                            <option value="readme">Estructura README</option>
+                        </select>
+                        <button type="button" class="tool-btn" onclick="insertNoteTimestamp()" title="Insertar fecha y hora actual">🕒</button>
+                        <button type="button" class="tool-btn" onclick="insertNoteCodeBlock()" title="Insertar bloque de código Markdown">```</button>
+                        <button type="button" class="tool-btn" onclick="toolCopy()" title="Copiar al portapapeles">📋</button>
+                        <button type="button" class="tool-btn" onclick="toolDownload()" title="Descargar como Markdown">💾</button>
                     </div>
                 </div>
-                <textarea id="scratchpad" class="notes-area" placeholder="Escribe apuntes, dudas o snippets rápidos aquí..."></textarea>
+                <textarea id="scratchpad" class="notes-area" placeholder="Escribe apuntes, dudas o snippets rápidos aquí (soporta vista previa Markdown)..."></textarea>
+                <div id="scratchpad-preview" class="markdown-preview-box" style="display:none;"></div>
                 <div id="scratchpad-metrics" class="notes-metrics">0 líneas &bull; 0 caracteres</div>
             </div>
         </div>
 
-        <!-- STICKY NOTE / BUFFER -->
+        <!-- 8. STICKY NOTE / BUFFER -->
         <div class="card" id="card-sticky" data-category="dev" style="min-height:90px;">
             <div class="card-header">
                 <span class="card-title-text">📌 Sticky Note / Buffer Temporal</span>
@@ -362,7 +540,7 @@
 
     <div class="col-right" id="col-right">
 
-        <!-- MÉTRICAS & PROGRESO -->
+        <!-- 9. MÉTRICAS & PROGRESO -->
         <div class="card" id="card-study-stats" data-category="focus">
             <div class="card-header">
                 <span class="card-title-text">📈 Métricas & Progreso del Estudiante</span>
@@ -397,10 +575,10 @@
             </div>
         </div>
 
-        <!-- POMODORO PRO -->
+        <!-- 10. POMODORO PRO + TEMPORIZADOR DE EXAMEN (#21) -->
         <div class="card" id="card-pomodoro" data-category="focus">
             <div class="card-header">
-                <span class="card-title-text">⏱️ Pomodoro Pro</span>
+                <span class="card-title-text">⏱️ Pomodoro Pro & Simulador Examen</span>
                 <div class="card-actions">
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-pomodoro', this.value)"></select>
@@ -416,27 +594,30 @@
                 <div class="pomodoro-controls">
                     <div class="pomo-preset-row">
                         <select id="pomo-focus-time">
-                            <option value="15">🎯 15 Min Foco</option>
-                            <option value="25" selected>🎯 25 Min Foco</option>
-                            <option value="45">🎯 45 Min Foco</option>
-                            <option value="60">🎯 60 Min Foco</option>
+                            <option value="15">🎯 15m Foco</option>
+                            <option value="25" selected>🎯 25m Foco</option>
+                            <option value="45">🎯 45m Foco</option>
+                            <option value="60">🎯 60m Foco</option>
+                            <option value="90">📝 90m Examen</option>
+                            <option value="120">📝 120m Examen</option>
                         </select>
                         <select id="pomo-break-time">
-                            <option value="5" selected>☕ 5 Min Break</option>
-                            <option value="10">☕ 10 Min Break</option>
-                            <option value="15">☕ 15 Min Break</option>
+                            <option value="5" selected>☕ 5m Break</option>
+                            <option value="10">☕ 10m Break</option>
+                            <option value="15">☕ 15m Break</option>
                         </select>
                     </div>
                     <div class="form-inline-row">
                         <button type="button" onclick="startCustomPomodoro('focus')" class="btn-green" style="flex:1;">Iniciar Foco</button>
+                        <button type="button" onclick="startCustomPomodoro('exam')" class="btn-cyan" style="flex:1;" title="Modo examen con avisos a 15m y 5m (#21)">📝 Examen</button>
                         <button type="button" onclick="startCustomPomodoro('break')" class="btn-violet" style="flex:1;">Break</button>
-                        <button type="button" onclick="stopPomodoro()" class="btn-ghost" title="Detener">◼ Stop</button>
+                        <button type="button" onclick="stopPomodoro()" class="btn-ghost" title="Detener">◼</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- AUDIO / WHITE NOISE & BINAURAL -->
+        <!-- 11. AUDIO / WHITE NOISE & BINAURAL -->
         <div class="card" id="card-audio" data-category="focus">
             <div class="card-header">
                 <span class="card-title-text">🎧 Ruido Blanco / Lofi & Ondas Binaurales</span>
@@ -483,11 +664,158 @@
             </div>
         </div>
 
-        <!-- SNIPPET & COMMAND LAB -->
+        <!-- 12. DEV TOOLBOX MULTIFUNCIÓN (#1 al #13, #16, #17) -->
+        <div class="card" id="card-dev-toolbox" data-category="dev">
+            <div class="card-header">
+                <span class="card-title-text">🧰 Dev & SysAdmin Toolbox</span>
+                <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="toggleCardSpan('card-dev-toolbox')" title="Expandir a ancho completo">↔</button>
+                    <div class="edit-controls">
+                        <select class="card-category-select" onchange="updateCardCategory('card-dev-toolbox', this.value)"></select>
+                        <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-dev-toolbox')" title="Ocultar Tarjeta">👁️</button>
+                    </div>
+                    <button type="button" class="btn-icon btn-collapse" onclick="toggleCardCollapse('card-dev-toolbox')">_</button>
+                    <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'card-dev-toolbox')">⋮⋮</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="toolbox-nav-tabs">
+                    <button type="button" class="tab-btn active" id="tb-tab-format" onclick="setToolboxTab('format')">{ } JSON/Data</button>
+                    <button type="button" class="tab-btn" id="tb-tab-encode" onclick="setToolboxTab('encode')">🔐 Encode/JWT/Hash</button>
+                    <button type="button" class="tab-btn" id="tb-tab-regex" onclick="setToolboxTab('regex')">.* Regex & Diff</button>
+                    <button type="button" class="tab-btn" id="tb-tab-net" onclick="setToolboxTab('net')">🌐 IPv4 & Bases</button>
+                    <button type="button" class="tab-btn" id="tb-tab-sys" onclick="setToolboxTab('sys')">🐧 Chmod/Cron</button>
+                    <button type="button" class="tab-btn" id="tb-tab-gen" onclick="setToolboxTab('gen')">🎲 Mock/Boiler</button>
+                    <button type="button" class="tab-btn" id="tb-tab-ref" onclick="setToolboxTab('ref')">📚 HTTP/Puertos</button>
+                </div>
+
+                <!-- TAB 1: JSON, CSV, XML, SQL Formatter & Converter (#1, #2) -->
+                <div id="tb-view-format" class="tb-subview">
+                    <textarea id="tb-json-input" class="notes-area" style="min-height:70px;" placeholder="Pega JSON, CSV o consulta SQL aquí..."></textarea>
+                    <div class="form-inline-row" style="flex-wrap:wrap;">
+                        <button type="button" class="btn-cyan" onclick="tbFormatJson(false)">Indent JSON</button>
+                        <button type="button" class="btn-ghost" onclick="tbFormatJson(true)">Minificar</button>
+                        <button type="button" class="btn-violet" onclick="tbJsonToCsv()">JSON → CSV</button>
+                        <button type="button" class="btn-violet" onclick="tbCsvToJson()">CSV → JSON</button>
+                        <button type="button" class="btn-green" onclick="tbFormatSql()">Formatear SQL</button>
+                        <button type="button" class="tool-btn" onclick="copyElementValue('tb-json-input')">📋 Copiar</button>
+                    </div>
+                    <div id="tb-json-status" class="tb-status-msg">Listo para validar o convertir datos.</div>
+                </div>
+
+                <!-- TAB 2: Base64, URL, Hex, JWT Inspector, Hash SHA-256 (#4, #5, #6) -->
+                <div id="tb-view-encode" class="tb-subview" style="display:none;">
+                    <textarea id="tb-encode-input" class="notes-area" style="min-height:55px;" placeholder="Texto, URL, Base64 o Token JWT (eyJ...)..."></textarea>
+                    <div class="form-inline-row" style="flex-wrap:wrap;">
+                        <button type="button" class="tool-btn" onclick="tbEncodeAction('b64e')">B64 Enc</button>
+                        <button type="button" class="tool-btn" onclick="tbEncodeAction('b64d')">B64 Dec</button>
+                        <button type="button" class="tool-btn" onclick="tbEncodeAction('urle')">URL Enc</button>
+                        <button type="button" class="tool-btn" onclick="tbEncodeAction('urld')">URL Dec</button>
+                        <button type="button" class="tool-btn" onclick="tbEncodeAction('hex')">Texto→Hex</button>
+                        <button type="button" class="btn-cyan" onclick="tbDecodeJwt()">🔍 Decodificar JWT</button>
+                        <button type="button" class="btn-violet" onclick="tbComputeHashes()"># SHA-256</button>
+                    </div>
+                    <pre id="tb-encode-output" class="tb-output-pre">Resultado...</pre>
+                </div>
+
+                <!-- TAB 3: Regex Tester & Diff Checker (#3, #8) -->
+                <div id="tb-view-regex" class="tb-subview" style="display:none;">
+                    <div class="form-inline-row">
+                        <input type="text" id="tb-regex-pattern" placeholder="Patrón Regex (ej: ^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$)" style="flex:2;" oninput="runRegexTester()">
+                        <input type="text" id="tb-regex-flags" value="gm" placeholder="Flags" style="width:55px;" oninput="runRegexTester()">
+                    </div>
+                    <textarea id="tb-regex-text" class="notes-area" style="min-height:48px;margin-top:4px;" placeholder="Texto de prueba para Regex (o Bloque A para Diff)..." oninput="runRegexTester()"></textarea>
+                    <div id="tb-regex-result" class="tb-output-pre">0 coincidencias</div>
+                    <div style="border-top:1px dashed var(--card-border);margin-top:5px;padding-top:5px;">
+                        <div class="form-inline-row">
+                            <textarea id="tb-diff-b" class="notes-area" style="min-height:42px;flex:1;" placeholder="Bloque B para comparar (Diff con texto superior)..."></textarea>
+                            <button type="button" class="btn-cyan" onclick="runSimpleDiff()">Comparar Diff</button>
+                        </div>
+                        <pre id="tb-diff-output" class="tb-output-pre" style="max-height:75px;">Diff listo.</pre>
+                    </div>
+                </div>
+
+                <!-- TAB 4: Subredes IPv4/CIDR & Conversor de Bases (#9, #11) -->
+                <div id="tb-view-net" class="tb-subview" style="display:none;">
+                    <div class="form-inline-row">
+                        <input type="text" id="tb-ip-input" value="192.168.1.10/24" placeholder="IP/CIDR (ej: 192.168.10.5/26)" style="flex:1;" oninput="calculateSubnet()">
+                        <button type="button" class="btn-cyan" onclick="calculateSubnet()">Calcular Subred</button>
+                    </div>
+                    <div id="tb-subnet-output" class="tb-output-pre">Red: 192.168.1.0 | Broadcast: 192.168.1.255 | Hosts: 254</div>
+                    <div class="bases-grid" style="margin-top:5px;">
+                        <div><label>DEC</label><input type="text" id="base-dec" value="255" oninput="convertNumberBase('dec', this.value)"></div>
+                        <div><label>BIN</label><input type="text" id="base-bin" value="11111111" oninput="convertNumberBase('bin', this.value)"></div>
+                        <div><label>HEX</label><input type="text" id="base-hex" value="FF" oninput="convertNumberBase('hex', this.value)"></div>
+                        <div><label>OCT</label><input type="text" id="base-oct" value="377" oninput="convertNumberBase('oct', this.value)"></div>
+                    </div>
+                </div>
+
+                <!-- TAB 5: Calculadora Chmod & Cron Builder (#12, #13) -->
+                <div id="tb-view-sys" class="tb-subview" style="display:none;">
+                    <div class="chmod-matrix">
+                        <div class="chmod-group">
+                            <strong>Owner</strong>
+                            <label><input type="checkbox" id="ch-ur" checked onchange="updateChmodCalc()"> R (4)</label>
+                            <label><input type="checkbox" id="ch-uw" checked onchange="updateChmodCalc()"> W (2)</label>
+                            <label><input type="checkbox" id="ch-ux" checked onchange="updateChmodCalc()"> X (1)</label>
+                        </div>
+                        <div class="chmod-group">
+                            <strong>Group</strong>
+                            <label><input type="checkbox" id="ch-gr" checked onchange="updateChmodCalc()"> R (4)</label>
+                            <label><input type="checkbox" id="ch-gw" onchange="updateChmodCalc()"> W (2)</label>
+                            <label><input type="checkbox" id="ch-gx" checked onchange="updateChmodCalc()"> X (1)</label>
+                        </div>
+                        <div class="chmod-group">
+                            <strong>Others</strong>
+                            <label><input type="checkbox" id="ch-or" checked onchange="updateChmodCalc()"> R (4)</label>
+                            <label><input type="checkbox" id="ch-ow" onchange="updateChmodCalc()"> W (2)</label>
+                            <label><input type="checkbox" id="ch-ox" checked onchange="updateChmodCalc()"> X (1)</label>
+                        </div>
+                        <div class="chmod-result-box">
+                            <div id="chmod-octal" class="stat-val">755</div>
+                            <div id="chmod-symbolic" style="font-family:var(--font-mono);font-size:0.68rem;">rwxr-xr-x</div>
+                            <button type="button" class="tool-btn" onclick="copyChmodCmd()">📋 chmod</button>
+                        </div>
+                    </div>
+                    <div class="form-inline-row" style="margin-top:5px;">
+                        <input type="text" id="cron-expr-input" value="*/15 * * * *" placeholder="Expresión Cron (m h dom mon dow)" style="flex:1;" oninput="explainCronExpr()">
+                        <button type="button" class="tool-btn" onclick="copyElementValue('cron-expr-input')">📋</button>
+                    </div>
+                    <div id="cron-explanation" class="tb-status-msg">Cada 15 minutos, todas las horas, todos los días.</div>
+                </div>
+
+                <!-- TAB 6: Mock Data, Passwords & Boilerplates (#7, #10, #16) -->
+                <div id="tb-view-gen" class="tb-subview" style="display:none;">
+                    <div class="form-inline-row" style="flex-wrap:wrap;">
+                        <button type="button" class="btn-green" onclick="generateMockUsers(5)">👥 5 Usuarios JSON</button>
+                        <button type="button" class="btn-cyan" onclick="generateUuidsAndDni()">🆔 UUID + DNI Test</button>
+                        <button type="button" class="btn-violet" onclick="generateSecurePassword()">🔑 Pass Segura (16)</button>
+                        <select id="boilerplate-select" onchange="loadBoilerplate(this.value)" style="flex:1;">
+                            <option value="">📦 Plantilla Archivo...</option>
+                            <option value="gitignore">.gitignore (Java/Node/Py)</option>
+                            <option value="dockerfile">Dockerfile Multi-Stage</option>
+                            <option value="compose">docker-compose.yml</option>
+                            <option value="html5">HTML5 Base Limpio</option>
+                        </select>
+                    </div>
+                    <textarea id="tb-gen-output" class="notes-area" style="min-height:68px;margin-top:4px;" placeholder="Salida generada lista para copiar..."></textarea>
+                    <button type="button" class="tool-btn btn-full" onclick="copyElementValue('tb-gen-output')">📋 Copiar Salida Generada</button>
+                </div>
+
+                <!-- TAB 7: Referencia HTTP & Puertos Estándar (#17) -->
+                <div id="tb-view-ref" class="tb-subview" style="display:none;">
+                    <input type="text" id="tb-ref-search" placeholder="🔍 Buscar código HTTP (404, 502) o puerto (22, 3306, 443)..." oninput="renderQuickRefList()">
+                    <div id="tb-ref-list" class="hub-list-container" style="max-height:115px;margin-top:4px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 13. SNIPPET & COMMAND LAB CON VARIABLES DINÁMICAS (#14) -->
         <div class="card" id="card-snippets" data-category="dev">
             <div class="card-header">
                 <span class="card-title-text">💻 Snippet & Command Lab</span>
                 <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="toggleForm('snippet-vars-bar')" title="Variables dinámicas {{IP}}, {{USER}}, {{PORT}} (#14)">🎛️</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-snippets', this.value)"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-snippets')" title="Ocultar Tarjeta">👁️</button>
@@ -497,6 +825,15 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- Constructor dinámico de variables CLI (#14) -->
+                <div id="snippet-vars-bar" class="hidden-form" style="margin-top:0;margin-bottom:4px;">
+                    <div class="form-inline-row">
+                        <input type="text" id="cli-var-user" placeholder="{{USER}} (root)" oninput="renderSnippets()">
+                        <input type="text" id="cli-var-ip" placeholder="{{IP}} (192.168.1.10)" oninput="renderSnippets()">
+                        <input type="text" id="cli-var-port" placeholder="{{PORT}} (22)" style="width:85px;" oninput="renderSnippets()">
+                    </div>
+                </div>
+
                 <div class="form-inline-row" style="margin-bottom:4px;">
                     <input type="text" id="snippet-search" placeholder="🔍 Buscar comando o snippet..." oninput="renderSnippets()">
                     <select id="snippet-filter-cat" style="width:130px;" onchange="renderSnippets()">
@@ -513,17 +850,17 @@
                 <div class="snippet-grid" id="snippet-list-container"></div>
                 <button type="button" class="btn-toggle" onclick="toggleForm('form-add-snippet')">✚ Añadir Snippet Personalizado</button>
                 <div id="form-add-snippet" class="hidden-form">
-                    <input type="text" id="snip-new-title" placeholder="Título (ej: Backup BBDD MySQL)">
+                    <input type="text" id="snip-new-title" placeholder="Título (usa {{IP}}, {{USER}} o {{PORT}} si quieres)">
                     <div class="form-inline-row">
                         <input type="text" id="snip-new-cat" placeholder="Categoría (ej: Linux)" style="width:110px;">
-                        <input type="text" id="snip-new-cmd" placeholder="Comando..." style="flex:1;">
+                        <input type="text" id="snip-new-cmd" placeholder="Comando (ej: ssh {{USER}}@{{IP}} -p {{PORT}})" style="flex:1;">
                     </div>
                     <button type="button" onclick="addCustomSnippet()" class="btn-violet btn-full" style="margin-top:4px;">Guardar Snippet</button>
                 </div>
             </div>
         </div>
 
-        <!-- HORARIO & CLASES -->
+        <!-- 14. HORARIO & CLASES -->
         <div class="card" id="card-schedule" data-category="study">
             <div class="card-header">
                 <span class="card-title-text">📅 Horario & Clases</span>
@@ -545,7 +882,7 @@
             </div>
         </div>
 
-        <!-- ENLACES & DOCUMENTACIÓN -->
+        <!-- 15. ENLACES & DOCUMENTACIÓN -->
         <div class="card" id="card-bookmarks" data-category="dev">
             <div class="card-header">
                 <span class="card-title-text">🔖 Enlaces & Documentación</span>
@@ -570,11 +907,12 @@
             </div>
         </div>
 
-        <!-- SERVIDORES & VMS -->
+        <!-- 16. SERVIDORES, VMS, PUERTOS LOCALES Y CHECKLIST SYSADMIN (#15, #18) -->
         <div class="card" id="card-servers" data-category="dev">
             <div class="card-header">
-                <span class="card-title-text">🖥️ Servidores & VMs</span>
+                <span class="card-title-text">🖥️ Servidores, VMs & Puertos Lab</span>
                 <div class="card-actions">
+                    <button type="button" class="btn-icon" onclick="toggleForm('sysadmin-deploy-checklist')" title="Checklist Pre-Entrega / Despliegue VM (#18)">✅</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('card-servers', this.value)"></select>
                         <button type="button" class="btn-icon" onclick="toggleCardVisibility('card-servers')" title="Ocultar Tarjeta">👁️</button>
@@ -584,16 +922,23 @@
                 </div>
             </div>
             <div class="card-body">
-                <input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Filtrar servidores..." oninput="renderServers()">
+                <!-- Checklist Pre-Despliegue SysAdmin (#18) -->
+                <div id="sysadmin-deploy-checklist" class="hidden-form" style="margin-top:0;">
+                    <div class="form-title" style="margin-bottom:4px;">🛡️ Checklist Pre-Entrega / VM</div>
+                    <div id="deploy-checklist-items" class="deploy-checklist-grid"></div>
+                </div>
+
+                <input type="text" id="srv-search-filter" class="search-filter-input" placeholder="🔍 Filtrar servidores o puertos..." oninput="renderServers()">
                 <ul id="servers-list" class="servers-list"></ul>
-                <button type="button" class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor</button>
+                <button type="button" class="btn-toggle" onclick="toggleForm('form-servers')">✚ Añadir Servidor / Servicio Local</button>
                 <div id="form-servers" class="hidden-form">
-                    <input type="text" id="srv-name" placeholder="Nombre (ej: Debian 12 Lab DAM)">
+                    <input type="text" id="srv-name" placeholder="Nombre (ej: Debian 12 Lab / MySQL Local)">
                     <div class="form-inline-row">
-                        <input type="text" id="srv-ip" placeholder="IP / Host (192.168.1.X)" style="flex:1;">
-                        <input type="text" id="srv-creds" placeholder="Credenciales (ej: root/22)" style="width:120px;">
+                        <input type="text" id="srv-ip" placeholder="IP / localhost (192.168.1.X)" style="flex:1;">
+                        <input type="text" id="srv-port" placeholder="Puerto (22 / 3306)" style="width:95px;">
+                        <input type="text" id="srv-creds" placeholder="Usuario (root)" style="width:100px;">
                     </div>
-                    <button type="button" onclick="addServer()" class="btn-violet btn-full" style="margin-top:4px;">Guardar Servidor</button>
+                    <button type="button" onclick="addServer()" class="btn-violet btn-full" style="margin-top:4px;">Guardar Servidor / Puerto</button>
                 </div>
             </div>
         </div>
@@ -629,7 +974,7 @@
             <h2 id="global-search-title">🔍 Buscador Global</h2>
             <button type="button" class="btn-icon" onclick="closeGlobalSearch()" aria-label="Cerrar buscador global">✖</button>
         </div>
-        <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar entregas, tareas, comandos, notas, enlaces..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)">
+        <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar entregas, tareas, comandos, bugs, flashcards, notas..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)">
         <div class="modal-body">
             <ul id="global-search-results" class="global-search-results" role="listbox"></ul>
         </div>
@@ -685,15 +1030,101 @@
     </div>
 </div>
 
+<!-- MODAL APARIENCIA Y TIPOGRAFÍA (#40) -->
+<div class="modal-overlay" id="appearance-modal" role="dialog" aria-modal="true" aria-labelledby="appearance-modal-title">
+    <div class="modal-content" style="max-width:440px;">
+        <div class="modal-header">
+            <h2 id="appearance-modal-title">🎨 Tipografía & Escala Visual</h2>
+            <button type="button" class="btn-icon" onclick="closeAppearanceModal()">✖</button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:8px;">
+            <label class="modal-hint">Fuente Monoespaciada (Código & Terminal):</label>
+            <select id="font-family-select" onchange="updateAppearanceSettings()">
+                <option value="'JetBrains Mono', 'Fira Code', monospace">JetBrains Mono / Fira Code</option>
+                <option value="'Consolas', 'Courier New', monospace">Consolas Classic</option>
+                <option value="ui-monospace, SFMono-Regular, Menlo, monospace">System Monospace</option>
+            </select>
+            <label class="modal-hint">Escala Global de Interfaz:</label>
+            <select id="ui-scale-select" onchange="updateAppearanceSettings()">
+                <option value="0.92">Compacta (92%)</option>
+                <option value="1" selected>Estándar (100%)</option>
+                <option value="1.08">Amplia / Monitor Grande (108%)</option>
+            </select>
+        </div>
+        <div class="modal-footer-actions">
+            <button type="button" class="btn-green btn-full" onclick="closeAppearanceModal()">Aplicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ATAJOS DE TECLADO (#35) -->
+<div class="modal-overlay" id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+    <div class="modal-content" style="max-width:480px;">
+        <div class="modal-header">
+            <h2 id="shortcuts-modal-title">⌨️ Atajos de Teclado</h2>
+            <button type="button" class="btn-icon" onclick="closeShortcutsModal()">✖</button>
+        </div>
+        <div class="modal-body shortcuts-list-grid">
+            <div><kbd>Ctrl + K</kbd> Buscador global</div>
+            <div><kbd>Ctrl + N</kbd> Nueva tarea rápida</div>
+            <div><kbd>Ctrl + P</kbd> Iniciar / Parar Pomodoro</div>
+            <div><kbd>Ctrl + Z</kbd> Deshacer último borrado</div>
+            <div><kbd>Alt + Z</kbd> Alternar Modo Zen</div>
+            <div><kbd>Alt + 1..4</kbd> Cambiar vista superior</div>
+            <div><kbd>?</kbd> Mostrar esta ayuda</div>
+            <div><kbd>ESC</kbd> Cerrar modal activo</div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SNAPSHOTS / HISTORIAL DE APUNTES (#29, #36) -->
+<div class="modal-overlay" id="snapshots-modal" role="dialog" aria-modal="true" aria-labelledby="snapshots-modal-title">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+            <h2 id="snapshots-modal-title">🛟 Copias de Seguridad & Historial</h2>
+            <button type="button" class="btn-icon" onclick="closeSnapshotsModal()">✖</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-hint">Instantáneas locales automáticas y manuales para restaurar sin riesgo:</p>
+            <div id="snapshots-list-container" class="hub-list-container"></div>
+        </div>
+        <div class="modal-footer-actions">
+            <button type="button" class="btn-cyan" onclick="createManualSnapshot()">📸 Crear Snapshot Ahora</button>
+            <button type="button" class="btn-ghost" onclick="closeSnapshotsModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL RESUMEN DE JORNADA (#32) -->
+<div class="modal-overlay" id="daily-summary-modal" role="dialog" aria-modal="true" aria-labelledby="summary-modal-title">
+    <div class="modal-content" style="max-width:540px;">
+        <div class="modal-header">
+            <h2 id="summary-modal-title">📊 Resumen de Jornada (Markdown)</h2>
+            <button type="button" class="btn-icon" onclick="closeDailySummaryModal()">✖</button>
+        </div>
+        <div class="modal-body">
+            <textarea id="daily-summary-output" class="notes-area" style="min-height:200px;"></textarea>
+        </div>
+        <div class="modal-footer-actions">
+            <button type="button" class="btn-cyan" onclick="copyElementValue('daily-summary-output')">📋 Copiar Markdown</button>
+            <button type="button" class="btn-green" onclick="closeDailySummaryModal()">Listo</button>
+        </div>
+    </div>
+</div>
+
 <!-- CONTENEDOR DE NOTIFICACIONES TOAST -->
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
+<!-- FOOTER CON INDICADOR DE ALMACENAMIENTO (#42) -->
 <footer>
-    <div>DevWorkspace v5.9 Zen &bull; Student & Dev Cockpit</div>
+    <div>
+        DevWorkspace v6.0 Ultimate &bull; Student & Dev Cockpit
+        <span id="storage-quota-badge" class="badge-version" style="margin-left:6px;" title="Uso de localStorage (#42)">Storage: 0 KB</span>
+    </div>
     <div>
         <a href="#" onclick="resetWorkspacePrompt(); return false;" class="footer-link-danger" title="Reiniciar todos los datos a blanco">[Limpiar Workspace]</a>
         <a href="#" onclick="exportData(); return false;" class="footer-link-cyan">[Exportar JSON]</a>
-        <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" class="footer-link-violet">[Importar JSON]</a>
+        <a href="#" onclick="document.getElementById('import-json-input').click(); return false;" class="footer-link-violet">[Importar / Fusionar JSON]</a>
         <input type="file" id="import-json-input" style="display:none;" accept=".json" onchange="importData(event)">
     </div>
 </footer>

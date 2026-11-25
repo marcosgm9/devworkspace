@@ -1,6 +1,6 @@
 /* ==========================================================
-   DEVWORKSPACE ULTIMATE v5.9 - STYLESHEET
-   Cyberpunk / Terminal Glassmorphism Architecture (Zen & UI)
+   DEVWORKSPACE ULTIMATE v6.0 - STYLESHEET
+   Cyberpunk / Terminal Glassmorphism Architecture (Full Suite)
    ========================================================== */
 
 /* ----------------------------------------------------------
@@ -8,8 +8,8 @@
    ---------------------------------------------------------- */
 :root {
     --bg-color: #060813;
-    --card-bg: rgba(13, 19, 31, 0.82);
-    --card-header-bg: rgba(9, 14, 24, 0.7);
+    --card-bg: rgba(13, 19, 31, 0.84);
+    --card-header-bg: rgba(9, 14, 24, 0.75);
     --card-border: rgba(56, 189, 248, 0.22);
     --card-border-glow: rgba(56, 189, 248, 0.5);
     --text-main: #f1f5f9;
@@ -25,6 +25,7 @@
     --accent-red: #ef4444;
     --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
     --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --ui-scale: 1;
     --radius: 8px;
     --radius-sm: 4px;
     --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.55), 0 0 1px 1px rgba(255, 255, 255, 0.04);
@@ -115,6 +116,52 @@
     --shadow-glow: 0 0 14px rgba(74, 222, 128, 0.3);
 }
 
+/* Tema Alto Contraste Día (#41) */
+[data-theme="daylight"] {
+    --bg-color: #f1f5f9;
+    --card-bg: rgba(255, 255, 255, 0.96);
+    --card-header-bg: #e2e8f0;
+    --card-border: #94a3b8;
+    --card-border-glow: #0284c7;
+    --text-main: #0f172a;
+    --text-muted: #334155;
+    --text-dim: #475569;
+    --accent-cyan: #0284c7;
+    --accent-cyan-rgb: 2, 132, 199;
+    --accent-violet: #7c3aed;
+    --accent-violet-rgb: 124, 58, 237;
+    --accent-green: #15803d;
+    --accent-yellow: #b45309;
+    --accent-yellow-rgb: 180, 83, 9;
+    --accent-red: #b91c1c;
+    --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.08);
+    --shadow-glow: 0 0 0 1px #0284c7;
+}
+
+[data-theme="daylight"] button,
+[data-theme="daylight"] input,
+[data-theme="daylight"] select,
+[data-theme="daylight"] textarea,
+[data-theme="daylight"] .theme-select,
+[data-theme="daylight"] .skew-select,
+[data-theme="daylight"] .btn-quick-search,
+[data-theme="daylight"] #clock-container,
+[data-theme="daylight"] .view-pill,
+[data-theme="daylight"] .kanban-col,
+[data-theme="daylight"] .kanban-card,
+[data-theme="daylight"] .grade-subject-card,
+[data-theme="daylight"] .deadline-card-item,
+[data-theme="daylight"] li,
+[data-theme="daylight"] .stat-box,
+[data-theme="daylight"] .chart-container,
+[data-theme="daylight"] .snippet-box,
+[data-theme="daylight"] .schedule-widget,
+[data-theme="daylight"] .tb-output-pre,
+[data-theme="daylight"] .hub-item-card,
+[data-theme="daylight"] .flashcard-stage {
+    background: #f8fafc;
+}
+
 /* ----------------------------------------------------------
    RESETEO Y BASE
    ---------------------------------------------------------- */
@@ -122,6 +169,10 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+}
+
+html {
+    font-size: calc(16px * var(--ui-scale));
 }
 
 body {
@@ -180,7 +231,7 @@ body.density-compact footer {
     border-color: var(--accent-cyan);
 }
 
-/* Modo Zen: Oculta elementos no esenciales */
+/* Modo Zen */
 body.zen-mode-active #card-bookmarks,
 body.zen-mode-active #card-servers,
 body.zen-mode-active #card-snippets,
@@ -188,6 +239,9 @@ body.zen-mode-active #card-schedule,
 body.zen-mode-active #card-grades,
 body.zen-mode-active #card-deliveries,
 body.zen-mode-active #card-kanban,
+body.zen-mode-active #card-dev-toolbox,
+body.zen-mode-active #card-study-hub,
+body.zen-mode-active #card-projects,
 body.zen-mode-active .view-filter-bar,
 body.zen-mode-active #form-create-card-panel {
     display: none !important;
@@ -241,7 +295,7 @@ header::after {
 .header-title-zone {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
@@ -274,7 +328,7 @@ h1 {
     font-size: 0.72rem;
     font-family: var(--font-mono);
     border-left: 1px solid var(--card-border);
-    padding-left: 10px;
+    padding-left: 8px;
 }
 
 .user-status-dot {
@@ -307,13 +361,13 @@ h1 {
     background: rgba(239, 68, 68, 0.12);
 }
 
-.btn-cloud-toggle {
+.btn-cloud-toggle, .weather-badge {
     background: rgba(var(--accent-cyan-rgb), 0.08);
     border: 1px solid var(--card-border);
     color: var(--text-main);
     padding: 3px 8px;
     border-radius: var(--radius-sm);
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-family: var(--font-mono);
     cursor: pointer;
     display: flex;
@@ -322,7 +376,7 @@ h1 {
     transition: all 0.2s ease;
 }
 
-.btn-cloud-toggle:hover {
+.btn-cloud-toggle:hover, .weather-badge:hover {
     background: rgba(var(--accent-cyan-rgb), 0.18);
     border-color: var(--accent-cyan);
 }
@@ -330,7 +384,7 @@ h1 {
 .header-controls {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     flex-wrap: wrap;
 }
 
@@ -338,25 +392,27 @@ h1 {
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid var(--card-border);
     color: var(--text-muted);
-    padding: 4px 10px;
+    padding: 4px 9px;
     border-radius: var(--radius-sm);
     font-family: var(--font-mono);
     font-size: 0.72rem;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     transition: all 0.2s ease;
 }
 
 .btn-quick-search kbd,
-.search-tip-footer kbd {
+.search-tip-footer kbd,
+.shortcuts-list-grid kbd {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid var(--card-border);
     padding: 1px 4px;
     border-radius: 3px;
-    font-size: 0.6rem;
+    font-size: 0.62rem;
     color: var(--accent-cyan);
+    font-family: var(--font-mono);
 }
 
 .btn-quick-search:hover {
@@ -419,7 +475,7 @@ h1 {
     padding: 5px 10px;
     border-radius: var(--radius);
     margin-bottom: 8px;
-    gap: 6px;
+    gap: 5px;
     overflow-x: auto;
     box-shadow: var(--shadow-card);
 }
@@ -441,9 +497,9 @@ h1 {
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--card-border);
     color: var(--text-muted);
-    padding: 3px 9px;
+    padding: 3px 8px;
     border-radius: var(--radius-sm);
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     cursor: pointer;
     font-family: var(--font-mono);
     white-space: nowrap;
@@ -483,7 +539,6 @@ h1 {
     flex: 1;
 }
 
-/* Panel creador de tarjetas personalizadas */
 .form-create-card-panel {
     margin-top: 0;
     margin-bottom: 8px;
@@ -520,7 +575,7 @@ h1 {
 }
 
 /* ----------------------------------------------------------
-   DASHBOARD GRID & COLUMNAS
+   DASHBOARD GRID, COLUMNAS Y TARJETAS EXPANDIDAS (#39)
    ---------------------------------------------------------- */
 .dashboard-container {
     display: grid;
@@ -540,6 +595,11 @@ h1 {
     flex-direction: column;
     gap: 8px;
     min-height: 200px;
+}
+
+/* Tarjeta expandida a ancho completo (#39) */
+.card.card-full-span {
+    grid-column: 1 / -1;
 }
 
 /* ----------------------------------------------------------
@@ -583,6 +643,7 @@ h1 {
     font-size: 0.76rem;
     position: relative;
     user-select: none;
+    gap: 6px;
 }
 
 .card-header::before {
@@ -606,6 +667,7 @@ h1 {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-wrap: wrap;
 }
 
 .edit-controls {
@@ -798,6 +860,7 @@ button:active {
     display: flex;
     gap: 4px;
     margin-top: 4px;
+    align-items: center;
 }
 
 /* ----------------------------------------------------------
@@ -954,10 +1017,10 @@ button:active {
 }
 
 /* ----------------------------------------------------------
-   CALCULADORA DE CALIFICACIONES
+   CALCULADORA DE CALIFICACIONES + SIMULADOR NOTA MÍNIMA (#19)
    ---------------------------------------------------------- */
 .grades-container {
-    max-height: 250px;
+    max-height: 270px;
     overflow-y: auto;
     padding-right: 3px;
     display: flex;
@@ -997,6 +1060,28 @@ button:active {
 .score-pass { background: rgba(34, 197, 94, 0.18); color: var(--accent-green); border: 1px solid var(--accent-green); }
 .score-fail { background: rgba(239, 68, 68, 0.18); color: var(--accent-red); border: 1px solid var(--accent-red); }
 
+.grade-needed-banner {
+    font-size: 0.63rem;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(var(--accent-cyan-rgb), 0.08);
+    border: 1px dashed rgba(var(--accent-cyan-rgb), 0.3);
+    color: var(--text-muted);
+}
+
+.grade-needed-banner.impossible {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: var(--accent-red);
+}
+
+.grade-needed-banner.achieved {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: var(--accent-green);
+}
+
 .grade-progress-bar-bg {
     width: 100%;
     height: 5px;
@@ -1030,10 +1115,17 @@ button:active {
 }
 
 /* ----------------------------------------------------------
-   ENTREGAS & EXÁMENES
+   ENTREGAS, EXÁMENES Y RÚBRICAS (#22, #25)
    ---------------------------------------------------------- */
+.planner-result-box {
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    color: var(--accent-cyan);
+    margin-top: 4px;
+}
+
 .deliveries-list {
-    max-height: 220px;
+    max-height: 240px;
     overflow-y: auto;
     padding-right: 3px;
     display: flex;
@@ -1047,10 +1139,17 @@ button:active {
     padding: 5px 7px;
     border-radius: var(--radius-sm);
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 4px;
     font-size: 0.72rem;
     transition: border-color 0.2s ease;
+}
+
+.deadline-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
 }
 
 .deadline-card-item:hover {
@@ -1076,6 +1175,30 @@ button:active {
     gap: 6px;
 }
 
+.deliv-rubric-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-top: 3px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    font-size: 0.63rem;
+    font-family: var(--font-mono);
+}
+
+.rubric-chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--card-border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.rubric-chip.done {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+    text-decoration: line-through;
+}
+
 .countdown-badge {
     padding: 1px 5px;
     border-radius: 3px;
@@ -1093,6 +1216,143 @@ button:active {
 .cd-warn { background: rgba(var(--accent-yellow-rgb), 0.2); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
 .cd-ok { background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); }
 .cd-done { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); text-decoration: line-through; }
+
+/* ----------------------------------------------------------
+   STUDY HUB (FLASHCARDS, BUG LOG, DUDAS) & PROYECTOS (#20, #23, #24, #30)
+   ---------------------------------------------------------- */
+.flashcard-stage {
+    min-height: 95px;
+    background: rgba(0, 0, 0, 0.38);
+    border: 1px solid var(--accent-cyan);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.flashcard-stage:hover {
+    box-shadow: 0 0 14px rgba(var(--accent-cyan-rgb), 0.25);
+}
+
+.fc-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.fc-question-text {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.fc-answer-text {
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--accent-green);
+}
+
+.hub-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 185px;
+    overflow-y: auto;
+}
+
+.hub-item-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: 5px 7px;
+    font-size: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+/* ----------------------------------------------------------
+   DEV TOOLBOX MULTIFUNCIÓN (#1 al #17)
+   ---------------------------------------------------------- */
+.toolbox-nav-tabs {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+.tb-output-pre {
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: 5px 7px;
+    font-family: var(--font-mono);
+    font-size: 0.67rem;
+    color: var(--accent-cyan);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 110px;
+    overflow-y: auto;
+}
+
+.tb-status-msg {
+    font-size: 0.65rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.bases-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.bases-grid label {
+    display: block;
+    font-size: 0.58rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    margin-bottom: 1px;
+}
+
+.bases-grid input {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+}
+
+.chmod-matrix {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--card-border);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+}
+
+.chmod-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.chmod-result-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-left: 1px solid var(--card-border);
+    padding-left: 4px;
+}
 
 /* ----------------------------------------------------------
    TAREAS GENERALES
@@ -1172,7 +1432,7 @@ li.task-done span {
 }
 
 /* ----------------------------------------------------------
-   SCRATCHPAD & STICKY NOTE
+   SCRATCHPAD, MARKDOWN PREVIEW & STICKY NOTE (#27)
    ---------------------------------------------------------- */
 .scratchpad-header {
     display: flex;
@@ -1189,7 +1449,7 @@ li.task-done span {
 }
 
 .tab-btn {
-    font-size: 0.66rem;
+    font-size: 0.65rem;
     padding: 2px 7px;
     background: transparent;
     border: 1px solid var(--card-border);
@@ -1223,6 +1483,42 @@ li.task-done span {
     font-size: 0.73rem;
     line-height: 1.4;
     background: rgba(0, 0, 0, 0.35);
+}
+
+.markdown-preview-box {
+    width: 100%;
+    min-height: 95px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid var(--accent-cyan);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.markdown-preview-box h1,
+.markdown-preview-box h2,
+.markdown-preview-box h3 {
+    color: var(--accent-cyan);
+    margin: 4px 0;
+    font-family: var(--font-mono);
+}
+
+.markdown-preview-box pre {
+    background: rgba(0, 0, 0, 0.55);
+    padding: 6px;
+    border-radius: 4px;
+    border: 1px solid var(--card-border);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    margin: 4px 0;
+}
+
+.markdown-preview-box code {
+    font-family: var(--font-mono);
+    color: var(--accent-green);
 }
 
 .notes-metrics {
@@ -1541,7 +1837,7 @@ li.task-done span {
 }
 
 /* ----------------------------------------------------------
-   ENLACES & SERVIDORES
+   ENLACES, SERVIDORES Y CHECKLIST SYSADMIN (#18)
    ---------------------------------------------------------- */
 .bookmarks-list, .servers-list {
     list-style: none;
@@ -1565,8 +1861,16 @@ li.task-done span {
     margin-bottom: 2px;
 }
 
+.deploy-checklist-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+}
+
 /* ----------------------------------------------------------
-   MODALES
+   MODALES & ATAJOS (#35)
    ---------------------------------------------------------- */
 .modal-overlay {
     position: fixed;
@@ -1625,7 +1929,7 @@ li.task-done span {
     font-size: 0.7rem;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .modal-footer-actions {
@@ -1634,6 +1938,14 @@ li.task-done span {
     align-items: center;
     margin-top: 8px;
     gap: 6px;
+}
+
+.shortcuts-list-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
 }
 
 /* Modal Auth */
@@ -1801,7 +2113,7 @@ li.task-done span {
 }
 
 /* ----------------------------------------------------------
-   TOAST NOTIFICATIONS
+   TOAST NOTIFICATIONS CON DESHACER (#43)
    ---------------------------------------------------------- */
 .toast-container {
     position: fixed;
@@ -1815,7 +2127,7 @@ li.task-done span {
 }
 
 .toast {
-    background: rgba(13, 19, 31, 0.95);
+    background: rgba(13, 19, 31, 0.96);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--accent-cyan);
@@ -1829,7 +2141,7 @@ li.task-done span {
     display: flex;
     align-items: center;
     gap: 8px;
-    animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1), toastFadeOut 0.3s ease 2.7s forwards;
+    animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1), toastFadeOut 0.3s ease 4.7s forwards;
 }
 
 .toast-success { border-color: var(--accent-green); box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
