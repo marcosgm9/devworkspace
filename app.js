@@ -1,3 +1,5 @@
+import { calculateSubnet, getMadridClock, getMadridDateKey, getNextRepeatDate, mergeState } from './core.js';
+
 /* ==========================================================
    DEVWORKSPACE v7.0 - STUDIO EDITION (app.js)
    Sincronización en tiempo real con Firebase Auth + Firestore
@@ -20,12 +22,16 @@ let netTimeOffsetMs = 0;
 let scheduleViewMode = 'current'; // 'current' | 'table'
 let taskFilter = 'all';
 let taskSort = 'created';
+const expandedTaskIds = new Set();
 let deliveriesFilter = 'all';
+const deliveryReminderTimers = new Map();
+let serviceWorkerRegistration = null;
 let activeNotesTab = 'general';
 let isNotesPreview = false;
 let activeStudioTab = 'html';
 let studioAutoRunTimer = null;
 let studioConsoleLogs = [];
+let studioConsoleToken = '';
 let examCramOnly = false;
 let activeStudyHubTab = 'flashcards';
 let currentFlashcardIdx = 0;
@@ -33,12 +39,16 @@ let isFlashcardFlipped = false;
 let activeToolboxTab = 'format';
 let lastLoadedGoogleFont = 'JetBrains Mono';
 let globalSearchSelectedIdx = 0;
+let globalSearchQuery = '';
+let globalSearchResults = [];
+let deferredInstallPrompt = null;
 
 // Pomodoro & Audio State
 let pomoInterval = null;
 let pomoSecondsLeft = 25 * 60;
 let pomoMode = 'focus';
 let pomoRunning = false;
+let pomoEndsAt = 0;
 let audioCtx = null;
 let audioNodes = [];
 let isAudioPlaying = false;
@@ -114,24 +124,15 @@ function createDefaultState() {
     };
 }
 
-function deepMerge(target, source) {
-    if (!source || typeof source !== 'object') return target;
-    const output = Array.isArray(target) ? [...target] : { ...target };
-    for (const key of Object.keys(source)) {
-        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-            output[key] = deepMerge(target[key] || {}, source[key]);
-        } else {
-            output[key] = source[key];
-        }
-    }
-    return output;
+function createId() {
+    return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return createDefaultState();
-        return deepMerge(createDefaultState(), JSON.parse(raw));
+        return mergeState(createDefaultState(), JSON.parse(raw));
     } catch (e) {
         console.warn('Error cargando estado local:', e);
         return createDefaultState();
@@ -191,7 +192,7 @@ async function initFirebaseIfConfigured() {
                     if (snap.exists()) {
                         if (!snap.metadata.hasPendingWrites) {
                             isApplyingRemoteUpdate = true;
-                            appState = deepMerge(createDefaultState(), snap.data());
+                            appState = mergeState(createDefaultState(), snap.data());
                             saveState(true);
                             applyAllAppearance();
                             renderAll();
@@ -387,7 +388,30 @@ function escapeHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeCssString(value) {
+    return `"${String(value).replace(/[\0-\x1f\x7f"\\]/g, character =>
+        `\\${character.codePointAt(0).toString(16)} `
+    ).replace(/</g, '\\3c ')}"`;
+}
+
+function inlineJsArg(value) {
+    const literal = JSON.stringify(String(value))
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+    return escapeHtml(literal);
+}
+
+function getSafeExternalUrl(value) {
+    try {
+        const url = new URL(String(value));
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+    } catch (_) {
+        return '';
+    }
 }
 
 window.copyElementValue = function (id) {
@@ -424,10 +448,10 @@ function updateClockLoop() {
     const now = getNow();
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
-    if (timeEl) timeEl.textContent = now.toLocaleTimeString('es-ES');
+    if (timeEl) timeEl.textContent = now.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid' });
     if (dateEl) {
         dateEl.textContent = now.toLocaleDateString('es-ES', {
-            weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'
+            weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Madrid'
         });
     }
 }
@@ -482,7 +506,14 @@ window.addScheduleClass = function () {
     const end = document.getElementById('sch-add-end').value;
     const subject = document.getElementById('sch-add-subject').value.trim();
     const room = document.getElementById('sch-add-room').value.trim();
-    if (!subject || !start || !end) return;
+    if (!subject || !start || !end) {
+        showToast('Completa asignatura y horario', 'error');
+        return;
+    }
+    if (end <= start) {
+        showToast('La hora de fin debe ser posterior a la de inicio', 'error');
+        return;
+    }
 
     appState.schedule.push({ id: Date.now().toString(), day, start, end, subject, room });
     document.getElementById('sch-add-subject').value = '';
@@ -514,8 +545,8 @@ function renderScheduleEditor() {
         ? sorted.map(c => `
             <div class="deadline-card-item">
                 <div class="deadline-card-top">
-                    <span><strong>${days[c.day]}</strong> ${c.start}-${c.end} — ${escapeHtml(c.subject)} ${c.room ? `(${escapeHtml(c.room)})` : ''}</span>
-                    <button type="button" class="btn-icon" onclick="deleteScheduleClass('${c.id}')">🗑️</button>
+                    <span><strong>${escapeHtml(days[c.day] || '')}</strong> ${escapeHtml(c.start)}-${escapeHtml(c.end)} — ${escapeHtml(c.subject)} ${c.room ? `(${escapeHtml(c.room)})` : ''}</span>
+                    <button type="button" class="btn-icon" onclick="deleteScheduleClass(${inlineJsArg(c.id)})">🗑️</button>
                 </div>
             </div>`).join('')
         : '<p class="mono-muted">No hay clases configuradas.</p>';
@@ -526,8 +557,7 @@ function renderScheduleWidget() {
     if (!container) return;
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const now = getNow();
-    const todayDay = now.getDay();
-    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const { day: todayDay, minutes: nowMins } = getMadridClock(now);
 
     if (scheduleViewMode === 'table') {
         const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
@@ -564,11 +594,11 @@ function renderScheduleWidget() {
         const pct = Math.min(100, Math.max(0, Math.round(((nowMins - s) / (e - s)) * 100)));
         container.innerHTML = `
             <div class="sch-status">🟢 En clase: <strong>${escapeHtml(active.subject)}</strong> ${active.room ? `[${escapeHtml(active.room)}]` : ''}</div>
-            <div class="sch-detail">${active.start} - ${active.end} (${e - nowMins} min restantes)${next ? ` • Siguiente: ${escapeHtml(next.subject)}` : ''}</div>
+            <div class="sch-detail">${escapeHtml(active.start)} - ${escapeHtml(active.end)} (${e - nowMins} min restantes)${next ? ` • Siguiente: ${escapeHtml(next.subject)}` : ''}</div>
             <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>`;
     } else if (next) {
         container.innerHTML = `
-            <div class="sch-status">⏳ Próxima: <strong>${escapeHtml(next.subject)}</strong> a las ${next.start}</div>
+            <div class="sch-status">⏳ Próxima: <strong>${escapeHtml(next.subject)}</strong> a las ${escapeHtml(next.start)}</div>
             <div class="sch-detail">Faltan ${toMins(next.start) - nowMins} min ${next.room ? `• Aula ${escapeHtml(next.room)}` : ''}</div>`;
     } else {
         container.innerHTML = `<div class="sch-status">✅ Clases de hoy finalizadas</div>`;
@@ -600,21 +630,140 @@ window.addDelivery = function () {
         subject: subject || 'General',
         type,
         datetime,
+        alertMins: Number(document.getElementById('deliv-alert-mins').value) || 0,
+        alertSent: false,
         done: false
     });
+    const item = appState.deliveries[appState.deliveries.length - 1];
     document.getElementById('deliv-title').value = '';
     saveState();
     renderDeliveries();
+    if (item.alertMins > 0) {
+        if (window.Notification?.permission === 'granted') scheduleDeliveryReminder(item);
+        else showToast('Entrega guardada. Activa los avisos con el botón 🔔.', 'info');
+    }
 };
+
+window.enableDeadlineNotifications = async function () {
+    if (!('Notification' in window)) {
+        showToast('Este navegador no admite notificaciones', 'error');
+        return;
+    }
+    if (Notification.permission === 'denied') {
+        showToast('Las notificaciones están bloqueadas en los ajustes del navegador', 'error');
+        updateNotificationControls();
+        return;
+    }
+    let permission;
+    try {
+        permission = Notification.permission === 'granted'
+            ? 'granted'
+            : await Notification.requestPermission();
+    } catch (error) {
+        console.error('No se pudo solicitar permiso para notificaciones:', error);
+        showToast('No se pudo solicitar permiso para notificaciones', 'error');
+        return;
+    }
+    if (permission !== 'granted') {
+        showToast('No se han permitido las notificaciones', 'error');
+        updateNotificationControls();
+        return;
+    }
+    updateNotificationControls();
+    scheduleAllDeliveryReminders();
+    showToast('Avisos de entregas activados mientras la app esté abierta', 'success');
+};
+
+function updateNotificationControls() {
+    const button = document.getElementById('btn-enable-notifications');
+    if (!button) return;
+    if (!('Notification' in window)) {
+        button.textContent = '🔔 No disponible';
+        button.disabled = true;
+    } else if (Notification.permission === 'granted') {
+        button.textContent = '🔔 Avisos activos';
+        button.disabled = true;
+    } else if (Notification.permission === 'denied') {
+        button.textContent = '🔕 Avisos bloqueados';
+        button.disabled = false;
+        button.title = 'Cambia los permisos de notificación en el navegador';
+    } else {
+        button.textContent = '🔔 Activar avisos';
+        button.disabled = false;
+    }
+}
+
+function clearDeliveryReminder(id) {
+    const timer = deliveryReminderTimers.get(id);
+    if (timer) clearTimeout(timer);
+    deliveryReminderTimers.delete(id);
+}
+
+function scheduleDeliveryReminder(item) {
+    clearDeliveryReminder(item.id);
+    const alertMins = Number(item.alertMins);
+    if (item.done || item.alertSent || !Number.isFinite(alertMins) || alertMins <= 0 ||
+        !('Notification' in window) || Notification.permission !== 'granted') return;
+
+    const deadline = new Date(item.datetime).getTime();
+    const reminderAt = deadline - alertMins * 60000;
+    if (!Number.isFinite(deadline) || deadline <= Date.now()) return;
+
+    const scheduleNext = () => {
+        const remaining = reminderAt - Date.now();
+        const delay = Math.min(remaining, 2147483647);
+        const timer = setTimeout(async () => {
+            if (reminderAt > Date.now()) {
+                scheduleNext();
+                return;
+            }
+            deliveryReminderTimers.delete(item.id);
+            const current = appState.deliveries.find(delivery => delivery.id === item.id);
+            if (!current || current.done || current.alertSent || new Date(current.datetime).getTime() <= Date.now()) return;
+            try {
+                const title = `Entrega próxima: ${current.title}`;
+                const options = {
+                    body: `${current.subject || 'General'} · vence ${new Date(current.datetime).toLocaleString('es-ES')}`,
+                    icon: './icon.svg',
+                    tag: `delivery-${current.id}`
+                };
+                if (serviceWorkerRegistration) {
+                    await serviceWorkerRegistration.showNotification(title, options);
+                } else {
+                    const notification = new Notification(title, options);
+                    notification.onclick = () => {
+                        window.focus();
+                        switchWorkspace('cockpit');
+                        notification.close();
+                    };
+                }
+                current.alertSent = true;
+                saveState();
+                showToast(title, 'info');
+            } catch (error) {
+                console.error('No se pudo mostrar el aviso de entrega:', error);
+                showToast('No se pudo mostrar el aviso de entrega', 'error');
+            }
+        }, Math.max(0, delay));
+        deliveryReminderTimers.set(item.id, timer);
+    };
+    scheduleNext();
+}
+
+function scheduleAllDeliveryReminders() {
+    appState.deliveries.forEach(scheduleDeliveryReminder);
+}
 
 window.toggleDeliveryDone = function (id) {
     const item = appState.deliveries.find(d => d.id === id);
     if (item) item.done = !item.done;
+    if (item) scheduleDeliveryReminder(item);
     saveState();
     renderDeliveries();
 };
 
 window.deleteDelivery = function (id) {
+    clearDeliveryReminder(id);
     appState.deliveries = appState.deliveries.filter(d => d.id !== id);
     saveState();
     renderDeliveries();
@@ -653,12 +802,12 @@ function renderDeliveries() {
             <div class="deadline-card-top">
                 <div>
                     <div class="deadline-title" style="${d.done ? 'text-decoration:line-through;opacity:0.6;' : ''}">${escapeHtml(d.title)}</div>
-                    <div class="deadline-meta"><span>${escapeHtml(d.subject)}</span> • <span>${d.type}</span> • <span>${new Date(d.datetime).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+                    <div class="deadline-meta"><span>${escapeHtml(d.subject)}</span> • <span>${escapeHtml(d.type)}</span> • <span>${new Date(d.datetime).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
                 </div>
                 <div class="card-actions">
                     <span class="countdown-badge ${badgeClass}">${badgeTxt}</span>
-                    <button type="button" class="btn-icon" onclick="toggleDeliveryDone('${d.id}')">✅</button>
-                    <button type="button" class="btn-icon" onclick="deleteDelivery('${d.id}')">🗑️</button>
+                    <button type="button" class="btn-icon" onclick="toggleDeliveryDone(${inlineJsArg(d.id)})">✅</button>
+                    <button type="button" class="btn-icon" onclick="deleteDelivery(${inlineJsArg(d.id)})">🗑️</button>
                 </div>
             </div>
         </div>`;
@@ -669,6 +818,7 @@ function renderDeliveries() {
    TAREAS DEL DÍA
    ---------------------------------------------------------- */
 window.setTaskFilter = function (f) {
+    if (!['all', 'pending', 'done', 'today', 'overdue'].includes(f)) return;
     taskFilter = f;
     document.querySelectorAll('#card-tasks .pill-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('filter-' + f)?.classList.add('active');
@@ -686,16 +836,20 @@ window.addTask = function () {
     const block = document.getElementById('task-block').value;
     const priority = document.getElementById('task-priority').value;
     const date = document.getElementById('task-date').value;
+    const repeat = document.getElementById('task-repeat').value;
 
     appState.tasks.unshift({
-        id: Date.now().toString(),
+        id: createId(),
         text,
         block,
         priority,
         date,
+        repeat,
+        subtasks: [],
         done: false
     });
     document.getElementById('task-text').value = '';
+    document.getElementById('task-repeat').value = '';
     saveState();
     renderTasks();
     updateStats();
@@ -703,13 +857,70 @@ window.addTask = function () {
 
 window.toggleTask = function (id) {
     const t = appState.tasks.find(x => x.id === id);
-    if (t) t.done = !t.done;
+    if (!t) return;
+    if (!t.done && ['daily', 'weekly', 'monthly'].includes(t.repeat)) {
+        const today = getMadridDateKey();
+        let nextDate;
+        try {
+            nextDate = getNextRepeatDate(t.date && t.date > today ? t.date : today, t.repeat);
+        } catch (error) {
+            if (!(error instanceof TypeError)) throw error;
+            showToast(error.message, 'error');
+            return;
+        }
+        t.done = true;
+        const subtasks = (Array.isArray(t.subtasks) ? t.subtasks : []).map(subtask => ({
+            ...subtask,
+            id: createId(),
+            done: false
+        }));
+        appState.tasks.unshift({ ...t, id: createId(), date: nextDate, done: false, subtasks });
+        showToast(`Siguiente tarea programada para ${nextDate}`, 'success');
+    } else {
+        t.done = !t.done;
+    }
     saveState();
     renderTasks();
     updateStats();
 };
 
+window.toggleTaskSubtasks = function (id) {
+    if (expandedTaskIds.has(id)) expandedTaskIds.delete(id);
+    else expandedTaskIds.add(id);
+    renderTasks();
+};
+
+window.addTaskSubtask = function (id) {
+    const task = appState.tasks.find(item => item.id === id);
+    const input = document.getElementById(`subtask-input-${id}`);
+    const text = input?.value.trim();
+    if (!task || !text) return;
+    if (!Array.isArray(task.subtasks)) task.subtasks = [];
+    task.subtasks.push({ id: createId(), text, done: false });
+    saveState();
+    renderTasks();
+    document.getElementById(`subtask-input-${id}`)?.focus();
+};
+
+window.toggleTaskSubtask = function (taskId, subtaskId) {
+    const task = appState.tasks.find(item => item.id === taskId);
+    const subtask = task?.subtasks?.find(item => item.id === subtaskId);
+    if (!subtask) return;
+    subtask.done = !subtask.done;
+    saveState();
+    renderTasks();
+};
+
+window.deleteTaskSubtask = function (taskId, subtaskId) {
+    const task = appState.tasks.find(item => item.id === taskId);
+    if (!task || !Array.isArray(task.subtasks)) return;
+    task.subtasks = task.subtasks.filter(item => item.id !== subtaskId);
+    saveState();
+    renderTasks();
+};
+
 window.deleteTask = function (id) {
+    expandedTaskIds.delete(id);
     appState.tasks = appState.tasks.filter(x => x.id !== id);
     saveState();
     renderTasks();
@@ -717,7 +928,12 @@ window.deleteTask = function (id) {
 };
 
 window.exportTasksMarkdown = function () {
-    const md = appState.tasks.map(t => `- [${t.done ? 'x' : ' '}] (${t.priority.toUpperCase()}) ${t.text}`).join('\n');
+    const md = appState.tasks.map(t => {
+        const taskLine = `- [${t.done ? 'x' : ' '}] (${String(t.priority || 'medium').toUpperCase()}) ${t.text}`;
+        const subtaskLines = (Array.isArray(t.subtasks) ? t.subtasks : [])
+            .map(subtask => `  - [${subtask.done ? 'x' : ' '}] ${subtask.text}`);
+        return [taskLine, ...subtaskLines].join('\n');
+    }).join('\n');
     navigator.clipboard.writeText(md || '- Sin tareas').then(() => showToast('Tareas copiadas en Markdown', 'success'));
 };
 
@@ -727,9 +943,12 @@ function renderTasks() {
     const prioWeight = { high: 1, medium: 2, low: 3 };
     const blockIcon = { morning: '🌅', afternoon: '☀️', night: '🌙' };
 
+    const today = getMadridDateKey();
     let list = appState.tasks.filter(t => {
         if (taskFilter === 'pending') return !t.done;
         if (taskFilter === 'done') return t.done;
+        if (taskFilter === 'today') return t.date === today;
+        if (taskFilter === 'overdue') return !t.done && !!t.date && t.date < today;
         return true;
     });
 
@@ -738,14 +957,34 @@ function renderTasks() {
     else if (taskSort === 'date') list.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
 
     ul.innerHTML = list.length
-        ? list.map(t => `
+        ? list.map(t => {
+            const subtasks = Array.isArray(t.subtasks) ? t.subtasks : [];
+            const expanded = expandedTaskIds.has(t.id);
+            const repeatLabel = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual' }[t.repeat];
+            return `
             <li class="${t.done ? 'task-done' : ''}">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
-                    <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask('${t.id}')">
-                    <span>${blockIcon[t.block] || ''} ${escapeHtml(t.text)} ${t.date ? `<small class="mono-muted">(${t.date})</small>` : ''}</span>
-                </label>
-                <button type="button" class="btn-icon" onclick="deleteTask('${t.id}')">🗑️</button>
-            </li>`).join('')
+                <div class="task-main-row">
+                    <label class="task-label">
+                        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${inlineJsArg(t.id)})">
+                        <span>${blockIcon[t.block] || ''} ${escapeHtml(t.text)} ${t.date ? `<small class="mono-muted">(${escapeHtml(t.date)})</small>` : ''} ${repeatLabel ? `<small class="task-repeat-badge">↻ ${repeatLabel}</small>` : ''}</span>
+                    </label>
+                    <div class="task-actions">
+                        <button type="button" class="btn-ghost btn-sm" aria-expanded="${expanded}" onclick="toggleTaskSubtasks(${inlineJsArg(t.id)})">Subtareas (${subtasks.length})</button>
+                        <button type="button" class="btn-icon" onclick="deleteTask(${inlineJsArg(t.id)})" aria-label="Eliminar tarea">🗑️</button>
+                    </div>
+                </div>
+                ${expanded ? `<div class="task-subtasks">
+                    ${subtasks.map(subtask => `<div class="task-subtask-row ${subtask.done ? 'subtask-done' : ''}">
+                        <label><input type="checkbox" ${subtask.done ? 'checked' : ''} onchange="toggleTaskSubtask(${inlineJsArg(t.id)},${inlineJsArg(subtask.id)})"> ${escapeHtml(subtask.text)}</label>
+                        <button type="button" class="btn-icon" onclick="deleteTaskSubtask(${inlineJsArg(t.id)},${inlineJsArg(subtask.id)})" aria-label="Eliminar subtarea">×</button>
+                    </div>`).join('')}
+                    <div class="task-subtask-add">
+                        <input type="text" id="subtask-input-${escapeHtml(t.id)}" placeholder="Añadir subtarea" aria-label="Nueva subtarea" onkeydown="if(event.key==='Enter'){event.preventDefault();addTaskSubtask(${inlineJsArg(t.id)})}">
+                        <button type="button" class="btn-cyan btn-sm" onclick="addTaskSubtask(${inlineJsArg(t.id)})">Añadir</button>
+                    </div>
+                </div>` : ''}
+            </li>`;
+        }).join('')
         : '<li class="mono-muted">No hay tareas en esta vista.</li>';
 }
 
@@ -762,25 +1001,28 @@ function updatePomodoroDisplay() {
 window.startCustomPomodoro = function (mode) {
     clearInterval(pomoInterval);
     pomoMode = mode;
-    const focusMins = Math.max(1, Number(document.getElementById('pomo-focus-time').value) || 25);
-    const breakMins = Math.max(1, Number(document.getElementById('pomo-break-time').value) || 5);
+    const focusMins = Math.min(180, Math.max(1, Number(document.getElementById('pomo-focus-time').value) || 25));
+    const breakMins = Math.min(60, Math.max(1, Number(document.getElementById('pomo-break-time').value) || 5));
     appState.pomodoro.focusMins = focusMins;
     appState.pomodoro.breakMins = breakMins;
 
     if (mode === 'focus') pomoSecondsLeft = focusMins * 60;
     else if (mode === 'break') pomoSecondsLeft = breakMins * 60;
     else if (mode === 'exam') pomoSecondsLeft = 60 * 60;
+    else return;
 
     pomoRunning = true;
+    pomoEndsAt = Date.now() + pomoSecondsLeft * 1000;
     updatePomodoroDisplay();
     saveState();
 
     pomoInterval = setInterval(() => {
-        pomoSecondsLeft--;
+        pomoSecondsLeft = Math.max(0, Math.ceil((pomoEndsAt - Date.now()) / 1000));
         updatePomodoroDisplay();
         if (pomoSecondsLeft <= 0) {
             clearInterval(pomoInterval);
             pomoRunning = false;
+            pomoEndsAt = 0;
             if (mode === 'focus' || mode === 'exam') {
                 const earned = mode === 'exam' ? 60 : focusMins;
                 recordStudyMinutes(earned);
@@ -793,16 +1035,22 @@ window.startCustomPomodoro = function (mode) {
 window.stopPomodoro = function () {
     clearInterval(pomoInterval);
     pomoRunning = false;
-    const focusMins = Number(document.getElementById('pomo-focus-time').value) || 25;
+    pomoEndsAt = 0;
+    const focusMins = Math.min(180, Math.max(1, Number(document.getElementById('pomo-focus-time').value) || 25));
     pomoSecondsLeft = focusMins * 60;
     updatePomodoroDisplay();
 };
 
 function recordStudyMinutes(mins) {
-    const todayStr = getNow().toISOString().slice(0, 10);
+    const todayStr = getMadridDateKey();
     if (appState.pomodoro.lastStudyDate !== todayStr) {
         appState.pomodoro.todayMinutes = 0;
-        appState.pomodoro.streakDays = (appState.pomodoro.streakDays || 0) + 1;
+        const yesterday = new Date(`${todayStr}T00:00:00Z`);
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+        const yesterdayStr = yesterday.toISOString().slice(0, 10);
+        appState.pomodoro.streakDays = appState.pomodoro.lastStudyDate === yesterdayStr
+            ? (appState.pomodoro.streakDays || 0) + 1
+            : 1;
         appState.pomodoro.lastStudyDate = todayStr;
     }
     appState.pomodoro.todayMinutes += mins;
@@ -813,7 +1061,7 @@ function recordStudyMinutes(mins) {
 }
 
 function updateStats() {
-    const todayStr = getNow().toISOString().slice(0, 10);
+    const todayStr = getMadridDateKey();
     const todayMins = appState.pomodoro.lastStudyDate === todayStr ? appState.pomodoro.todayMinutes : 0;
     document.getElementById('stat-focus-today').textContent = `${todayMins}m`;
     document.getElementById('stat-focus-total').textContent = `${(appState.pomodoro.totalMinutes / 60).toFixed(1)}h`;
@@ -829,11 +1077,12 @@ function updateStats() {
     let weekSum = 0;
     const daysData = [];
     for (let i = 6; i >= 0; i--) {
-        const d = new Date(getNow().getTime() - i * 86400000);
+        const d = new Date(`${todayStr}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - i);
         const key = d.toISOString().slice(0, 10);
         const mins = appState.pomodoro.historyByDate[key] || 0;
         weekSum += mins;
-        daysData.push({ label: d.toLocaleDateString('es-ES', { weekday: 'narrow' }), mins });
+        daysData.push({ label: d.toLocaleDateString('es-ES', { weekday: 'narrow', timeZone: 'UTC' }), mins });
     }
     const maxMins = Math.max(60, ...daysData.map(x => x.mins));
     document.getElementById('chart-week-sum').textContent = `${weekSum} min`;
@@ -1049,11 +1298,13 @@ window.runStudioPreview = function () {
     const css = document.getElementById('code-css')?.value || '';
     const js = document.getElementById('code-js')?.value || '';
     const font = appState.studio.previewFont;
-    const fontLink = font ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;600;700&display=swap"><style>body{font-family:'${font}',sans-serif;}</style>` : '';
+    const fontLink = font ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;600;700&display=swap"><style>body{font-family:${escapeCssString(font)},sans-serif;}</style>` : '';
 
+    studioConsoleToken = crypto.randomUUID();
     const consoleBridge = `<script>
       (function(){
-        const send = (level, args) => parent.postMessage({ source: 'studio-console', level, msg: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+        const token = ${JSON.stringify(studioConsoleToken)};
+        const send = (level, args) => parent.postMessage({ source: 'studio-console', token, level, msg: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
         console.log = (...a) => send('log', a);
         console.warn = (...a) => send('warn', a);
         console.error = (...a) => send('error', a);
@@ -1204,11 +1455,11 @@ function renderStudioSavedProjects() {
                 <div class="deadline-card-top">
                     <div>
                         <div class="deadline-title">${escapeHtml(p.title)}</div>
-                        <div class="deadline-meta">${p.updatedAt}</div>
+                        <div class="deadline-meta">${escapeHtml(p.updatedAt)}</div>
                     </div>
                     <div class="card-actions">
-                        <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject('${p.id}')">Abrir</button>
-                        <button type="button" class="btn-icon" onclick="deleteSavedStudioProject('${p.id}')">🗑️</button>
+                        <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject(${inlineJsArg(p.id)})">Abrir</button>
+                        <button type="button" class="btn-icon" onclick="deleteSavedStudioProject(${inlineJsArg(p.id)})">🗑️</button>
                     </div>
                 </div>
             </div>`).join('')
@@ -1284,15 +1535,15 @@ function renderKanban() {
             <div class="kanban-card">
                 <div class="kanban-card-header">
                     <span class="kanban-subject-tag">${escapeHtml(k.subject)}</span>
-                    <button type="button" class="btn-icon" onclick="deleteKanbanTask('${k.id}')">✖</button>
+                    <button type="button" class="btn-icon" onclick="deleteKanbanTask(${inlineJsArg(k.id)})">✖</button>
                 </div>
                 <div>${escapeHtml(k.title)}</div>
                 <div class="kanban-card-footer">
-                    <span>🍅 ${k.pomos}</span>
+                    <span>🍅 ${escapeHtml(k.pomos)}</span>
                     <div>
-                        ${col !== 'todo' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','todo')">⬅️</button>` : ''}
-                        ${col !== 'doing' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','doing')">🔄</button>` : ''}
-                        ${col !== 'done' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','done')">✅</button>` : ''}
+                        ${col !== 'todo' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask(${inlineJsArg(k.id)},'todo')">⬅️</button>` : ''}
+                        ${col !== 'doing' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask(${inlineJsArg(k.id)},'doing')">🔄</button>` : ''}
+                        ${col !== 'done' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask(${inlineJsArg(k.id)},'done')">✅</button>` : ''}
                     </div>
                 </div>
             </div>`).join('');
@@ -1353,16 +1604,16 @@ function renderGrades() {
                 <strong>${escapeHtml(s.name)} (${evalWeight}% eval.)</strong>
                 <div class="card-actions">
                     <span class="grade-subj-score ${avg >= s.target ? 'score-pass' : 'score-fail'}">${avg.toFixed(2)}</span>
-                    <button type="button" class="btn-icon" onclick="deleteGradeSubject('${s.id}')">🗑️</button>
+                    <button type="button" class="btn-icon" onclick="deleteGradeSubject(${inlineJsArg(s.id)})">🗑️</button>
                 </div>
             </div>
             <div class="grade-progress-bar-bg"><div class="grade-progress-bar-fill" style="width:${Math.min(100, evalWeight)}%"></div></div>
-            ${remWeight > 0 ? `<div class="grade-needed-banner">Necesitas un <strong>${needed}</strong> en el ${remWeight}% restante para llegar a ${s.target}</div>` : ''}
+            ${remWeight > 0 ? `<div class="grade-needed-banner">Necesitas un <strong>${needed}</strong> en el ${remWeight}% restante para llegar a ${escapeHtml(s.target)}</div>` : ''}
             <div class="form-inline-row">
-                <input type="text" id="gi-title-${s.id}" placeholder="Prueba">
-                <input type="number" id="gi-weight-${s.id}" placeholder="%" style="max-width:65px;">
-                <input type="number" id="gi-score-${s.id}" placeholder="Nota" step="0.1" style="max-width:75px;">
-                <button type="button" class="btn-green btn-sm" onclick="addGradeItem('${s.id}')">✚</button>
+                <input type="text" id="gi-title-${escapeHtml(s.id)}" placeholder="Prueba">
+                <input type="number" id="gi-weight-${escapeHtml(s.id)}" placeholder="%" style="max-width:65px;">
+                <input type="number" id="gi-score-${escapeHtml(s.id)}" placeholder="Nota" step="0.1" style="max-width:75px;">
+                <button type="button" class="btn-green btn-sm" onclick="addGradeItem(${inlineJsArg(s.id)})">✚</button>
             </div>
         </div>`;
     }).join('');
@@ -1489,7 +1740,7 @@ function renderDoubts() {
     document.getElementById('doubts-list').innerHTML = appState.doubts.map(d => `
         <div class="hub-item-card" style="flex-direction:row;justify-content:space-between;align-items:center;">
             <span style="${d.resolved ? 'text-decoration:line-through;opacity:0.6;' : ''}"><strong>[${escapeHtml(d.subj)}]</strong> ${escapeHtml(d.text)}</span>
-            <button type="button" class="btn-icon" onclick="toggleDoubt('${d.id}')">✅</button>
+            <button type="button" class="btn-icon" onclick="toggleDoubt(${inlineJsArg(d.id)})">✅</button>
         </div>`).join('') || '<p class="mono-muted">Sin dudas pendientes.</p>';
 }
 
@@ -1503,7 +1754,9 @@ window.calculateStudyPlan = function () {
     const topics = Number(document.getElementById('planner-topics-count').value) || 1;
     const minsPerTopic = Number(document.getElementById('planner-mins-topic').value) || 45;
     if (!dateVal) return;
-    const days = Math.max(1, Math.ceil((new Date(dateVal) - getNow()) / 86400000));
+    const today = new Date(`${getMadridDateKey()}T00:00:00Z`);
+    const examDate = new Date(`${dateVal}T00:00:00Z`);
+    const days = Math.max(1, Math.ceil((examDate - today) / 86400000));
     const totalMins = topics * minsPerTopic;
     document.getElementById('study-planner-result').textContent =
         `Quedan ${days} días → ${(topics / days).toFixed(1)} temas/día (${Math.ceil(totalMins / days)} min/día).`;
@@ -1526,7 +1779,7 @@ function renderProjects() {
         <div class="hub-item-card">
             <div class="deadline-card-top">
                 <strong>${escapeHtml(p.name)}</strong>
-                ${p.repo ? `<a href="${escapeHtml(p.repo)}" target="_blank" class="footer-link-cyan">Repo ↗</a>` : ''}
+                ${getSafeExternalUrl(p.repo) ? `<a href="${escapeHtml(getSafeExternalUrl(p.repo))}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">Repo ↗</a>` : ''}
             </div>
             <div class="mono-muted">✅ ${escapeHtml(p.working || '-')} | ⏳ ${escapeHtml(p.pending || '-')}</div>
         </div>`).join('') || '<p class="mono-muted">Sin proyectos activos.</p>';
@@ -1644,20 +1897,14 @@ window.runSimpleDiff = function () {
 window.calculateSubnet = function () {
     const raw = document.getElementById('tb-ip-input').value.trim();
     const out = document.getElementById('tb-subnet-output');
-    const [ipStr, cidrStr] = raw.split('/');
-    const cidr = Number(cidrStr);
-    const octets = (ipStr || '').split('.').map(Number);
-    if (octets.length !== 4 || octets.some(o => isNaN(o) || o < 0 || o > 255) || isNaN(cidr) || cidr < 0 || cidr > 32) {
-        out.textContent = 'Formato inválido. Usa ej: 192.168.1.50/24';
+    try {
+        const subnet = calculateSubnet(raw);
+        out.textContent = `Red: ${subnet.network}/${subnet.cidr}\nMáscara: ${subnet.mask}\nBroadcast: ${subnet.broadcast}\nRango útil: ${subnet.firstHost} - ${subnet.lastHost}\nHosts útiles: ${subnet.hosts}`;
+    } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        out.textContent = error.message;
         return;
     }
-    const ipInt = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
-    const mask = cidr === 0 ? 0 : (0xffffffff << (32 - cidr)) >>> 0;
-    const net = (ipInt & mask) >>> 0;
-    const bcast = (net | (~mask >>> 0)) >>> 0;
-    const toIp = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
-    const hosts = cidr >= 31 ? 0 : Math.pow(2, 32 - cidr) - 2;
-    out.textContent = `Red: ${toIp(net)}/${cidr}\nMáscara: ${toIp(mask)}\nBroadcast: ${toIp(bcast)}\nRango útil: ${toIp(net + 1)} - ${toIp(bcast - 1)}\nHosts útiles: ${hosts}`;
 };
 
 window.convertNumberBase = function (from, val) {
@@ -1761,8 +2008,8 @@ function renderServers() {
                 ${s.logs ? `<div class="mono-muted">Logs: ${escapeHtml(s.logs)}</div>` : ''}
             </div>
             <div class="card-actions">
-                <button type="button" class="btn-cyan btn-sm" onclick="copySshCmd('${escapeHtml(s.creds)}','${escapeHtml(s.ip)}','${escapeHtml(s.port)}')">SSH</button>
-                <button type="button" class="btn-icon" onclick="deleteServer('${s.id}')">🗑️</button>
+                <button type="button" class="btn-cyan btn-sm" onclick="copySshCmd(${inlineJsArg(s.creds)},${inlineJsArg(s.ip)},${inlineJsArg(s.port)})">SSH</button>
+                <button type="button" class="btn-icon" onclick="deleteServer(${inlineJsArg(s.id)})">🗑️</button>
             </div>
         </li>`).join('') || '<li class="mono-muted">Sin servidores registrados.</li>';
 }
@@ -1779,7 +2026,7 @@ window.addInfraChangelog = function () {
 
 function renderInfraChangelog() {
     document.getElementById('infra-changelog-list').innerHTML = appState.infraChangelog.map(c =>
-        `<div class="mono-muted">• [${c.date}] ${escapeHtml(c.text)}</div>`).join('');
+        `<div class="mono-muted">• [${escapeHtml(c.date)}] ${escapeHtml(c.text)}</div>`).join('');
 }
 
 window.addCustomSnippet = function () {
@@ -1794,8 +2041,7 @@ window.addCustomSnippet = function () {
     renderSnippets();
 };
 
-window.copyResolvedSnippet = function (encodedCmd) {
-    const cmd = decodeURIComponent(encodedCmd);
+window.copyResolvedSnippet = function (cmd) {
     navigator.clipboard.writeText(cmd).then(() => showToast('Comando copiado', 'success'));
 };
 
@@ -1813,7 +2059,7 @@ function renderSnippets() {
                 <div class="mono-muted">[${escapeHtml(s.cat)}] ${escapeHtml(s.title)}</div>
                 <div class="snippet-cmd-text">${escapeHtml(resolved)}</div>
             </div>
-            <button type="button" class="btn-cyan btn-sm" onclick="copyResolvedSnippet('${encodeURIComponent(resolved)}')">📋</button>
+            <button type="button" class="btn-cyan btn-sm" onclick="copyResolvedSnippet(${inlineJsArg(resolved)})">📋</button>
         </div>`;
     }).join('');
 }
@@ -1822,7 +2068,12 @@ window.addBookmark = function () {
     const name = document.getElementById('bm-name').value.trim();
     const url = document.getElementById('bm-url').value.trim();
     if (!name || !url) return;
-    appState.bookmarks.push({ id: Date.now().toString(), name, url });
+    const safeUrl = getSafeExternalUrl(url);
+    if (!safeUrl) {
+        showToast('Introduce una URL que empiece por http:// o https://', 'error');
+        return;
+    }
+    appState.bookmarks.push({ id: Date.now().toString(), name, url: safeUrl });
     document.getElementById('bm-name').value = '';
     document.getElementById('bm-url').value = '';
     saveState();
@@ -1836,11 +2087,16 @@ window.deleteBookmark = function (id) {
 };
 
 function renderBookmarks() {
-    document.getElementById('bookmarks-list').innerHTML = appState.bookmarks.map(b => `
-        <li>
-            <a href="${escapeHtml(b.url)}" target="_blank" class="footer-link-cyan">${escapeHtml(b.name)} ↗</a>
-            <button type="button" class="btn-icon" onclick="deleteBookmark('${b.id}')">🗑️</button>
-        </li>`).join('');
+    document.getElementById('bookmarks-list').innerHTML = appState.bookmarks.map(b => {
+        const url = getSafeExternalUrl(b.url);
+        const link = url
+            ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">${escapeHtml(b.name)} ↗</a>`
+            : `<span>${escapeHtml(b.name)} (URL no válida)</span>`;
+        return `<li>
+            ${link}
+            <button type="button" class="btn-icon" onclick="deleteBookmark(${inlineJsArg(b.id)})">🗑️</button>
+        </li>`;
+    }).join('');
 }
 
 /* ----------------------------------------------------------
@@ -1909,7 +2165,7 @@ function renderFavoriteFonts() {
     const box = document.getElementById('gf-favorites-list');
     if (!box) return;
     box.innerHTML = appState.favoriteFonts.map(f =>
-        `<button type="button" class="pill-btn" onclick="quickLoadGoogleFont('${escapeHtml(f)}')">${escapeHtml(f)}</button>`
+        `<button type="button" class="pill-btn" onclick="quickLoadGoogleFont(${inlineJsArg(f)})">${escapeHtml(f)}</button>`
     ).join('');
     renderStudioFontSelector();
 }
@@ -1986,6 +2242,8 @@ window.openGlobalSearch = function () {
     document.getElementById('global-search-modal').style.display = 'flex';
     const inp = document.getElementById('global-search-input');
     inp.value = '';
+    globalSearchQuery = '';
+    globalSearchSelectedIdx = 0;
     filterGlobalSearch();
     inp.focus();
 };
@@ -1995,31 +2253,70 @@ window.closeGlobalSearch = function () {
 };
 
 window.filterGlobalSearch = function () {
-    const q = (document.getElementById('global-search-input').value || '').toLowerCase();
+    const q = (document.getElementById('global-search-input').value || '').trim().toLocaleLowerCase('es-ES');
+    if (q !== globalSearchQuery) {
+        globalSearchQuery = q;
+        globalSearchSelectedIdx = 0;
+    }
+
     const results = [];
-    appState.tasks.forEach(t => {
-        if (t.text.toLowerCase().includes(q)) results.push({ type: 'Tarea', label: t.text, ws: 'cockpit' });
-    });
-    appState.studio.savedProjects.forEach(p => {
-        if (p.title.toLowerCase().includes(q)) results.push({ type: 'Proyecto Web', label: p.title, ws: 'studio' });
-    });
-    appState.snippets.forEach(s => {
-        if (`${s.title} ${s.cmd}`.toLowerCase().includes(q)) results.push({ type: 'Snippet', label: `${s.title}: ${s.cmd}`, ws: 'devlab' });
-    });
-    appState.servers.forEach(s => {
-        if (`${s.name} ${s.ip}`.toLowerCase().includes(q)) results.push({ type: 'Servidor', label: `${s.name} (${s.ip})`, ws: 'devlab' });
+    const add = (items, type, ws, getLabel, getSearchText = getLabel) => {
+        if (!Array.isArray(items)) return;
+        items.forEach(item => {
+            const label = String(getLabel(item) || '');
+            const searchable = String(getSearchText(item) || label).toLocaleLowerCase('es-ES');
+            if (searchable.includes(q)) results.push({ type, label, ws });
+        });
+    };
+
+    add(appState.tasks, 'Tarea', 'cockpit', t => t.text, t =>
+        `${t.text} ${t.date || ''} ${t.repeat || ''} ${(Array.isArray(t.subtasks) ? t.subtasks : []).map(subtask => subtask.text).join(' ')}`);
+    add(appState.deliveries, 'Entrega', 'cockpit', d => d.title, d => `${d.title} ${d.subject} ${d.type}`);
+    add(appState.schedule, 'Horario', 'cockpit', c => `${c.subject} · ${c.start}`, c => `${c.subject} ${c.room} ${c.start} ${c.end}`);
+    add(appState.studio.savedProjects, 'Proyecto web', 'studio', p => p.title);
+    add(appState.snippets, 'Snippet', 'devlab', s => `${s.title}: ${s.cmd}`, s => `${s.title} ${s.cmd} ${s.cat}`);
+    add(appState.servers, 'Servidor', 'devlab', s => `${s.name} (${s.ip})`, s => `${s.name} ${s.ip} ${s.port} ${s.logs}`);
+    add(appState.kanban, 'Kanban', 'academy', k => k.title, k => `${k.title} ${k.subject} ${k.status}`);
+    add(appState.flashcards, 'Flashcard', 'academy', c => c.q, c => `${c.q} ${c.a} ${c.subj}`);
+    add(appState.bugLogs, 'Bug', 'academy', b => b.error, b => `${b.subj} ${b.error} ${b.cause} ${b.fix}`);
+    add(appState.doubts, 'Duda', 'academy', d => d.text, d => `${d.subj} ${d.text}`);
+    add(appState.projects, 'Proyecto', 'academy', p => p.name, p => `${p.name} ${p.repo} ${p.working} ${p.pending}`);
+    add(appState.bookmarks, 'Enlace', 'devlab', b => b.name, b => `${b.name} ${b.url}`);
+    Object.entries(appState.notes || {}).forEach(([tab, note]) => {
+        if (typeof note !== 'string' || !note.trim() || !note.toLocaleLowerCase('es-ES').includes(q)) return;
+        results.push({ type: 'Nota', label: `${tab}: ${note.slice(0, 120)}`, ws: 'cockpit' });
     });
 
+    globalSearchResults = results.slice(0, 30);
+    globalSearchSelectedIdx = Math.min(globalSearchSelectedIdx, Math.max(0, globalSearchResults.length - 1));
+    renderGlobalSearchResults();
+};
+
+function renderGlobalSearchResults() {
     const ul = document.getElementById('global-search-results');
-    ul.innerHTML = results.slice(0, 15).map((r, idx) => `
-        <li class="search-result-item ${idx === globalSearchSelectedIdx ? 'selected' : ''}" onclick="switchWorkspace('${r.ws}');closeGlobalSearch();">
-            <span>${escapeHtml(r.label)}</span>
-            <span class="badge-version">${r.type}</span>
+    ul.innerHTML = globalSearchResults.slice(0, 15).map((result, index) => `
+        <li class="search-result-item ${index === globalSearchSelectedIdx ? 'selected' : ''}" onclick="switchWorkspace(${inlineJsArg(result.ws)});closeGlobalSearch();">
+            <span>${escapeHtml(result.label)}</span>
+            <span class="badge-version">${escapeHtml(result.type)}</span>
         </li>`).join('') || '<li class="mono-muted">Sin coincidencias.</li>';
+    ul.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
 };
 
 window.handleGlobalSearchKeydown = function (e) {
-    if (e.key === 'Escape') closeGlobalSearch();
+    if (e.key === 'Escape') {
+        closeGlobalSearch();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const lastIndex = Math.min(globalSearchResults.length, 15) - 1;
+        if (lastIndex < 0) return;
+        const delta = e.key === 'ArrowDown' ? 1 : -1;
+        globalSearchSelectedIdx = (globalSearchSelectedIdx + delta + lastIndex + 1) % (lastIndex + 1);
+        renderGlobalSearchResults();
+    } else if (e.key === 'Enter' && globalSearchResults[globalSearchSelectedIdx]) {
+        const result = globalSearchResults[globalSearchSelectedIdx];
+        switchWorkspace(result.ws);
+        closeGlobalSearch();
+    }
 };
 
 window.openSnapshotsModal = function () {
@@ -2043,7 +2340,7 @@ window.restoreSnapshot = function (id) {
     const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
     const found = snaps.find(s => s.id === id);
     if (!found) return;
-    appState = deepMerge(createDefaultState(), found.data);
+    appState = mergeState(createDefaultState(), found.data);
     saveState();
     applyAllAppearance();
     renderAll();
@@ -2056,14 +2353,14 @@ function renderSnapshotsList() {
     document.getElementById('snapshots-list-container').innerHTML = snaps.map(s => `
         <div class="deadline-card-item">
             <div class="deadline-card-top">
-                <span>📸 ${s.date}</span>
-                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot('${s.id}')">Restaurar</button>
+                <span>📸 ${escapeHtml(s.date)}</span>
+                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot(${inlineJsArg(s.id)})">Restaurar</button>
             </div>
         </div>`).join('') || '<p class="mono-muted">No hay snapshots guardados.</p>';
 }
 
 window.generateDailySummaryModal = function () {
-    const todayStr = getNow().toISOString().slice(0, 10);
+    const todayStr = getMadridDateKey();
     const doneTasks = appState.tasks.filter(t => t.done).map(t => `- [x] ${t.text}`).join('\n') || '- Ninguna';
     const pendingTasks = appState.tasks.filter(t => !t.done).map(t => `- [ ] ${t.text}`).join('\n') || '- Ninguna';
     const mins = appState.pomodoro.lastStudyDate === todayStr ? appState.pomodoro.todayMinutes : 0;
@@ -2089,7 +2386,7 @@ window.exportData = function () {
     const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `devworkspace-backup-${getNow().toISOString().slice(0, 10)}.json`;
+    a.download = `devworkspace-backup-${getMadridDateKey()}.json`;
     a.click();
 };
 
@@ -2099,7 +2396,11 @@ window.importData = function (event) {
     const reader = new FileReader();
     reader.onload = e => {
         try {
-            appState = deepMerge(createDefaultState(), JSON.parse(e.target.result));
+            const imported = JSON.parse(e.target.result);
+            if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
+                throw new Error('El backup debe ser un objeto JSON');
+            }
+            appState = mergeState(createDefaultState(), imported);
             saveState();
             applyAllAppearance();
             renderAll();
@@ -2124,6 +2425,65 @@ function updateStorageQuotaBadge(bytes) {
     if (badge) badge.textContent = `Storage: ${(bytes / 1024).toFixed(1)} KB`;
 }
 
+function updateConnectionStatus() {
+    const status = document.getElementById('connection-status');
+    if (!status) return;
+    const online = navigator.onLine;
+    status.textContent = online ? '🟢 Online' : '🟠 Offline · cambios locales';
+    status.classList.toggle('connection-online', online);
+    status.classList.toggle('connection-offline', !online);
+}
+
+function initializePwaSupport() {
+    updateConnectionStatus();
+    window.addEventListener('online', updateConnectionStatus);
+    window.addEventListener('offline', updateConnectionStatus);
+    window.addEventListener('beforeinstallprompt', event => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        const button = document.getElementById('app-install-button');
+        if (button) button.style.display = 'inline-flex';
+    });
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        const button = document.getElementById('app-install-button');
+        if (button) button.style.display = 'none';
+        showToast('DevWorkspace se ha instalado', 'success');
+    });
+
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('./service-worker.js')
+        .then(() => navigator.serviceWorker.ready)
+        .then(registration => {
+            serviceWorkerRegistration = registration;
+            scheduleAllDeliveryReminders();
+        })
+        .catch(error => {
+            console.error('No se pudo registrar el service worker:', error);
+            showToast('No se pudo activar el modo offline', 'error');
+        });
+}
+
+window.installApp = async function () {
+    if (!deferredInstallPrompt) {
+        showToast('La instalación no está disponible en este navegador', 'info');
+        return;
+    }
+    const prompt = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    const button = document.getElementById('app-install-button');
+    if (button) button.style.display = 'none';
+    try {
+        await prompt.prompt();
+        const choice = await prompt.userChoice;
+        if (choice.outcome === 'accepted') showToast('Instalación iniciada', 'success');
+        else if (choice.outcome === 'dismissed') showToast('Instalación cancelada', 'info');
+    } catch (error) {
+        console.error('No se pudo iniciar la instalación:', error);
+        showToast('No se pudo iniciar la instalación', 'error');
+    }
+};
+
 /* ----------------------------------------------------------
    RENDERIZADO GLOBAL Y EVENTOS DE INICIO
    ---------------------------------------------------------- */
@@ -2143,6 +2503,8 @@ function renderAll() {
     renderSnippets();
     renderBookmarks();
     renderFavoriteFonts();
+    updateNotificationControls();
+    if (window.Notification?.permission === 'granted') scheduleAllDeliveryReminders();
 
     const pad = document.getElementById('scratchpad');
     if (pad) pad.value = appState.notes[activeNotesTab] || '';
@@ -2170,6 +2532,7 @@ function renderAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
     applyAllAppearance();
+    initializePwaSupport();
     switchWorkspace(appState.activeWorkspace || 'cockpit');
     renderAll();
     updateWeatherBadge();
@@ -2203,10 +2566,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('message', (ev) => {
-        if (ev.data?.source === 'studio-console') {
-            studioConsoleLogs.push({ level: ev.data.level, msg: ev.data.msg });
-            renderStudioConsole();
-        }
+        const iframe = document.getElementById('studio-preview-iframe');
+        const { data } = ev;
+        if (ev.source !== iframe?.contentWindow || !data || data.source !== 'studio-console' || data.token !== studioConsoleToken) return;
+
+        const levels = ['log', 'warn', 'error'];
+        if (!levels.includes(data.level) || typeof data.msg !== 'string') return;
+        studioConsoleLogs.push({ level: data.level, msg: data.msg.slice(0, 4000) });
+        if (studioConsoleLogs.length > 200) studioConsoleLogs.shift();
+        renderStudioConsole();
     });
 
     document.getElementById('theme-select')?.addEventListener('change', (e) => {
@@ -2217,6 +2585,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Atajos de teclado globales
     document.addEventListener('keydown', (e) => {
+        const target = e.target;
+        const isEditing = target instanceof HTMLElement &&
+            (target.isContentEditable || target.matches('input, textarea, select'));
+
         if (e.ctrlKey && e.key.toLowerCase() === 'k') {
             e.preventDefault();
             openGlobalSearch();
@@ -2227,6 +2599,17 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const map = ['cockpit', 'studio', 'academy', 'devlab', 'fonts'];
             switchWorkspace(map[Number(e.key) - 1]);
+        } else if (!isEditing && e.ctrlKey && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            switchWorkspace('cockpit');
+            document.getElementById('task-text')?.focus();
+        } else if (!isEditing && e.ctrlKey && e.key.toLowerCase() === 'p') {
+            e.preventDefault();
+            if (pomoRunning) stopPomodoro();
+            else startCustomPomodoro('focus');
+        } else if (!isEditing && e.key === '?') {
+            e.preventDefault();
+            openShortcutsModal();
         }
     });
 

@@ -4,11 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DevWorkspace v7.0 - Studio Edition</title>
+    <meta name="description" content="Workspace personal para estudiar, organizar tareas y desarrollar proyectos.">
+    <meta name="theme-color" content="#060813">
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <link id="dynamic-google-fonts" rel="stylesheet" href="">
-    <link id="pwa-manifest-link" rel="manifest" href="">
+    <link rel="manifest" href="./manifest.json">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -71,6 +74,9 @@
             <button type="button" onclick="openShortcutsModal()" class="btn-pill-header" title="Atajos de teclado (?)">
                 ⌨️
             </button>
+            <button type="button" id="app-install-button" onclick="installApp()" class="btn-pill-header" style="display:none;">
+                📲 Instalar
+            </button>
 
             <div id="clock-container" onclick="syncRealTimeNetwork()" title="Clic para sincronizar hora real (Madrid)">
                 <div id="time">00:00:00</div>
@@ -85,6 +91,7 @@
          ========================================================== -->
     <div class="sub-toolbar">
         <div class="sub-toolbar-left">
+            <span id="connection-status" class="badge-version" role="status" aria-live="polite">Comprobando conexión…</span>
             <span class="toolbar-label">Perfil:</span>
             <select id="workspace-preset-select" onchange="applyWorkspacePreset(this.value)" class="compact-select">
                 <option value="default">🌐 Vista Completa</option>
@@ -150,6 +157,7 @@
                     <div class="card-header">
                         <span class="card-title-text">⏳ Entregas &amp; Exámenes</span>
                         <div class="card-actions">
+                            <button type="button" id="btn-enable-notifications" class="btn-ghost btn-sm" onclick="enableDeadlineNotifications()">🔔 Activar avisos</button>
                             <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-delivery')">✚ Nueva Entrega</button>
                         </div>
                     </div>
@@ -202,6 +210,8 @@
                                 <button type="button" id="filter-all" class="pill-btn active" onclick="setTaskFilter('all')">Todas</button>
                                 <button type="button" id="filter-pending" class="pill-btn" onclick="setTaskFilter('pending')">Pendientes</button>
                                 <button type="button" id="filter-done" class="pill-btn" onclick="setTaskFilter('done')">Hechas</button>
+                                <button type="button" id="filter-today" class="pill-btn" onclick="setTaskFilter('today')">Hoy</button>
+                                <button type="button" id="filter-overdue" class="pill-btn" onclick="setTaskFilter('overdue')">Vencidas</button>
                             </div>
                             <select onchange="setTaskSort(this.value)" class="compact-select">
                                 <option value="created">Recientes</option>
@@ -226,6 +236,12 @@
                                 <option value="low">🔵 Baja</option>
                             </select>
                             <input type="date" id="task-date" title="Fecha">
+                            <select id="task-repeat" title="Repetición">
+                                <option value="">Sin repetición</option>
+                                <option value="daily">Cada día</option>
+                                <option value="weekly">Cada semana</option>
+                                <option value="monthly">Cada mes</option>
+                            </select>
                             <button type="button" class="btn-green" onclick="addTask()">✚</button>
                         </div>
                     </div>
@@ -959,8 +975,8 @@
                 <h2>🔍 Buscador Global (Ctrl + K)</h2>
                 <button type="button" class="btn-icon" onclick="closeGlobalSearch()">✖</button>
             </div>
-            <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar tareas, proyectos HTML, comandos, bugs, servidores..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)">
-            <ul id="global-search-results" class="global-search-results"></ul>
+            <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar tareas, notas, entregas, flashcards, proyectos..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)" aria-label="Buscar en todo el espacio de trabajo">
+            <ul id="global-search-results" class="global-search-results" aria-live="polite"></ul>
         </div>
     </div>
 
@@ -1061,7 +1077,7 @@
     </div>
 
     <!-- TOASTS -->
-    <div id="toast-container" class="toast-container"></div>
+    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 
     <!-- ==========================================================
          FOOTER
