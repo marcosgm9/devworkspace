@@ -1,13 +1,10 @@
-/* ==========================================================================
-   DEVWORKSPACE v7.0 - STUDIO EDITION (CORE ENGINE)
-   Modular Workspaces, Live HTML/CSS/JS Sandbox, Dynamic Google Fonts,
-   Study Hub, Dev & SysAdmin Lab, Web Audio Focus & Cloud Sync
-   ========================================================================== */
+/* ==========================================================
+   DEVWORKSPACE v7.0 - STUDIO EDITION (app.js)
+   Sincronización en tiempo real con Firebase Auth + Firestore
+   ========================================================== */
 
-const STORAGE_KEY = 'devworkspace_v7_studio_data';
+const STORAGE_KEY = 'devworkspace_v7_state';
 const SNAPSHOTS_KEY = 'devworkspace_v7_snapshots';
-
-// Si tienes tu propia configuración de Firebase, pégala aquí; si no, funciona 100% en Modo Local.
 const FIREBASE_CONFIG = window.DEVWORKSPACE_FIREBASE_CONFIG || null;
 
 let firebaseApp = null;
@@ -15,177 +12,114 @@ let firebaseAuth = null;
 let firebaseDb = null;
 let currentUser = null;
 let isRegisterMode = false;
+let cloudSyncTimer = null;
+let unsubscribeFirestore = null;
+let isApplyingRemoteUpdate = false;
 
-let timeOffsetMs = 0;
-let activeWorkspace = 'cockpit';
-let scheduleViewMode = 'current';
-let activeNotesTab = 'general';
+let netTimeOffsetMs = 0;
+let scheduleViewMode = 'current'; // 'current' | 'table'
 let taskFilter = 'all';
 let taskSort = 'created';
 let deliveriesFilter = 'all';
-let studyHubTab = 'flashcards';
-let currentFlashcardIndex = 0;
-let flashcardFlipped = false;
+let activeNotesTab = 'general';
+let isNotesPreview = false;
+let activeStudioTab = 'html';
+let studioAutoRunTimer = null;
+let studioConsoleLogs = [];
 let examCramOnly = false;
-let currentStudioEditorTab = 'html';
-let currentPreviewFont = '';
-let loadedPreviewFont = 'JetBrains Mono';
+let activeStudyHubTab = 'flashcards';
+let currentFlashcardIdx = 0;
+let isFlashcardFlipped = false;
+let activeToolboxTab = 'format';
+let lastLoadedGoogleFont = 'JetBrains Mono';
+let globalSearchSelectedIdx = 0;
 
 // Pomodoro & Audio State
 let pomoInterval = null;
 let pomoSecondsLeft = 25 * 60;
-let pomoRunning = false;
 let pomoMode = 'focus';
-let pomoLinkedKanbanId = null;
-
+let pomoRunning = false;
 let audioCtx = null;
-let audioSourceNode = null;
-let audioGainNode = null;
+let audioNodes = [];
 let isAudioPlaying = false;
 
-// Estado Global Persistente
-let appState = createDefaultState();
-
+/* ----------------------------------------------------------
+   ESTADO POR DEFECTO Y FUSIÓN SEGURA
+   ---------------------------------------------------------- */
 function createDefaultState() {
     return {
+        activeWorkspace: 'cockpit',
         theme: 'cyberpunk',
         densityCompact: false,
-        uiScale: '1',
-        fontSans: "'Inter', system-ui, sans-serif",
-        fontMono: "'JetBrains Mono', monospace",
-        googleFontsFavorites: ['JetBrains Mono', 'Fira Code', 'Space Grotesk', 'Outfit', 'Orbitron'],
-        customTheme: {
-            name: 'Mi Tema',
-            bg: '#060813',
-            card: '#0d131f',
-            border: '#1e293b',
-            text: '#f1f5f9',
-            cyan: '#38bdf8',
-            violet: '#a855f7'
-        },
         weatherEnabled: false,
-        schedule: [
-            { id: 'sch1', day: 1, start: '08:30', end: '10:20', subject: 'Acceso a Datos', room: 'Aula 204' },
-            { id: 'sch2', day: 1, start: '10:50', end: '12:40', subject: 'Desarrollo de Interfaces', room: 'Aula 204' },
-            { id: 'sch3', day: 2, start: '08:30', end: '11:15', subject: 'Programación de Servicios y Procesos', room: 'Lab 2' },
-            { id: 'sch4', day: 3, start: '09:25', end: '12:40', subject: 'Sistemas de Gestión Empresarial', room: 'Aula 204' },
-            { id: 'sch5', day: 4, start: '08:30', end: '11:15', subject: 'Programación Multimedia y Móvil', room: 'Lab 2' },
-            { id: 'sch6', day: 5, start: '08:30', end: '10:20', subject: 'Empresa e Iniciativa Emprendedora', room: 'Aula 204' }
-        ],
+        appearance: {
+            scale: '1',
+            fontSans: 'Inter',
+            fontMono: 'JetBrains Mono',
+            customName: 'Mi Tema',
+            colors: {
+                bg: '#060813',
+                card: '#0d131f',
+                border: '#1e293b',
+                text: '#f1f5f9',
+                cyan: '#38bdf8',
+                violet: '#a855f7'
+            }
+        },
+        favoriteFonts: ['JetBrains Mono', 'Fira Code', 'Space Grotesk', 'Outfit'],
+        schedule: [],
         deliveries: [],
         tasks: [],
-        notes: {
-            general: '# Apuntes Rápidos\n\nBienvenido a **DevWorkspace v7.0 Studio Edition**.\n',
-            comandos: '# Comandos Frecuentes\n\n```bash\ndocker ps -a\nsystemctl status nginx\n```\n',
-            clases: '# Notas de Clase\n\n- Repasar patrones de diseño y arquitectura MVC.\n'
-        },
-        noteHistory: [],
-        stickyNote: '',
-        stats: {
-            focusMinutesToday: 0,
-            focusMinutesTotal: 0,
+        pomodoro: {
+            focusMins: 25,
+            breakMins: 5,
+            todayMinutes: 0,
+            totalMinutes: 0,
             lastStudyDate: '',
             streakDays: 0,
-            weeklyHistory: {}
+            historyByDate: {}
         },
-        studioCurrent: {
-            title: 'Landing Cyberpunk',
-            html: `<div class="hero-card">\n  <span class="badge">LIVE PREVIEW</span>\n  <h1>DevWorkspace Studio</h1>\n  <p>Edita HTML, CSS y JS en tiempo real y visualiza los resultados al instante.</p>\n  <button id="btn-ping">Probar Consola JS</button>\n</div>`,
-            css: `body {\n  margin: 0;\n  min-height: 100vh;\n  display: grid;\n  place-items: center;\n  background: #070b14;\n  color: #f1f5f9;\n  font-family: system-ui, sans-serif;\n}\n.hero-card {\n  background: #0f172a;\n  border: 1px solid #38bdf8;\n  border-radius: 12px;\n  padding: 28px;\n  max-width: 420px;\n  box-shadow: 0 0 25px rgba(56, 189, 248, 0.25);\n}\n.badge {\n  font-size: 11px;\n  color: #38bdf8;\n  border: 1px solid #38bdf8;\n  padding: 2px 8px;\n  border-radius: 4px;\n}\nbutton {\n  margin-top: 12px;\n  background: #38bdf8;\n  color: #040711;\n  border: none;\n  padding: 8px 14px;\n  border-radius: 6px;\n  font-weight: 700;\n  cursor: pointer;\n}`,
-            js: `console.log("Sandbox inicializado correctamente");\ndocument.getElementById("btn-ping")?.addEventListener("click", () => {\n  console.log("Botón pulsado a las " + new Date().toLocaleTimeString());\n});`
+        notes: {
+            general: '',
+            comandos: '',
+            clases: '',
+            history: []
         },
-        studioProjects: [],
-        kanban: [
-            { id: 'kb1', title: 'Sockets TCP/UDP en Java', subject: 'PSP', pomosEst: 3, pomosDone: 1, prio: 'high', status: 'doing' },
-            { id: 'kb2', title: 'Consultas JPQL e Hibernate', subject: 'Acceso a Datos', pomosEst: 4, pomosDone: 0, prio: 'medium', status: 'todo' }
-        ],
-        gradeSubjects: [
-            {
-                id: 'gs1',
-                name: 'Acceso a Datos',
-                target: 6.0,
-                credits: 6,
-                items: [
-                    { id: 'gi1', name: 'Examen T1-T2', weight: 40, score: 7.2 },
-                    { id: 'gi2', name: 'Práctica JDBC/ORM', weight: 30, score: 8.5 }
-                ]
-            }
-        ],
-        flashcards: [
-            { id: 'fc1', subject: 'PSP', q: '¿Diferencia principal entre TCP y UDP?', a: 'TCP es orientado a conexión y garantiza entrega ordenada; UDP no tiene conexión y prioriza velocidad.', mastered: false },
-            { id: 'fc2', subject: 'Redes', q: '¿Qué máscara corresponde a un prefijo /26?', a: '255.255.255.192 (64 direcciones totales, 62 hosts útiles).', mastered: false }
-        ],
+        stickyNote: '',
+        studio: {
+            currentTitle: 'Mi Proyecto Web',
+            html: '<div class="card">\n  <h1>Hola DevWorkspace</h1>\n  <p>Edita HTML, CSS y JS en tiempo real.</p>\n  <button id="btn">Pulsar</button>\n</div>',
+            css: 'body {\n  font-family: system-ui, sans-serif;\n  background: #0f172a;\n  color: #f8fafc;\n  display: grid;\n  place-items: center;\n  min-height: 100vh;\n  margin: 0;\n}\n.card {\n  background: #1e293b;\n  padding: 2rem;\n  border-radius: 12px;\n  border: 1px solid #38bdf8;\n  text-align: center;\n}\nbutton {\n  background: #38bdf8;\n  color: #0f172a;\n  border: none;\n  padding: 8px 16px;\n  border-radius: 6px;\n  font-weight: bold;\n  cursor: pointer;\n}',
+            js: 'document.getElementById("btn")?.addEventListener("click", () => {\n  console.log("¡Botón pulsado a las " + new Date().toLocaleTimeString() + "!");\n});',
+            previewFont: '',
+            savedProjects: []
+        },
+        kanban: [],
+        grades: [],
+        flashcards: [],
         bugLogs: [],
         doubts: [],
-        teamProjects: [],
-        servers: [
-            { id: 'srv1', name: 'Homelab Debian', ip: '192.168.1.50', port: '22', user: 'root', logs: '/var/log/nginx/error.log' }
-        ],
+        projects: [],
+        servers: [],
         infraChangelog: [],
-        customSnippets: [
-            { id: 'sn1', cat: 'SSH', title: 'Conectar por SSH con variables', cmd: 'ssh -p {{PORT}} {{USER}}@{{IP}}' },
-            { id: 'sn2', cat: 'Docker', title: 'Ver logs en vivo de contenedor', cmd: 'docker logs -f --tail 100 <contenedor>' },
-            { id: 'sn3', cat: 'Linux', title: 'Puertos TCP/UDP en escucha', cmd: 'ss -tulnp' },
-            { id: 'sn4', cat: 'Git', title: 'Historial compacto en gráfico', cmd: 'git log --oneline --graph --decorate -n 15' }
+        snippets: [
+            { id: 's1', title: 'Conexión SSH estándar', cat: 'Linux', cmd: 'ssh {{USER}}@{{IP}} -p {{PORT}}' },
+            { id: 's2', title: 'Contenedores Docker activos', cat: 'Docker', cmd: 'docker ps -a --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
+            { id: 's3', title: 'Ver puertos en escucha', cat: 'Redes', cmd: 'ss -tulpn' }
         ],
         bookmarks: [
-            { id: 'bm1', name: 'MDN Web Docs', url: 'https://developer.mozilla.org/es/' },
-            { id: 'bm2', name: 'Google Fonts', url: 'https://fonts.google.com/' },
-            { id: 'bm3', name: 'GitHub', url: 'https://github.com/' }
+            { id: 'b1', name: 'MDN Web Docs', url: 'https://developer.mozilla.org/es/' },
+            { id: 'b2', name: 'GitHub', url: 'https://github.com' }
         ]
     };
 }
 
-/* ==========================================================================
-   INICIALIZACIÓN Y PERSISTENCIA
-   ========================================================================== */
-document.addEventListener('DOMContentLoaded', () => {
-    loadState();
-    applyAllAppearance();
-    renderAll();
-    initClockAndNetwork();
-    initStudioListeners();
-    initKeyboardShortcuts();
-    explainCronExpr();
-    updateChmodCalc();
-    initFirebaseIfConfigured();
-    setTimeout(runStudioPreview, 120);
-});
-
-function loadState() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-            const parsed = JSON.parse(raw);
-            appState = deepMerge(createDefaultState(), parsed);
-        }
-    } catch (err) {
-        console.error('Error cargando estado local:', err);
-    }
-    checkDailyStatsRollover();
-}
-
-function saveState(syncCloud = true) {
-    try {
-        const json = JSON.stringify(appState);
-        localStorage.setItem(STORAGE_KEY, json);
-        updateStorageQuotaBadge(json.length);
-        if (syncCloud && currentUser && firebaseDb) {
-            syncToFirebaseCloud();
-        }
-    } catch (err) {
-        showToast('Error guardando datos locales', 'error');
-    }
-}
-
 function deepMerge(target, source) {
-    if (typeof target !== 'object' || target === null) return source;
-    if (typeof source !== 'object' || source === null) return target;
-    if (Array.isArray(target)) return Array.isArray(source) ? source : target;
-    const output = { ...target };
+    if (!source || typeof source !== 'object') return target;
+    const output = Array.isArray(target) ? [...target] : { ...target };
     for (const key of Object.keys(source)) {
-        if (key in target) {
-            output[key] = deepMerge(target[key], source[key]);
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            output[key] = deepMerge(target[key] || {}, source[key]);
         } else {
             output[key] = source[key];
         }
@@ -193,58 +127,220 @@ function deepMerge(target, source) {
     return output;
 }
 
-function updateStorageQuotaBadge(bytes) {
-    const badge = document.getElementById('storage-quota-badge');
-    if (badge) {
-        badge.textContent = `Storage: ${(bytes / 1024).toFixed(1)} KB`;
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return createDefaultState();
+        return deepMerge(createDefaultState(), JSON.parse(raw));
+    } catch (e) {
+        console.warn('Error cargando estado local:', e);
+        return createDefaultState();
     }
 }
 
-/* ==========================================================================
-   NAVEGACIÓN DE WORKSPACES Y PERFILES
-   ========================================================================== */
-window.switchWorkspace = function (wsName) {
-    activeWorkspace = wsName;
-    document.querySelectorAll('.workspace-view').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.ws-tab').forEach(btn => btn.classList.remove('active'));
+let appState = loadState();
 
-    const targetView = document.getElementById(`ws-${wsName}`);
-    const targetBtn = document.querySelector(`.ws-tab[data-ws="${wsName}"]`);
-    if (targetView) targetView.classList.add('active');
-    if (targetBtn) targetBtn.classList.add('active');
+function saveState(skipCloud = false) {
+    try {
+        const serialized = JSON.stringify(appState);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        updateStorageQuotaBadge(serialized.length);
+    } catch (e) {
+        showToast('Error guardando en LocalStorage (cuota llena)', 'error');
+    }
+    if (!skipCloud && !isApplyingRemoteUpdate) {
+        syncToFirebaseCloud();
+    }
+}
 
-    if (wsName === 'studio') {
-        runStudioPreview();
+/* ----------------------------------------------------------
+   FIREBASE AUTH + FIRESTORE REAL-TIME SYNC
+   ---------------------------------------------------------- */
+async function initFirebaseIfConfigured() {
+    if (!FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey) return;
+    try {
+        const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+        const { getAuth, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+        const { getFirestore, doc, onSnapshot, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+        firebaseApp = initializeApp(FIREBASE_CONFIG);
+        firebaseAuth = getAuth(firebaseApp);
+        firebaseDb = getFirestore(firebaseApp);
+
+        onAuthStateChanged(firebaseAuth, (user) => {
+            currentUser = user;
+            const profWidget = document.getElementById('user-profile-widget');
+            const loginBtn = document.getElementById('btn-cloud-login');
+
+            if (unsubscribeFirestore) {
+                unsubscribeFirestore();
+                unsubscribeFirestore = null;
+            }
+
+            if (user) {
+                if (profWidget) profWidget.style.display = 'flex';
+                if (loginBtn) loginBtn.style.display = 'none';
+                const userNameEl = document.getElementById('user-name');
+                if (userNameEl) userNameEl.textContent = user.email || 'Usuario';
+
+                const userDocRef = doc(firebaseDb, 'workspaces', user.uid);
+                let firstSnap = true;
+
+                unsubscribeFirestore = onSnapshot(userDocRef, async (snap) => {
+                    const ind = document.getElementById('cloud-sync-indicator');
+                    if (snap.exists()) {
+                        if (!snap.metadata.hasPendingWrites) {
+                            isApplyingRemoteUpdate = true;
+                            appState = deepMerge(createDefaultState(), snap.data());
+                            saveState(true);
+                            applyAllAppearance();
+                            renderAll();
+                            isApplyingRemoteUpdate = false;
+                            if (ind) {
+                                ind.textContent = 'Cloud OK';
+                                ind.className = 'sync-badge';
+                            }
+                            if (firstSnap) {
+                                showToast('Datos sincronizados desde la nube', 'success');
+                            }
+                        }
+                    } else if (firstSnap) {
+                        // Primera vez de este usuario: subir su estado local actual
+                        await setDoc(userDocRef, appState);
+                        if (ind) {
+                            ind.textContent = 'Cloud OK';
+                            ind.className = 'sync-badge';
+                        }
+                    }
+                    firstSnap = false;
+                }, (err) => {
+                    console.error('Error Firestore onSnapshot:', err);
+                    const ind = document.getElementById('cloud-sync-indicator');
+                    if (ind) {
+                        ind.textContent = 'Sync Error';
+                        ind.className = 'sync-badge sync-error';
+                    }
+                    showToast('Error de permisos o red en Firestore', 'error');
+                });
+            } else {
+                if (profWidget) profWidget.style.display = 'none';
+                if (loginBtn) loginBtn.style.display = 'inline-flex';
+            }
+        });
+    } catch (e) {
+        console.warn('No se pudo iniciar Firebase:', e);
+    }
+}
+
+function syncToFirebaseCloud() {
+    if (!currentUser || !firebaseDb || isApplyingRemoteUpdate) return;
+    const ind = document.getElementById('cloud-sync-indicator');
+    if (ind) {
+        ind.textContent = 'Guardando...';
+        ind.className = 'sync-badge sync-saving';
+    }
+
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(async () => {
+        try {
+            const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+            await setDoc(doc(firebaseDb, 'workspaces', currentUser.uid), appState);
+            if (ind) {
+                ind.textContent = 'Cloud OK';
+                ind.className = 'sync-badge';
+            }
+        } catch (err) {
+            console.error('Error guardando en Firestore:', err);
+            if (ind) {
+                ind.textContent = 'Sync Error';
+                ind.className = 'sync-badge sync-error';
+            }
+        }
+    }, 1100);
+}
+
+window.openAuthModal = function () {
+    document.getElementById('auth-modal').style.display = 'flex';
+    document.getElementById('auth-email')?.focus();
+};
+
+window.closeAuthModal = function () {
+    document.getElementById('auth-modal').style.display = 'none';
+};
+
+window.continueAsGuest = function () {
+    closeAuthModal();
+    showToast('Trabajando en modo local', 'info');
+};
+
+window.toggleAuthMode = function () {
+    isRegisterMode = !isRegisterMode;
+    document.getElementById('auth-title').textContent = isRegisterMode ? 'Crear Cuenta Cloud' : 'DevWorkspace Cloud';
+    document.getElementById('auth-main-btn').textContent = isRegisterMode ? '✨ Registrarse' : '🔑 Iniciar Sesión';
+    document.querySelector('.btn-link-action').textContent = isRegisterMode
+        ? '¿Ya tienes cuenta? Inicia sesión aquí'
+        : '¿No tienes cuenta? Regístrate aquí';
+};
+
+window.handleEmailAuth = async function () {
+    if (!firebaseAuth) {
+        showToast('Firebase no está configurado aún', 'error');
+        return;
+    }
+    const email = document.getElementById('auth-email').value.trim();
+    const pass = document.getElementById('auth-password').value;
+    if (!email || !pass) {
+        showToast('Introduce correo y contraseña', 'error');
+        return;
+    }
+    try {
+        const { signInWithEmailAndPassword, createUserWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+        if (isRegisterMode) {
+            await createUserWithEmailAndPassword(firebaseAuth, email, pass);
+            showToast('Cuenta creada y vinculada', 'success');
+        } else {
+            await signInWithEmailAndPassword(firebaseAuth, email, pass);
+            showToast('Sesión iniciada correctamente', 'success');
+        }
+        closeAuthModal();
+    } catch (e) {
+        showToast('Error Auth: ' + (e.code || e.message), 'error');
     }
 };
 
-window.applyWorkspacePreset = function (preset) {
-    const allCards = ['card-schedule', 'card-deliveries', 'card-tasks', 'card-pomodoro', 'card-notes'];
-    allCards.forEach(id => document.getElementById(id)?.classList.remove('hidden-card'));
+window.logoutUser = async function () {
+    if (!firebaseAuth) return;
+    const { signOut } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+    await signOut(firebaseAuth);
+    showToast('Sesión cerrada', 'info');
+};
 
-    if (preset === 'today') {
-        switchWorkspace('cockpit');
-        document.getElementById('card-notes')?.classList.add('hidden-card');
-        setDeliveriesFilter('soon');
-        setTaskFilter('pending');
-        showToast('Perfil "Solo Hoy" activado');
-    } else if (preset === 'exam') {
-        switchWorkspace('academy');
-        examCramOnly = true;
-        renderKanban();
-        showToast('Perfil "Modo Examen" activado');
-    } else if (preset === 'dev') {
-        switchWorkspace('studio');
-        showToast('Perfil "Modo Código" activado');
-    } else if (preset === 'sysadmin') {
-        switchWorkspace('devlab');
-        showToast('Perfil "Modo Redes / Lab" activado');
-    } else {
-        switchWorkspace('cockpit');
-        examCramOnly = false;
-        renderKanban();
-        showToast('Vista Completa restaurada');
+/* ----------------------------------------------------------
+   NAVEGACIÓN DE WORKSPACES, MODOS Y UTILIDADES UI
+   ---------------------------------------------------------- */
+window.switchWorkspace = function (wsName) {
+    appState.activeWorkspace = wsName;
+    document.querySelectorAll('.ws-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.ws === wsName);
+    });
+    document.querySelectorAll('.workspace-view').forEach(view => {
+        view.classList.toggle('active', view.id === 'ws-' + wsName);
+    });
+    if (wsName === 'studio') {
+        runStudioPreview();
     }
+    saveState();
+};
+
+window.toggleForm = function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = el.style.display === 'block' ? 'none' : 'block';
+};
+
+window.togglePresentationMode = function () {
+    document.body.classList.toggle('presentation-mode-active');
+    document.getElementById('btn-present-mode')?.classList.toggle('active');
 };
 
 window.toggleZenMode = function () {
@@ -252,714 +348,133 @@ window.toggleZenMode = function () {
     document.getElementById('btn-zen-mode')?.classList.toggle('active');
 };
 
-window.togglePresentationMode = function () {
-    document.body.classList.toggle('presentation-mode-active');
-    const active = document.body.classList.contains('presentation-mode-active');
-    document.getElementById('btn-present-mode')?.classList.toggle('active', active);
-    showToast(active ? '🛡️ Modo Clase activado: datos sensibles ocultos' : 'Modo Clase desactivado');
-};
-
 window.toggleDensityMode = function () {
     appState.densityCompact = !appState.densityCompact;
-    document.body.classList.toggle('density-compact', appState.densityCompact);
-    const btn = document.getElementById('btn-density-mode');
-    if (btn) btn.textContent = appState.densityCompact ? '📐 Compacto' : '📐 Aireado';
-    saveState(false);
-};
-
-/* ==========================================================================
-   GOOGLE FONTS DYNAMIC STUDIO & TEMAS
-   ========================================================================== */
-function applyAllAppearance() {
-    document.documentElement.setAttribute('data-theme', appState.theme || 'cyberpunk');
-    const themeSel = document.getElementById('theme-select');
-    if (themeSel) themeSel.value = appState.theme || 'cyberpunk';
-
-    document.body.classList.toggle('density-compact', !!appState.densityCompact);
-    const densBtn = document.getElementById('btn-density-mode');
-    if (densBtn) densBtn.textContent = appState.densityCompact ? '📐 Compacto' : '📐 Aireado';
-
-    document.documentElement.style.setProperty('--ui-scale', appState.uiScale || '1');
-    const scaleSel = document.getElementById('ui-scale-select');
-    if (scaleSel) scaleSel.value = appState.uiScale || '1';
-
-    document.documentElement.style.setProperty('--font-sans', appState.fontSans);
-    document.documentElement.style.setProperty('--font-mono', appState.fontMono);
-
-    if (appState.theme === 'custom') {
-        applyCustomThemeVariables();
-    }
-
-    // Cargar todas las fuentes favoritas en <head>
-    if (appState.googleFontsFavorites?.length) {
-        injectGoogleFontsLink(appState.googleFontsFavorites);
-    }
-    renderGoogleFontsFavorites();
-}
-
-function injectGoogleFontsLink(fontNames) {
-    const linkEl = document.getElementById('dynamic-google-fonts');
-    if (!linkEl || !fontNames.length) return;
-    const families = fontNames
-        .map(f => `family=${encodeURIComponent(f.trim()).replace(/%20/g, '+')}:wght@400;500;600;700`)
-        .join('&');
-    linkEl.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
-}
-
-window.loadGoogleFontByName = function () {
-    const input = document.getElementById('gf-input-name');
-    const name = (input?.value || '').trim();
-    if (!name) return showToast('Escribe el nombre de una Google Font', 'error');
-
-    loadedPreviewFont = name;
-    const allToLoad = Array.from(new Set([...(appState.googleFontsFavorites || []), name]));
-    injectGoogleFontsLink(allToLoad);
-
-    const label = document.getElementById('gf-active-preview-label');
-    if (label) label.textContent = `Vista previa: ${name}`;
-    updateFontPlaygroundStyle();
-    showToast(`Fuente "${name}" cargada desde Google Fonts`, 'success');
-};
-
-window.quickLoadGoogleFont = function (name) {
-    const input = document.getElementById('gf-input-name');
-    if (input) input.value = name;
-    loadGoogleFontByName();
-};
-
-window.updateFontPlaygroundStyle = function () {
-    const sample = document.getElementById('gf-preview-sample');
-    const size = document.getElementById('gf-preview-size')?.value || 18;
-    if (sample) {
-        sample.style.fontFamily = `'${loadedPreviewFont}', monospace, sans-serif`;
-        sample.style.fontSize = `${size}px`;
-    }
-};
-
-window.saveGoogleFontFavorite = function () {
-    const name = (document.getElementById('gf-input-name')?.value || loadedPreviewFont).trim();
-    if (!name) return;
-    if (!appState.googleFontsFavorites.includes(name)) {
-        appState.googleFontsFavorites.push(name);
-        injectGoogleFontsLink(appState.googleFontsFavorites);
-        renderGoogleFontsFavorites();
-        saveState();
-        showToast(`⭐ "${name}" guardada en favoritos`, 'success');
-    } else {
-        showToast('Esa fuente ya está en favoritos');
-    }
-};
-
-window.removeGoogleFontFavorite = function (name) {
-    appState.googleFontsFavorites = appState.googleFontsFavorites.filter(f => f !== name);
-    renderGoogleFontsFavorites();
-    saveState();
-};
-
-function renderGoogleFontsFavorites() {
-    const container = document.getElementById('gf-favorites-list');
-    const studioSel = document.getElementById('studio-font-select');
-
-    if (container) {
-        container.innerHTML = appState.googleFontsFavorites.map(font => `
-            <span class="rubric-chip" style="font-family:'${escapeHtml(font)}',sans-serif;" onclick="quickLoadGoogleFont('${escapeHtml(font)}')">
-                ${escapeHtml(font)}
-                <button type="button" class="btn-icon" onclick="event.stopPropagation(); removeGoogleFontFavorite('${escapeHtml(font)}')" title="Quitar">×</button>
-            </span>
-        `).join('');
-    }
-
-    if (studioSel) {
-        const currentVal = studioSel.value;
-        studioSel.innerHTML = `<option value="">🔤 Fuente Preview (Default)</option>` +
-            appState.googleFontsFavorites.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
-        studioSel.value = currentVal;
-    }
-}
-
-window.applyLoadedFontToUi = function (target) {
-    const fontValue = `'${loadedPreviewFont}', sans-serif`;
-    if (target === 'sans') {
-        appState.fontSans = fontValue;
-        document.documentElement.style.setProperty('--font-sans', fontValue);
-        showToast(`Fuente "${loadedPreviewFont}" aplicada a toda la Interfaz`, 'success');
-    } else {
-        appState.fontMono = `'${loadedPreviewFont}', monospace`;
-        document.documentElement.style.setProperty('--font-mono', appState.fontMono);
-        showToast(`Fuente "${loadedPreviewFont}" aplicada a Código y Terminal`, 'success');
-    }
-    saveState();
-};
-
-window.applyLoadedFontToStudio = function () {
-    if (!appState.googleFontsFavorites.includes(loadedPreviewFont)) {
-        appState.googleFontsFavorites.push(loadedPreviewFont);
-        renderGoogleFontsFavorites();
-    }
-    currentPreviewFont = loadedPreviewFont;
-    const studioSel = document.getElementById('studio-font-select');
-    if (studioSel) studioSel.value = loadedPreviewFont;
-    switchWorkspace('studio');
-    runStudioPreview();
-    showToast(`Fuente "${loadedPreviewFont}" aplicada en Live Code Studio`, 'success');
-};
-
-window.resetAppearanceDefaults = function () {
-    appState.fontSans = "'Inter', system-ui, sans-serif";
-    appState.fontMono = "'JetBrains Mono', monospace";
-    appState.uiScale = '1';
     applyAllAppearance();
     saveState();
-    showToast('Tipografía y escala restauradas');
 };
 
-document.getElementById('theme-select')?.addEventListener('change', (e) => {
-    appState.theme = e.target.value;
-    document.documentElement.setAttribute('data-theme', appState.theme);
-    if (appState.theme === 'custom') applyCustomThemeVariables();
-    saveState();
-});
+window.applyWorkspacePreset = function (preset) {
+    const cards = ['card-schedule', 'card-deliveries', 'card-tasks', 'card-pomodoro', 'card-notes'];
+    cards.forEach(id => document.getElementById(id)?.classList.remove('hidden-card'));
 
-window.updateAppearanceSettings = function () {
-    appState.uiScale = document.getElementById('ui-scale-select')?.value || '1';
-    document.documentElement.style.setProperty('--ui-scale', appState.uiScale);
-    saveState();
-};
-
-window.activateCustomTheme = function () {
-    appState.customTheme = {
-        name: document.getElementById('custom-theme-name')?.value || 'Mi Tema',
-        bg: document.getElementById('cp-bg')?.value || '#060813',
-        card: document.getElementById('cp-card')?.value || '#0d131f',
-        border: document.getElementById('cp-border')?.value || '#1e293b',
-        text: document.getElementById('cp-text')?.value || '#f1f5f9',
-        cyan: document.getElementById('cp-cyan')?.value || '#38bdf8',
-        violet: document.getElementById('cp-violet')?.value || '#a855f7'
-    };
-    appState.theme = 'custom';
-    const sel = document.getElementById('theme-select');
-    if (sel) sel.value = 'custom';
-    document.documentElement.setAttribute('data-theme', 'custom');
-    applyCustomThemeVariables();
-    saveState();
-    showToast(`Tema "${appState.customTheme.name}" activado`, 'success');
-};
-
-function applyCustomThemeVariables() {
-    const c = appState.customTheme;
-    if (!c) return;
-    const root = document.documentElement.style;
-    root.setProperty('--bg-color', c.bg);
-    root.setProperty('--card-bg', c.card);
-    root.setProperty('--card-border', c.border);
-    root.setProperty('--text-main', c.text);
-    root.setProperty('--accent-cyan', c.cyan);
-    root.setProperty('--accent-violet', c.violet);
-}
-
-/* ==========================================================================
-   WORKSPACE 2: LIVE CODE STUDIO (HTML / CSS / JS SANDBOX)
-   ========================================================================== */
-let studioAutoRunTimer = null;
-
-function initStudioListeners() {
-    const htmlEl = document.getElementById('code-html');
-    const cssEl = document.getElementById('code-css');
-    const jsEl = document.getElementById('code-js');
-    const titleEl = document.getElementById('studio-project-title');
-
-    if (htmlEl) htmlEl.value = appState.studioCurrent.html || '';
-    if (cssEl) cssEl.value = appState.studioCurrent.css || '';
-    if (jsEl) jsEl.value = appState.studioCurrent.js || '';
-    if (titleEl) titleEl.value = appState.studioCurrent.title || 'Mi Proyecto Web';
-
-    [htmlEl, cssEl, jsEl].forEach(el => {
-        if (!el) return;
-        // Soporte real para tecla Tab (2 espacios)
-        el.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                const start = el.selectionStart;
-                const end = el.selectionEnd;
-                el.value = el.value.substring(0, start) + '  ' + el.value.substring(end);
-                el.selectionStart = el.selectionEnd = start + 2;
-            }
-        });
-
-        el.addEventListener('input', () => {
-            appState.studioCurrent.html = htmlEl.value;
-            appState.studioCurrent.css = cssEl.value;
-            appState.studioCurrent.js = jsEl.value;
-            appState.studioCurrent.title = titleEl?.value || 'Mi Proyecto Web';
-
-            if (document.getElementById('studio-autorun')?.checked) {
-                clearTimeout(studioAutoRunTimer);
-                studioAutoRunTimer = setTimeout(runStudioPreview, 380);
-            }
-        });
-    });
-
-    // Escuchar mensajes de consola enviados desde el iframe sandbox
-    window.addEventListener('message', (event) => {
-        if (event.data && event.data.source === 'devworkspace-sandbox') {
-            appendStudioConsoleLine(event.data.level, event.data.args.join(' '));
-        }
-    });
-
-    renderSavedStudioProjects();
-}
-
-window.switchStudioEditorTab = function (tab) {
-    currentStudioEditorTab = tab;
-    ['html', 'css', 'js', 'saved'].forEach(t => {
-        document.getElementById(`ed-tab-${t}`)?.classList.toggle('active', t === tab);
-        document.getElementById(`ed-pane-${t}`)?.classList.toggle('active', t === tab);
-    });
-    if (tab === 'saved') renderSavedStudioProjects();
-};
-
-window.runStudioPreview = function () {
-    const iframe = document.getElementById('studio-preview-iframe');
-    if (!iframe) return;
-
-    const html = document.getElementById('code-html')?.value || '';
-    const css = document.getElementById('code-css')?.value || '';
-    const js = document.getElementById('code-js')?.value || '';
-
-    clearStudioConsole();
-
-    const fontLink = currentPreviewFont
-        ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(currentPreviewFont).replace(/%20/g, '+')}:wght@400;600;700&display=swap">
-           <style>body, button, input, select, textarea { font-family: '${currentPreviewFont}', sans-serif !important; }</style>`
-        : '';
-
-    const consoleHookScript = `
-        <script>
-        (function() {
-            const send = (level, args) => {
-                try {
-                    window.parent.postMessage({
-                        source: 'devworkspace-sandbox',
-                        level: level,
-                        args: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a))
-                    }, '*');
-                } catch (e) {}
-            };
-            const origLog = console.log;
-            const origWarn = console.warn;
-            const origErr = console.error;
-            console.log = (...a) => { origLog.apply(console, a); send('log', a); };
-            console.warn = (...a) => { origWarn.apply(console, a); send('warn', a); };
-            console.error = (...a) => { origErr.apply(console, a); send('error', a); };
-            window.onerror = (msg, src, line) => {
-                send('error', ['Error línea ' + line + ': ' + msg]);
-            };
-        })();
-        <\/script>
-    `;
-
-    const fullDoc = `<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    ${fontLink}
-    <style>${css}</style>
-    ${consoleHookScript}
-</head>
-<body>
-    ${html}
-    <script>
-    try {
-        ${js}
-    } catch (err) {
-        console.error(err.message);
-    }
-    <\/script>
-</body>
-</html>`;
-
-    iframe.srcdoc = fullDoc;
-    saveState(false);
-};
-
-function appendStudioConsoleLine(level, text) {
-    const out = document.getElementById('studio-console-output');
-    const countBadge = document.getElementById('studio-console-count');
-    if (!out) return;
-
-    const line = document.createElement('div');
-    line.className = `console-line-${level}`;
-    const prefix = level === 'error' ? '✖' : level === 'warn' ? '⚠' : '›';
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${prefix} ${text}`;
-    out.appendChild(line);
-    out.scrollTop = out.scrollHeight;
-
-    if (countBadge) {
-        countBadge.textContent = `${out.children.length} logs`;
-    }
-}
-
-window.clearStudioConsole = function () {
-    const out = document.getElementById('studio-console-output');
-    const countBadge = document.getElementById('studio-console-count');
-    if (out) out.innerHTML = '';
-    if (countBadge) countBadge.textContent = '0 logs';
-};
-
-window.setStudioViewport = function (widthVal) {
-    const iframe = document.getElementById('studio-preview-iframe');
-    if (iframe) iframe.style.width = widthVal;
-
-    document.getElementById('vp-desktop')?.classList.toggle('active', widthVal === '100%');
-    document.getElementById('vp-tablet')?.classList.toggle('active', widthVal === '768px');
-    document.getElementById('vp-mobile')?.classList.toggle('active', widthVal === '375px');
-};
-
-window.applyFontToStudioPreview = function (fontName) {
-    currentPreviewFont = fontName;
-    runStudioPreview();
-};
-
-window.toggleStudioFullscreen = function () {
-    document.getElementById('studio-workbench')?.classList.toggle('studio-fullscreen');
-};
-
-window.injectStudioCdn = function (cdnKey) {
-    const snippets = {
-        tailwind: '<script src="https://cdn.tailwindcss.com"></script>\n',
-        bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">\n',
-        alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>\n',
-        chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>\n'
-    };
-    const htmlEl = document.getElementById('code-html');
-    if (htmlEl && snippets[cdnKey]) {
-        htmlEl.value = snippets[cdnKey] + htmlEl.value;
-        runStudioPreview();
-        showToast(`CDN (${cdnKey}) inyectado en HTML`, 'success');
-    }
-};
-
-window.loadStudioTemplate = function (tplKey) {
-    const templates = {
-        blank: {
-            title: 'HTML5 Limpio',
-            html: '<main class="container">\n  <h1>Hola Mundo</h1>\n  <p>Empieza a construir tu interfaz aquí.</p>\n</main>',
-            css: 'body { font-family: system-ui, sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc; }',
-            js: 'console.log("Plantilla HTML5 cargada");'
-        },
-        cybercard: {
-            title: 'Tarjeta Cyberpunk',
-            html: '<div class="cyber-panel">\n  <h2>SYSTEM_READY // 2026</h2>\n  <p>Estado de nodos: 100% operativos.</p>\n</div>',
-            css: 'body { background:#050811; color:#38bdf8; font-family:monospace; display:grid; place-items:center; height:100vh; margin:0; }\n.cyber-panel { border:1px solid #38bdf8; padding:24px; box-shadow:0 0 20px rgba(56,189,248,0.3); }',
-            js: ''
-        },
-        flexgrid: {
-            title: 'Layout Grid + Flex',
-            html: '<div class="grid">\n  <div class="box">1</div>\n  <div class="box">2</div>\n  <div class="box">3</div>\n</div>',
-            css: 'body { background:#111827; color:#fff; font-family:sans-serif; padding:20px; }\n.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; }\n.box { background:#1e293b; border:1px solid #38bdf8; padding:30px; text-align:center; border-radius:8px; }',
-            js: ''
-        },
-        domlab: {
-            title: 'Práctica DOM JS',
-            html: '<div class="app">\n  <input id="item-inp" placeholder="Nuevo elemento...">\n  <button id="add-btn">Añadir</button>\n  <ul id="list"></ul>\n</div>',
-            css: 'body { font-family:sans-serif; background:#0f172a; color:#fff; padding:20px; }\ninput, button { padding:8px; border-radius:6px; border:1px solid #334155; }',
-            js: 'const inp = document.getElementById("item-inp");\nconst list = document.getElementById("list");\ndocument.getElementById("add-btn").onclick = () => {\n  if (!inp.value.trim()) return;\n  const li = document.createElement("li");\n  li.textContent = inp.value;\n  list.appendChild(li);\n  console.log("Añadido:", inp.value);\n  inp.value = "";\n};'
-        }
-    };
-
-    const t = templates[tplKey];
-    if (!t) return;
-    document.getElementById('studio-project-title').value = t.title;
-    document.getElementById('code-html').value = t.html;
-    document.getElementById('code-css').value = t.css;
-    document.getElementById('code-js').value = t.js;
-    runStudioPreview();
-    showToast(`Plantilla "${t.title}" cargada`);
-};
-
-window.saveStudioProject = function () {
-    const title = (document.getElementById('studio-project-title')?.value || 'Sin título').trim();
-    const html = document.getElementById('code-html')?.value || '';
-    const css = document.getElementById('code-css')?.value || '';
-    const js = document.getElementById('code-js')?.value || '';
-
-    const existingIdx = appState.studioProjects.findIndex(p => p.title.toLowerCase() === title.toLowerCase());
-    const projObj = {
-        id: existingIdx >= 0 ? appState.studioProjects[existingIdx].id : 'sp_' + Date.now(),
-        title,
-        html,
-        css,
-        js,
-        updatedAt: new Date().toLocaleString('es-ES')
-    };
-
-    if (existingIdx >= 0) {
-        appState.studioProjects[existingIdx] = projObj;
+    if (preset === 'today') {
+        switchWorkspace('cockpit');
+        document.getElementById('card-notes')?.classList.add('hidden-card');
+    } else if (preset === 'exam') {
+        switchWorkspace('academy');
+    } else if (preset === 'dev') {
+        switchWorkspace('studio');
+    } else if (preset === 'sysadmin') {
+        switchWorkspace('devlab');
     } else {
-        appState.studioProjects.unshift(projObj);
+        switchWorkspace('cockpit');
     }
-
-    saveState();
-    renderSavedStudioProjects();
-    showToast(`💾 Proyecto "${title}" guardado`, 'success');
 };
 
-function renderSavedStudioProjects() {
-    const list = document.getElementById('studio-saved-projects-list');
-    if (!list) return;
-
-    if (!appState.studioProjects.length) {
-        list.innerHTML = `<p class="mono-muted">No tienes proyectos web guardados aún. Pulsa "💾 Guardar" en la barra superior.</p>`;
-        return;
-    }
-
-    list.innerHTML = appState.studioProjects.map(p => `
-        <div class="hub-item-card">
-            <div class="form-inline-between">
-                <strong>${escapeHtml(p.title)}</strong>
-                <span class="mono-muted">${escapeHtml(p.updatedAt)}</span>
-            </div>
-            <div class="filter-pills-row">
-                <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject('${p.id}')">📂 Abrir</button>
-                <button type="button" class="btn-danger btn-sm" onclick="deleteSavedStudioProject('${p.id}')">🗑️ Eliminar</button>
-            </div>
-        </div>
-    `).join('');
+function showToast(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3200);
 }
 
-window.loadSavedStudioProject = function (id) {
-    const proj = appState.studioProjects.find(p => p.id === id);
-    if (!proj) return;
-    document.getElementById('studio-project-title').value = proj.title;
-    document.getElementById('code-html').value = proj.html;
-    document.getElementById('code-css').value = proj.css;
-    document.getElementById('code-js').value = proj.js;
-    switchStudioEditorTab('html');
-    runStudioPreview();
-    showToast(`Proyecto "${proj.title}" cargado`);
-};
-
-window.deleteSavedStudioProject = function (id) {
-    appState.studioProjects = appState.studioProjects.filter(p => p.id !== id);
-    saveState();
-    renderSavedStudioProjects();
-};
-
-window.exportStudioSingleHtml = function () {
-    const title = (document.getElementById('studio-project-title')?.value || 'proyecto').trim();
-    const html = document.getElementById('code-html')?.value || '';
-    const css = document.getElementById('code-css')?.value || '';
-    const js = document.getElementById('code-js')?.value || '';
-
-    const fullHtml = `<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>${escapeHtml(title)}</title>\n  <style>\n${css}\n  </style>\n</head>\n<body>\n${html}\n  <script>\n${js}\n  <\/script>\n</body>\n</html>`;
-
-    downloadTextFile(`${title.toLowerCase().replace(/\s+/g, '_')}.html`, fullHtml, 'text/html');
-    showToast('⬇️ Archivo .html exportado', 'success');
-};
-
-window.importStudioHtmlFile = function (event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const content = String(e.target?.result || '');
-        const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-        const scriptMatch = content.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-        const bodyMatch = content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-
-        document.getElementById('studio-project-title').value = file.name.replace(/\.html?$/i, '');
-        document.getElementById('code-css').value = styleMatch ? styleMatch[1].trim() : '';
-        document.getElementById('code-js').value = scriptMatch ? scriptMatch[1].trim() : '';
-
-        let cleanBody = bodyMatch ? bodyMatch[1] : content;
-        cleanBody = cleanBody.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').trim();
-        document.getElementById('code-html').value = cleanBody;
-
-        runStudioPreview();
-        showToast(`📂 "${file.name}" cargado en Live Code Studio`, 'success');
-    };
-    reader.readAsText(file);
-};
-
-window.inspectStudioDomStructure = function () {
-    const html = document.getElementById('code-html')?.value || '';
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    const ids = Array.from(temp.querySelectorAll('[id]')).map(el => `#${el.id} (<${el.tagName.toLowerCase()}>)`);
-    const classes = Array.from(new Set(
-        Array.from(temp.querySelectorAll('[class]'))
-            .flatMap(el => Array.from(el.classList).map(c => `.${c}`))
-    ));
-    appendStudioConsoleLine('log', `DOM Inspector -> IDs: [${ids.join(', ') || 'ninguno'}] | Clases: [${classes.join(', ') || 'ninguna'}]`);
-};
-
-/* ==========================================================================
-   RELOJ EN TIEMPO REAL, HORARIO Y CLIMA
-   ========================================================================== */
-function initClockAndNetwork() {
-    updateClockDisplay();
-    setInterval(updateClockDisplay, 1000);
-    syncRealTimeNetwork();
+function escapeHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
+
+window.copyElementValue = function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const val = el.value !== undefined ? el.value : el.textContent;
+    navigator.clipboard.writeText(val).then(() => showToast('Copiado al portapapeles', 'success'));
+};
+
+/* ----------------------------------------------------------
+   RELOJ REAL (MADRID) Y CLIMA
+   ---------------------------------------------------------- */
+window.syncRealTimeNetwork = async function () {
+    const statusEl = document.getElementById('net-status');
+    try {
+        const t0 = Date.now();
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid');
+        if (!res.ok) throw new Error('HTTP');
+        const data = await res.json();
+        const serverMs = new Date(data.datetime).getTime();
+        netTimeOffsetMs = serverMs - (t0 + Date.now()) / 2;
+        if (statusEl) statusEl.textContent = '🟢 Hora Madrid OK';
+    } catch (_) {
+        netTimeOffsetMs = 0;
+        if (statusEl) statusEl.textContent = '🟡 Reloj Local';
+    }
+};
 
 function getNow() {
-    return new Date(Date.now() + timeOffsetMs);
+    return new Date(Date.now() + netTimeOffsetMs);
 }
 
-function updateClockDisplay() {
+function updateClockLoop() {
     const now = getNow();
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
     if (timeEl) timeEl.textContent = now.toLocaleTimeString('es-ES');
     if (dateEl) {
         dateEl.textContent = now.toLocaleDateString('es-ES', {
-            weekday: 'short',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
+            weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'
         });
     }
-    renderScheduleWidget();
 }
-
-window.syncRealTimeNetwork = async function () {
-    const statusEl = document.getElementById('net-status');
-    try {
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid');
-        if (res.ok) {
-            const data = await res.json();
-            timeOffsetMs = new Date(data.datetime).getTime() - Date.now();
-            if (statusEl) statusEl.textContent = '🟢 NTP Madrid OK';
-            return;
-        }
-    } catch (_) {}
-    if (statusEl) statusEl.textContent = '🟡 Hora Local';
-};
 
 window.toggleWeatherWidget = async function () {
     appState.weatherEnabled = !appState.weatherEnabled;
-    const label = document.getElementById('weather-text');
+    saveState();
+    await updateWeatherBadge();
+};
+
+async function updateWeatherBadge() {
+    const txt = document.getElementById('weather-text');
+    if (!txt) return;
     if (!appState.weatherEnabled) {
-        if (label) label.textContent = 'Clima: OFF';
-        saveState(false);
+        txt.textContent = 'Clima: OFF';
         return;
     }
-    if (label) label.textContent = 'Cargando...';
+    txt.textContent = 'Cargando...';
     try {
-        // Coordenadas Fuente de Cantos / Extremadura por defecto si no hay geolocalización
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=38.2467&longitude=-6.3089&current_weather=true');
+        // Coordenadas Fuente de Cantos / Badajoz por defecto si no se concede geolocalización
+        let lat = 38.246, lon = -6.309;
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
         const data = await res.json();
-        const temp = data?.current_weather?.temperature;
-        if (label && temp !== undefined) {
-            label.textContent = `${temp}°C Extremadura`;
-        }
+        const temp = Math.round(data.current_weather.temperature);
+        txt.textContent = `${temp}°C`;
     } catch (_) {
-        if (label) label.textContent = 'Sin conexión';
-    }
-    saveState(false);
-};
-
-/* ==========================================================================
-   HORARIO SEMANAL
-   ========================================================================== */
-window.toggleScheduleViewMode = function () {
-    scheduleViewMode = scheduleViewMode === 'current' ? 'table' : 'current';
-    renderScheduleWidget();
-};
-
-function renderScheduleWidget() {
-    const box = document.getElementById('schedule-widget');
-    if (!box) return;
-
-    const now = getNow();
-    const day = now.getDay();
-    const curMins = now.getHours() * 60 + now.getMinutes();
-
-    if (scheduleViewMode === 'table') {
-        const daysMap = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie' };
-        const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
-        box.innerHTML = `
-            <table class="sch-table">
-                <thead><tr><th>Día</th><th>Hora</th><th>Módulo</th><th>Aula</th></tr></thead>
-                <tbody>
-                    ${sorted.map(s => `
-                        <tr>
-                            <td>${daysMap[s.day] || s.day}</td>
-                            <td>${s.start} - ${s.end}</td>
-                            <td><strong>${escapeHtml(s.subject)}</strong></td>
-                            <td>${escapeHtml(s.room || '-')}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
-        return;
-    }
-
-    const todayClasses = appState.schedule
-        .filter(s => Number(s.day) === day)
-        .sort((a, b) => a.start.localeCompare(b.start));
-
-    let currentClass = null;
-    let nextClass = null;
-
-    for (const c of todayClasses) {
-        const [sh, sm] = c.start.split(':').map(Number);
-        const [eh, em] = c.end.split(':').map(Number);
-        const sM = sh * 60 + sm;
-        const eM = eh * 60 + em;
-        if (curMins >= sM && curMins < eM) {
-            currentClass = { ...c, sM, eM };
-        } else if (curMins < sM && !nextClass) {
-            nextClass = { ...c, sM };
-        }
-    }
-
-    if (currentClass) {
-        const total = currentClass.eM - currentClass.sM;
-        const elapsed = curMins - currentClass.sM;
-        const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
-        const rem = currentClass.eM - curMins;
-        box.innerHTML = `
-            <div class="sch-status">🟢 <strong>En clase: ${escapeHtml(currentClass.subject)}</strong> <span class="badge-version">${escapeHtml(currentClass.room || '')}</span></div>
-            <div class="sch-detail">${currentClass.start} - ${currentClass.end} • Quedan ${rem} min (${pct}%)</div>
-            <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>
-        `;
-    } else if (nextClass) {
-        const diff = nextClass.sM - curMins;
-        box.innerHTML = `
-            <div class="sch-status">⏳ Próxima clase: <strong>${escapeHtml(nextClass.subject)}</strong></div>
-            <div class="sch-detail">Empieza a las ${nextClass.start} (en ${diff} min) • ${escapeHtml(nextClass.room || '')}</div>
-        `;
-    } else {
-        box.innerHTML = `
-            <div class="sch-status">🌙 Sin clases activas ahora mismo</div>
-            <div class="sch-detail">Puedes cambiar a "Tabla / Actual" para revisar toda la semana.</div>
-        `;
+        txt.textContent = 'Clima N/D';
     }
 }
 
+/* ----------------------------------------------------------
+   HORARIO Y CLASE ACTUAL
+   ---------------------------------------------------------- */
 window.openScheduleModal = function () {
+    renderScheduleEditor();
     document.getElementById('schedule-modal').style.display = 'flex';
-    renderScheduleEditorList();
 };
 
 window.closeScheduleModal = function () {
     document.getElementById('schedule-modal').style.display = 'none';
+    renderScheduleWidget();
 };
 
-function renderScheduleEditorList() {
-    const el = document.getElementById('schedule-list-editor');
-    if (!el) return;
-    const days = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes' };
-    el.innerHTML = appState.schedule.map(s => `
-        <div class="hub-item-card" style="flex-direction:row; justify-content:space-between; align-items:center;">
-            <span><strong>${days[s.day]}</strong> ${s.start}-${s.end} • ${escapeHtml(s.subject)} (${escapeHtml(s.room || '-')})</span>
-            <button type="button" class="btn-danger btn-sm" onclick="deleteScheduleClass('${s.id}')">🗑️</button>
-        </div>
-    `).join('');
-}
+window.toggleScheduleViewMode = function () {
+    scheduleViewMode = scheduleViewMode === 'current' ? 'table' : 'current';
+    renderScheduleWidget();
+};
 
 window.addScheduleClass = function () {
     const day = Number(document.getElementById('sch-add-day').value);
@@ -967,76 +482,151 @@ window.addScheduleClass = function () {
     const end = document.getElementById('sch-add-end').value;
     const subject = document.getElementById('sch-add-subject').value.trim();
     const room = document.getElementById('sch-add-room').value.trim();
-    if (!subject) return;
+    if (!subject || !start || !end) return;
 
-    appState.schedule.push({ id: 'sch_' + Date.now(), day, start, end, subject, room });
+    appState.schedule.push({ id: Date.now().toString(), day, start, end, subject, room });
     document.getElementById('sch-add-subject').value = '';
     saveState();
-    renderScheduleEditorList();
+    renderScheduleEditor();
     renderScheduleWidget();
 };
 
 window.deleteScheduleClass = function (id) {
-    appState.schedule = appState.schedule.filter(s => s.id !== id);
+    appState.schedule = appState.schedule.filter(c => c.id !== id);
     saveState();
-    renderScheduleEditorList();
+    renderScheduleEditor();
     renderScheduleWidget();
 };
 
 window.clearSchedule = function () {
     appState.schedule = [];
     saveState();
-    renderScheduleEditorList();
+    renderScheduleEditor();
     renderScheduleWidget();
 };
 
-/* ==========================================================================
-   ENTREGAS, EXÁMENES Y CHECKLIST DE RÚBRICA
-   ========================================================================== */
-window.setDeliveriesFilter = function (filter) {
-    deliveriesFilter = filter;
-    ['all', 'pending', 'soon', 'exam', 'practice'].forEach(f => {
-        document.getElementById(`deliv-filter-${f}`)?.classList.toggle('active', f === filter);
-    });
+function renderScheduleEditor() {
+    const container = document.getElementById('schedule-list-editor');
+    if (!container) return;
+    const days = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+    const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
+    container.innerHTML = sorted.length
+        ? sorted.map(c => `
+            <div class="deadline-card-item">
+                <div class="deadline-card-top">
+                    <span><strong>${days[c.day]}</strong> ${c.start}-${c.end} — ${escapeHtml(c.subject)} ${c.room ? `(${escapeHtml(c.room)})` : ''}</span>
+                    <button type="button" class="btn-icon" onclick="deleteScheduleClass('${c.id}')">🗑️</button>
+                </div>
+            </div>`).join('')
+        : '<p class="mono-muted">No hay clases configuradas.</p>';
+}
+
+function renderScheduleWidget() {
+    const container = document.getElementById('schedule-widget');
+    if (!container) return;
+    const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const now = getNow();
+    const todayDay = now.getDay();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+
+    if (scheduleViewMode === 'table') {
+        const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
+        if (!sorted.length) {
+            container.innerHTML = '<div class="sch-detail">Sin horario cargado. Pulsa Configurar.</div>';
+            return;
+        }
+        container.innerHTML = `<table class="sch-table">
+            <thead><tr><th>Día</th><th>Hora</th><th>Módulo</th><th>Aula</th></tr></thead>
+            <tbody>${sorted.map(c => `<tr><td>${days[c.day]}</td><td>${c.start}-${c.end}</td><td>${escapeHtml(c.subject)}</td><td>${escapeHtml(c.room || '-')}</td></tr>`).join('')}</tbody>
+        </table>`;
+        return;
+    }
+
+    const todayClasses = appState.schedule
+        .filter(c => c.day === todayDay)
+        .sort((a, b) => a.start.localeCompare(b.start));
+
+    if (!todayClasses.length) {
+        container.innerHTML = `<div class="sch-status">📅 ${days[todayDay]} — Sin clases programadas</div>`;
+        return;
+    }
+
+    const toMins = t => {
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    };
+
+    const active = todayClasses.find(c => nowMins >= toMins(c.start) && nowMins < toMins(c.end));
+    const next = todayClasses.find(c => toMins(c.start) > nowMins);
+
+    if (active) {
+        const s = toMins(active.start), e = toMins(active.end);
+        const pct = Math.min(100, Math.max(0, Math.round(((nowMins - s) / (e - s)) * 100)));
+        container.innerHTML = `
+            <div class="sch-status">🟢 En clase: <strong>${escapeHtml(active.subject)}</strong> ${active.room ? `[${escapeHtml(active.room)}]` : ''}</div>
+            <div class="sch-detail">${active.start} - ${active.end} (${e - nowMins} min restantes)${next ? ` • Siguiente: ${escapeHtml(next.subject)}` : ''}</div>
+            <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>`;
+    } else if (next) {
+        container.innerHTML = `
+            <div class="sch-status">⏳ Próxima: <strong>${escapeHtml(next.subject)}</strong> a las ${next.start}</div>
+            <div class="sch-detail">Faltan ${toMins(next.start) - nowMins} min ${next.room ? `• Aula ${escapeHtml(next.room)}` : ''}</div>`;
+    } else {
+        container.innerHTML = `<div class="sch-status">✅ Clases de hoy finalizadas</div>`;
+    }
+}
+
+/* ----------------------------------------------------------
+   ENTREGAS & EXÁMENES
+   ---------------------------------------------------------- */
+window.setDeliveriesFilter = function (f) {
+    deliveriesFilter = f;
+    document.querySelectorAll('#card-deliveries .pill-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('deliv-filter-' + f)?.classList.add('active');
     renderDeliveries();
 };
 
 window.addDelivery = function () {
-    const title = document.getElementById('deliv-title')?.value.trim();
-    const subject = document.getElementById('deliv-subject')?.value.trim() || 'General';
-    const type = document.getElementById('deliv-type')?.value || 'Práctica';
-    const datetime = document.getElementById('deliv-datetime')?.value;
-    if (!title || !datetime) return showToast('Completa título y fecha', 'error');
-
+    const title = document.getElementById('deliv-title').value.trim();
+    const subject = document.getElementById('deliv-subject').value.trim();
+    const type = document.getElementById('deliv-type').value;
+    const datetime = document.getElementById('deliv-datetime').value;
+    if (!title || !datetime) {
+        showToast('Completa título y fecha', 'error');
+        return;
+    }
     appState.deliveries.push({
-        id: 'del_' + Date.now(),
+        id: Date.now().toString(),
         title,
-        subject,
+        subject: subject || 'General',
         type,
         datetime,
-        done: false,
-        rubric: [
-            { label: 'Código limpio/comentado', done: false },
-            { label: 'Probado sin errores', done: false },
-            { label: 'Formato entrega OK', done: false }
-        ]
+        done: false
     });
-
     document.getElementById('deliv-title').value = '';
-    toggleForm('form-add-delivery');
     saveState();
     renderDeliveries();
-    showToast('Entrega añadida', 'success');
+};
+
+window.toggleDeliveryDone = function (id) {
+    const item = appState.deliveries.find(d => d.id === id);
+    if (item) item.done = !item.done;
+    saveState();
+    renderDeliveries();
+};
+
+window.deleteDelivery = function (id) {
+    appState.deliveries = appState.deliveries.filter(d => d.id !== id);
+    saveState();
+    renderDeliveries();
 };
 
 function renderDeliveries() {
-    const list = document.getElementById('deliveries-list');
-    if (!list) return;
-
+    const container = document.getElementById('deliveries-list');
+    if (!container) return;
     const now = getNow().getTime();
-    let items = [...appState.deliveries].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
-    items = items.filter(d => {
+    let list = [...appState.deliveries].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+    list = list.filter(d => {
         const diffHours = (new Date(d.datetime).getTime() - now) / 3600000;
         if (deliveriesFilter === 'pending') return !d.done;
         if (deliveriesFilter === 'soon') return !d.done && diffHours <= 48 && diffHours >= -24;
@@ -1045,86 +635,43 @@ function renderDeliveries() {
         return true;
     });
 
-    if (!items.length) {
-        list.innerHTML = `<p class="mono-muted">No hay entregas en este filtro.</p>`;
+    if (!list.length) {
+        container.innerHTML = '<p class="mono-muted">Sin entregas en este filtro.</p>';
         return;
     }
 
-    list.innerHTML = items.map(d => {
+    container.innerHTML = list.map(d => {
         const diffMs = new Date(d.datetime).getTime() - now;
-        const diffHours = Math.round(diffMs / 3600000);
-        const diffDays = Math.floor(diffHours / 24);
+        const diffHrs = Math.round(diffMs / 3600000);
         let badgeClass = 'cd-ok';
-        let badgeText = diffDays > 0 ? `En ${diffDays}d ${diffHours % 24}h` : `En ${diffHours}h`;
-        if (d.done) {
-            badgeClass = 'cd-done';
-            badgeText = 'Entregado';
-        } else if (diffHours < 0) {
-            badgeClass = 'cd-urgent';
-            badgeText = 'Vencido';
-        } else if (diffHours <= 48) {
-            badgeClass = 'cd-warn';
-        }
+        let badgeTxt = diffHrs >= 24 ? `${Math.round(diffHrs / 24)}d` : `${diffHrs}h`;
+        if (d.done) { badgeClass = 'cd-done'; badgeTxt = 'Entregado'; }
+        else if (diffHrs < 0) { badgeClass = 'cd-urgent'; badgeTxt = 'Vencido'; }
+        else if (diffHrs <= 48) { badgeClass = 'cd-warn'; }
 
-        const rubricHtml = (d.rubric || []).map((r, idx) => `
-            <span class="rubric-chip ${r.done ? 'done' : ''}" onclick="toggleDeliveryRubric('${d.id}', ${idx})">
-                ${r.done ? '☑' : '☐'} ${escapeHtml(r.label)}
-            </span>
-        `).join('');
-
-        return `
-            <div class="deadline-card-item">
-                <div class="deadline-card-top">
-                    <div>
-                        <div class="deadline-title" style="${d.done ? 'text-decoration:line-through;opacity:0.6;' : ''}">
-                            ${escapeHtml(d.title)}
-                        </div>
-                        <div class="deadline-meta">
-                            <span>${escapeHtml(d.subject)}</span> • <span>${escapeHtml(d.type)}</span> • <span>${new Date(d.datetime).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                        </div>
-                    </div>
-                    <div class="filter-pills-row">
-                        <span class="countdown-badge ${badgeClass}">${badgeText}</span>
-                        <button type="button" class="btn-icon" onclick="toggleDeliveryDone('${d.id}')" title="Marcar completada">✅</button>
-                        <button type="button" class="btn-icon" onclick="deleteDelivery('${d.id}')" title="Eliminar">🗑️</button>
-                    </div>
+        return `<div class="deadline-card-item">
+            <div class="deadline-card-top">
+                <div>
+                    <div class="deadline-title" style="${d.done ? 'text-decoration:line-through;opacity:0.6;' : ''}">${escapeHtml(d.title)}</div>
+                    <div class="deadline-meta"><span>${escapeHtml(d.subject)}</span> • <span>${d.type}</span> • <span>${new Date(d.datetime).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
                 </div>
-                <div class="deliv-rubric-box">${rubricHtml}</div>
+                <div class="card-actions">
+                    <span class="countdown-badge ${badgeClass}">${badgeTxt}</span>
+                    <button type="button" class="btn-icon" onclick="toggleDeliveryDone('${d.id}')">✅</button>
+                    <button type="button" class="btn-icon" onclick="deleteDelivery('${d.id}')">🗑️</button>
+                </div>
             </div>
-        `;
+        </div>`;
     }).join('');
 }
 
-window.toggleDeliveryRubric = function (id, idx) {
-    const d = appState.deliveries.find(x => x.id === id);
-    if (d && d.rubric?.[idx]) {
-        d.rubric[idx].done = !d.rubric[idx].done;
-        saveState();
-        renderDeliveries();
-    }
-};
-
-window.toggleDeliveryDone = function (id) {
-    const d = appState.deliveries.find(x => x.id === id);
-    if (d) {
-        d.done = !d.done;
-        saveState();
-        renderDeliveries();
-    }
-};
-
-window.deleteDelivery = function (id) {
-    appState.deliveries = appState.deliveries.filter(x => x.id !== id);
-    saveState();
-    renderDeliveries();
-};
-
-/* ==========================================================================
-   TAREAS CON BLOQUES DE JORNADA
-   ========================================================================== */
+/* ----------------------------------------------------------
+   TAREAS DEL DÍA
+   ---------------------------------------------------------- */
 window.setTaskFilter = function (f) {
     taskFilter = f;
-    ['all', 'pending', 'done'].forEach(k => document.getElementById(`filter-${k}`)?.classList.toggle('active', k === f));
+    document.querySelectorAll('#card-tasks .pill-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('filter-' + f)?.classList.add('active');
     renderTasks();
 };
 
@@ -1134,129 +681,111 @@ window.setTaskSort = function (s) {
 };
 
 window.addTask = function () {
-    const inp = document.getElementById('task-text');
-    const text = inp?.value.trim();
+    const text = document.getElementById('task-text').value.trim();
     if (!text) return;
-
-    const priority = document.getElementById('task-priority')?.value || 'medium';
-    const block = document.getElementById('task-block')?.value || 'afternoon';
-    const date = document.getElementById('task-date')?.value || '';
+    const block = document.getElementById('task-block').value;
+    const priority = document.getElementById('task-priority').value;
+    const date = document.getElementById('task-date').value;
 
     appState.tasks.unshift({
-        id: 'tsk_' + Date.now(),
+        id: Date.now().toString(),
         text,
-        priority,
         block,
+        priority,
         date,
-        done: false,
-        createdAt: Date.now()
+        done: false
     });
-
-    inp.value = '';
+    document.getElementById('task-text').value = '';
     saveState();
     renderTasks();
-    updateStatsDisplay();
+    updateStats();
 };
 
-function renderTasks() {
-    const list = document.getElementById('tasks-list');
-    if (!list) return;
-
-    const prioRank = { high: 1, medium: 2, low: 3 };
-    const blockRank = { morning: 1, afternoon: 2, night: 3 };
-    const blockIcons = { morning: '🌅', afternoon: '☀️', night: '🌙' };
-    const prioIcons = { high: '🔴', medium: '🟠', low: '🔵' };
-
-    let filtered = appState.tasks.filter(t => {
-        if (taskFilter === 'pending') return !t.done;
-        if (taskFilter === 'done') return t.done;
-        return true;
-    });
-
-    filtered.sort((a, b) => {
-        if (taskSort === 'priority') return (prioRank[a.priority] || 2) - (prioRank[b.priority] || 2);
-        if (taskSort === 'block') return (blockRank[a.block] || 2) - (blockRank[b.block] || 2);
-        if (taskSort === 'date') return (a.date || '9999').localeCompare(b.date || '9999');
-        return b.createdAt - a.createdAt;
-    });
-
-    list.innerHTML = filtered.map(t => `
-        <li class="${t.done ? 'task-done' : ''}">
-            <div style="display:flex;align-items:center;gap:8px;flex:1;">
-                <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone('${t.id}')">
-                <span>${prioIcons[t.priority] || '🟠'} ${blockIcons[t.block] || ''} ${escapeHtml(t.text)}</span>
-                ${t.date ? `<small class="mono-muted">(${t.date})</small>` : ''}
-            </div>
-            <button type="button" class="btn-icon" onclick="deleteTask('${t.id}')">🗑️</button>
-        </li>
-    `).join('');
-}
-
-window.toggleTaskDone = function (id) {
+window.toggleTask = function (id) {
     const t = appState.tasks.find(x => x.id === id);
-    if (t) {
-        t.done = !t.done;
-        saveState();
-        renderTasks();
-        updateStatsDisplay();
-    }
+    if (t) t.done = !t.done;
+    saveState();
+    renderTasks();
+    updateStats();
 };
 
 window.deleteTask = function (id) {
     appState.tasks = appState.tasks.filter(x => x.id !== id);
     saveState();
     renderTasks();
-    updateStatsDisplay();
+    updateStats();
 };
 
 window.exportTasksMarkdown = function () {
-    const md = appState.tasks.map(t => `- [${t.done ? 'x' : ' '}] ${t.text}`).join('\n');
-    navigator.clipboard.writeText(md);
-    showToast('Tareas copiadas en Markdown', 'success');
+    const md = appState.tasks.map(t => `- [${t.done ? 'x' : ' '}] (${t.priority.toUpperCase()}) ${t.text}`).join('\n');
+    navigator.clipboard.writeText(md || '- Sin tareas').then(() => showToast('Tareas copiadas en Markdown', 'success'));
 };
 
-/* ==========================================================================
-   POMODORO PRO, GENERADOR DE RUIDO WEB AUDIO Y MÉTRICAS
-   ========================================================================== */
-window.startCustomPomodoro = function (mode, linkedTitle = null, linkedId = null) {
-    pomoMode = mode;
-    pomoLinkedKanbanId = linkedId;
+function renderTasks() {
+    const ul = document.getElementById('tasks-list');
+    if (!ul) return;
+    const prioWeight = { high: 1, medium: 2, low: 3 };
+    const blockIcon = { morning: '🌅', afternoon: '☀️', night: '🌙' };
 
-    const focusMins = Number(document.getElementById('pomo-focus-time')?.value || 25);
-    const breakMins = Number(document.getElementById('pomo-break-time')?.value || 5);
+    let list = appState.tasks.filter(t => {
+        if (taskFilter === 'pending') return !t.done;
+        if (taskFilter === 'done') return t.done;
+        return true;
+    });
+
+    if (taskSort === 'priority') list.sort((a, b) => prioWeight[a.priority] - prioWeight[b.priority]);
+    else if (taskSort === 'block') list.sort((a, b) => a.block.localeCompare(b.block));
+    else if (taskSort === 'date') list.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+
+    ul.innerHTML = list.length
+        ? list.map(t => `
+            <li class="${t.done ? 'task-done' : ''}">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+                    <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask('${t.id}')">
+                    <span>${blockIcon[t.block] || ''} ${escapeHtml(t.text)} ${t.date ? `<small class="mono-muted">(${t.date})</small>` : ''}</span>
+                </label>
+                <button type="button" class="btn-icon" onclick="deleteTask('${t.id}')">🗑️</button>
+            </li>`).join('')
+        : '<li class="mono-muted">No hay tareas en esta vista.</li>';
+}
+
+/* ----------------------------------------------------------
+   POMODORO, AUDIO AMBIENTE & MÉTRICAS
+   ---------------------------------------------------------- */
+function updatePomodoroDisplay() {
+    const m = String(Math.floor(pomoSecondsLeft / 60)).padStart(2, '0');
+    const s = String(pomoSecondsLeft % 60).padStart(2, '0');
+    const el = document.getElementById('pomodoro-display');
+    if (el) el.textContent = `${m}:${s}`;
+}
+
+window.startCustomPomodoro = function (mode) {
+    clearInterval(pomoInterval);
+    pomoMode = mode;
+    const focusMins = Math.max(1, Number(document.getElementById('pomo-focus-time').value) || 25);
+    const breakMins = Math.max(1, Number(document.getElementById('pomo-break-time').value) || 5);
+    appState.pomodoro.focusMins = focusMins;
+    appState.pomodoro.breakMins = breakMins;
 
     if (mode === 'focus') pomoSecondsLeft = focusMins * 60;
     else if (mode === 'break') pomoSecondsLeft = breakMins * 60;
     else if (mode === 'exam') pomoSecondsLeft = 60 * 60;
 
-    const targetLabel = document.getElementById('pomodoro-target');
-    if (targetLabel) {
-        targetLabel.textContent = linkedTitle ? `Objetivo: ${linkedTitle}` : `Modo: ${mode.toUpperCase()}`;
-    }
-
-    clearInterval(pomoInterval);
     pomoRunning = true;
-    playNotificationBeep(520, 0.12);
     updatePomodoroDisplay();
+    saveState();
 
     pomoInterval = setInterval(() => {
         pomoSecondsLeft--;
         updatePomodoroDisplay();
-
-        if (pomoMode === 'focus' || pomoMode === 'exam') {
-            if (pomoSecondsLeft % 60 === 0) {
-                recordStudyMinute();
-            }
-        }
-
         if (pomoSecondsLeft <= 0) {
             clearInterval(pomoInterval);
             pomoRunning = false;
-            playNotificationBeep(780, 0.35);
-            showToast(`⏰ Sesión de ${pomoMode} finalizada`, 'success');
-            if (pomoLinkedKanbanId) {
-                incrementKanbanPomo(pomoLinkedKanbanId);
+            if (mode === 'focus' || mode === 'exam') {
+                const earned = mode === 'exam' ? 60 : focusMins;
+                recordStudyMinutes(earned);
             }
+            showToast('¡Tiempo completado!', 'success');
         }
     }, 1000);
 };
@@ -1264,254 +793,172 @@ window.startCustomPomodoro = function (mode, linkedTitle = null, linkedId = null
 window.stopPomodoro = function () {
     clearInterval(pomoInterval);
     pomoRunning = false;
-    const focusMins = Number(document.getElementById('pomo-focus-time')?.value || 25);
+    const focusMins = Number(document.getElementById('pomo-focus-time').value) || 25;
     pomoSecondsLeft = focusMins * 60;
     updatePomodoroDisplay();
 };
 
-function updatePomodoroDisplay() {
-    const mins = Math.floor(Math.max(0, pomoSecondsLeft) / 60).toString().padStart(2, '0');
-    const secs = (Math.max(0, pomoSecondsLeft) % 60).toString().padStart(2, '0');
-    const el = document.getElementById('pomodoro-display');
-    if (el) el.textContent = `${mins}:${secs}`;
-}
-
-function playNotificationBeep(freq = 600, duration = 0.2) {
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.value = freq;
-        gain.gain.value = 0.08;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + duration);
-    } catch (_) {}
-}
-
-window.toggleNoiseGenerator = function () {
-    const btn = document.getElementById('btn-audio-toggle');
-    const vis = document.getElementById('audio-visualizer');
-    if (isAudioPlaying) {
-        stopNoiseGenerator();
-        if (btn) btn.textContent = '▶ Audio';
-        vis?.classList.remove('audio-playing');
-    } else {
-        startNoiseGenerator(document.getElementById('audio-sound-type')?.value || 'brown');
-        if (btn) btn.textContent = '⏹ Parar';
-        vis?.classList.add('audio-playing');
+function recordStudyMinutes(mins) {
+    const todayStr = getNow().toISOString().slice(0, 10);
+    if (appState.pomodoro.lastStudyDate !== todayStr) {
+        appState.pomodoro.todayMinutes = 0;
+        appState.pomodoro.streakDays = (appState.pomodoro.streakDays || 0) + 1;
+        appState.pomodoro.lastStudyDate = todayStr;
     }
-};
-
-window.handleAudioTypeChange = function (val) {
-    if (isAudioPlaying) {
-        stopNoiseGenerator();
-        startNoiseGenerator(val);
-    }
-};
-
-window.updateAudioVolume = function (val) {
-    const txt = document.getElementById('audio-vol-text');
-    if (txt) txt.textContent = `${val}%`;
-    if (audioGainNode) {
-        audioGainNode.gain.value = (Number(val) / 100) * 0.25;
-    }
-};
-
-function startNoiseGenerator(type) {
-    try {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        audioGainNode = audioCtx.createGain();
-        const vol = Number(document.getElementById('audio-volume')?.value || 40);
-        audioGainNode.gain.value = (vol / 100) * 0.25;
-        audioGainNode.connect(audioCtx.destination);
-
-        if (type.startsWith('binaural')) {
-            const oscL = audioCtx.createOscillator();
-            const oscR = audioCtx.createOscillator();
-            const merger = audioCtx.createChannelMerger(2);
-            const diff = type === 'binaural-alpha' ? 10 : 6;
-            oscL.frequency.value = 200;
-            oscR.frequency.value = 200 + diff;
-            oscL.connect(merger, 0, 0);
-            oscR.connect(merger, 0, 1);
-            merger.connect(audioGainNode);
-            oscL.start();
-            oscR.start();
-            audioSourceNode = { stop: () => { oscL.stop(); oscR.stop(); } };
-        } else {
-            const bufferSize = 2 * audioCtx.sampleRate;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const output = buffer.getChannelData(0);
-            let lastOut = 0.0;
-            for (let i = 0; i < bufferSize; i++) {
-                const white = Math.random() * 2 - 1;
-                if (type === 'brown') {
-                    output[i] = (lastOut + (0.02 * white)) / 1.02;
-                    lastOut = output[i];
-                    output[i] *= 3.5;
-                } else {
-                    output[i] = white * 0.4;
-                }
-            }
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = buffer;
-            noise.loop = true;
-            noise.connect(audioGainNode);
-            noise.start();
-            audioSourceNode = noise;
-        }
-        isAudioPlaying = true;
-    } catch (e) {
-        console.error(e);
-    }
+    appState.pomodoro.todayMinutes += mins;
+    appState.pomodoro.totalMinutes += mins;
+    appState.pomodoro.historyByDate[todayStr] = (appState.pomodoro.historyByDate[todayStr] || 0) + mins;
+    saveState();
+    updateStats();
 }
 
-function stopNoiseGenerator() {
-    try {
-        audioSourceNode?.stop();
-        audioCtx?.close();
-    } catch (_) {}
-    isAudioPlaying = false;
-}
+function updateStats() {
+    const todayStr = getNow().toISOString().slice(0, 10);
+    const todayMins = appState.pomodoro.lastStudyDate === todayStr ? appState.pomodoro.todayMinutes : 0;
+    document.getElementById('stat-focus-today').textContent = `${todayMins}m`;
+    document.getElementById('stat-focus-total').textContent = `${(appState.pomodoro.totalMinutes / 60).toFixed(1)}h`;
+    document.getElementById('stat-streak').textContent = `🔥 ${appState.pomodoro.streakDays || 0}d`;
 
-function getTodayIsoKey() {
-    return getNow().toISOString().slice(0, 10);
-}
+    const totalT = appState.tasks.length;
+    const doneT = appState.tasks.filter(t => t.done).length;
+    document.getElementById('stat-ratio').textContent = totalT ? `${Math.round((doneT / totalT) * 100)}%` : '0%';
 
-function checkDailyStatsRollover() {
-    const today = getTodayIsoKey();
-    if (appState.stats.lastStudyDate !== today) {
-        appState.stats.focusMinutesToday = 0;
-        appState.stats.lastStudyDate = today;
-    }
-}
-
-function recordStudyMinute() {
-    checkDailyStatsRollover();
-    const today = getTodayIsoKey();
-    appState.stats.focusMinutesToday += 1;
-    appState.stats.focusMinutesTotal += 1;
-    appState.stats.weeklyHistory[today] = (appState.stats.weeklyHistory[today] || 0) + 1;
-    if (appState.stats.streakDays === 0) appState.stats.streakDays = 1;
-    saveState(false);
-    updateStatsDisplay();
-}
-
-function updateStatsDisplay() {
-    const todayEl = document.getElementById('stat-focus-today');
-    const totalEl = document.getElementById('stat-focus-total');
-    const streakEl = document.getElementById('stat-streak');
-    const ratioEl = document.getElementById('stat-ratio');
-
-    if (todayEl) todayEl.textContent = `${appState.stats.focusMinutesToday}m`;
-    if (totalEl) totalEl.textContent = `${(appState.stats.focusMinutesTotal / 60).toFixed(1)}h`;
-    if (streakEl) streakEl.textContent = `🔥 ${appState.stats.streakDays}d`;
-
-    const totalTasks = appState.tasks.length;
-    const doneTasks = appState.tasks.filter(t => t.done).length;
-    const pct = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
-    if (ratioEl) ratioEl.textContent = `${pct}%`;
-
-    renderWeeklyChart();
-}
-
-function renderWeeklyChart() {
-    const container = document.getElementById('study-bars-container');
-    const weekSumEl = document.getElementById('chart-week-sum');
-    if (!container) return;
-
-    const days = [];
-    let sum = 0;
+    // Gráfico últimos 7 días
+    const barsEl = document.getElementById('study-bars-container');
+    if (!barsEl) return;
+    let weekSum = 0;
+    const daysData = [];
     for (let i = 6; i >= 0; i--) {
         const d = new Date(getNow().getTime() - i * 86400000);
         const key = d.toISOString().slice(0, 10);
-        const mins = appState.stats.weeklyHistory[key] || 0;
-        sum += mins;
-        days.push({ label: d.toLocaleDateString('es-ES', { weekday: 'narrow' }), mins });
+        const mins = appState.pomodoro.historyByDate[key] || 0;
+        weekSum += mins;
+        daysData.push({ label: d.toLocaleDateString('es-ES', { weekday: 'narrow' }), mins });
     }
-    const maxMins = Math.max(30, ...days.map(x => x.mins));
-    if (weekSumEl) weekSumEl.textContent = `${sum} min`;
-
-    container.innerHTML = days.map(d => {
-        const hPct = Math.round((d.mins / maxMins) * 100);
-        return `
-            <div class="chart-bar-col" title="${d.mins} min">
-                <div class="chart-bar-fill" style="height:${Math.max(6, hPct)}%"></div>
-                <span class="chart-bar-day">${d.label}</span>
-            </div>
-        `;
+    const maxMins = Math.max(60, ...daysData.map(x => x.mins));
+    document.getElementById('chart-week-sum').textContent = `${weekSum} min`;
+    barsEl.innerHTML = daysData.map(d => {
+        const hPct = Math.max(6, Math.round((d.mins / maxMins) * 100));
+        return `<div class="chart-bar-col" title="${d.mins} min">
+            <div class="chart-bar-fill" style="height:${hPct}%"></div>
+            <span class="chart-bar-day">${d.label}</span>
+        </div>`;
     }).join('');
 }
 
-/* ==========================================================================
-   SCRATCHPAD MARKDOWN & STICKY
-   ========================================================================== */
-function initScratchpad() {
-    const sp = document.getElementById('scratchpad');
-    const sticky = document.getElementById('sticky-note-input');
-    if (sp) {
-        sp.value = appState.notes[activeNotesTab] || '';
-        updateScratchpadMetrics();
-        sp.addEventListener('input', () => {
-            appState.notes[activeNotesTab] = sp.value;
-            updateScratchpadMetrics();
-            saveState();
-        });
+window.toggleNoiseGenerator = function () {
+    if (isAudioPlaying) {
+        stopNoiseGenerator();
+    } else {
+        startNoiseGenerator();
     }
-    if (sticky) {
-        sticky.value = appState.stickyNote || '';
-        sticky.addEventListener('input', () => {
-            appState.stickyNote = sticky.value;
-            saveState();
-        });
-    }
+};
+
+function stopNoiseGenerator() {
+    audioNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch (_) {} });
+    audioNodes = [];
+    isAudioPlaying = false;
+    document.getElementById('btn-audio-toggle').textContent = '▶ Audio';
+    document.getElementById('audio-visualizer')?.classList.remove('audio-playing');
 }
 
+function startNoiseGenerator() {
+    stopNoiseGenerator();
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const type = document.getElementById('audio-sound-type').value;
+    const vol = (Number(document.getElementById('audio-volume').value) || 40) / 100;
+    const gain = audioCtx.createGain();
+    gain.gain.value = vol * 0.25;
+    gain.connect(audioCtx.destination);
+
+    if (type.startsWith('binaural')) {
+        const freqDiff = type === 'binaural-alpha' ? 10 : 6;
+        const oscL = audioCtx.createOscillator();
+        const oscR = audioCtx.createOscillator();
+        oscL.frequency.value = 200;
+        oscR.frequency.value = 200 + freqDiff;
+        oscL.connect(gain);
+        oscR.connect(gain);
+        oscL.start();
+        oscR.start();
+        audioNodes.push(oscL, oscR, gain);
+    } else {
+        const bufferSize = 2 * audioCtx.sampleRate;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = buffer.getChannelData(0);
+        let lastOut = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            output[i] = type === 'pink' ? (lastOut + 0.05 * white) / 1.05 : (lastOut + 0.02 * white) / 1.02;
+            lastOut = output[i];
+            output[i] *= 3.0;
+        }
+        const src = audioCtx.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        src.connect(gain);
+        src.start();
+        audioNodes.push(src, gain);
+    }
+
+    isAudioPlaying = true;
+    document.getElementById('btn-audio-toggle').textContent = '⏹ Audio';
+    document.getElementById('audio-visualizer')?.classList.add('audio-playing');
+}
+
+window.handleAudioTypeChange = function () {
+    if (isAudioPlaying) startNoiseGenerator();
+};
+
+window.updateAudioVolume = function (val) {
+    document.getElementById('audio-vol-text').textContent = `${val}%`;
+    if (isAudioPlaying) startNoiseGenerator();
+};
+
+/* ----------------------------------------------------------
+   SCRATCHPAD MARKDOWN & STICKY NOTE
+   ---------------------------------------------------------- */
 window.setNotesTab = function (tab) {
     activeNotesTab = tab;
-    ['general', 'comandos', 'clases'].forEach(t => document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab));
-    const sp = document.getElementById('scratchpad');
-    if (sp) sp.value = appState.notes[tab] || '';
+    document.querySelectorAll('#card-notes .scratchpad-toolbar .pill-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab)?.classList.add('active');
+    const pad = document.getElementById('scratchpad');
+    if (pad) pad.value = appState.notes[tab] || '';
     updateScratchpadMetrics();
+    if (isNotesPreview) renderScratchpadPreview();
 };
 
 function updateScratchpadMetrics() {
-    const text = document.getElementById('scratchpad')?.value || '';
-    const lines = text ? text.split('\n').length : 0;
-    const el = document.getElementById('scratchpad-metrics');
-    if (el) el.textContent = `${lines} líneas • ${text.length} caracteres`;
+    const pad = document.getElementById('scratchpad');
+    const m = document.getElementById('scratchpad-metrics');
+    if (!pad || !m) return;
+    const txt = pad.value;
+    const lines = txt ? txt.split('\n').length : 0;
+    m.textContent = `${lines} líneas • ${txt.length} caracteres`;
 }
 
 window.toggleScratchpadPreview = function () {
-    const sp = document.getElementById('scratchpad');
+    isNotesPreview = !isNotesPreview;
+    const pad = document.getElementById('scratchpad');
     const prev = document.getElementById('scratchpad-preview');
-    const btn = document.getElementById('btn-notes-preview');
-    if (!sp || !prev) return;
-
-    const showPrev = prev.style.display === 'none';
-    if (showPrev) {
-        prev.innerHTML = simpleMarkdownToHtml(sp.value);
-        sp.style.display = 'none';
-        prev.style.display = 'block';
-        btn?.classList.add('active');
-    } else {
-        sp.style.display = 'block';
-        prev.style.display = 'none';
-        btn?.classList.remove('active');
-    }
+    if (!pad || !prev) return;
+    pad.style.display = isNotesPreview ? 'none' : 'block';
+    prev.style.display = isNotesPreview ? 'block' : 'none';
+    if (isNotesPreview) renderScratchpadPreview();
 };
 
-function simpleMarkdownToHtml(md) {
-    let html = escapeHtml(md);
-    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    return html.replace(/\n/g, '<br>');
+function renderScratchpadPreview() {
+    const raw = escapeHtml(document.getElementById('scratchpad').value);
+    const html = raw
+        .replace(/^### (.*)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.*)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.*)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+    document.getElementById('scratchpad-preview').innerHTML = html;
 }
 
 window.toggleScratchpadFind = function () {
@@ -1519,760 +966,780 @@ window.toggleScratchpadFind = function () {
 };
 
 window.replaceInScratchpad = function (all) {
-    const sp = document.getElementById('scratchpad');
-    const find = document.getElementById('sp-find-text')?.value;
-    const rep = document.getElementById('sp-replace-text')?.value || '';
-    if (!sp || !find) return;
-
-    sp.value = all ? sp.value.split(find).join(rep) : sp.value.replace(find, rep);
-    appState.notes[activeNotesTab] = sp.value;
+    const find = document.getElementById('sp-find-text').value;
+    const rep = document.getElementById('sp-replace-text').value;
+    const pad = document.getElementById('scratchpad');
+    if (!find || !pad) return;
+    pad.value = all ? pad.value.split(find).join(rep) : pad.value.replace(find, rep);
+    appState.notes[activeNotesTab] = pad.value;
     saveState();
+    updateScratchpadMetrics();
 };
 
-window.insertNoteTemplate = function (key) {
-    const tpls = {
-        clase: `\n## Clase - ${new Date().toLocaleDateString('es-ES')}\n- **Tema:** \n- **Puntos clave:** \n- **Dudas:** \n`,
-        comando: `\n### Comando\n\`\`\`bash\n\n\`\`\`\n`,
-        practica: `\n## Análisis Práctica\n- **Requisitos:** \n- **Casos límite:** \n`,
-        readme: `\n# Nombre Proyecto\n\n## Instalación\n\`\`\`bash\n\n\`\`\`\n`
+window.insertNoteTemplate = function (tpl) {
+    const pad = document.getElementById('scratchpad');
+    if (!pad || !tpl) return;
+    const templates = {
+        clase: `\n## Clase - ${getNow().toLocaleDateString('es-ES')}\n- **Tema:** \n- **Puntos clave:** \n- **Dudas:** \n`,
+        comando: `\n### Comando: \`nombre\`\n- **Uso:** \`comando --flag\`\n- **Descripción:** \n`,
+        practica: `\n## Práctica\n- **Requisitos:** \n- **Solución:** \n`,
+        readme: `\n# Nombre del Proyecto\n## Instalación\n\`\`\`bash\ngit clone ...\n\`\`\`\n`
     };
-    const sp = document.getElementById('scratchpad');
-    if (sp && tpls[key]) {
-        sp.value += tpls[key];
-        appState.notes[activeNotesTab] = sp.value;
-        saveState();
-    }
+    pad.value += templates[tpl] || '';
+    appState.notes[activeNotesTab] = pad.value;
+    saveState();
+    updateScratchpadMetrics();
 };
 
 window.insertNoteTimestamp = function () {
-    const sp = document.getElementById('scratchpad');
-    if (sp) {
-        sp.value += `\n[${new Date().toLocaleString('es-ES')}] `;
-        appState.notes[activeNotesTab] = sp.value;
-        saveState();
-    }
+    const pad = document.getElementById('scratchpad');
+    pad.value += `\n[${getNow().toLocaleString('es-ES')}] `;
+    appState.notes[activeNotesTab] = pad.value;
+    saveState();
 };
 
 window.insertNoteCodeBlock = function () {
-    const sp = document.getElementById('scratchpad');
-    if (sp) {
-        sp.value += `\n\`\`\`\n\n\`\`\`\n`;
-        appState.notes[activeNotesTab] = sp.value;
-        saveState();
-    }
+    const pad = document.getElementById('scratchpad');
+    pad.value += `\n\`\`\`bash\n\n\`\`\`\n`;
+    appState.notes[activeNotesTab] = pad.value;
+    saveState();
 };
 
 window.toolCopy = function () {
-    navigator.clipboard.writeText(document.getElementById('scratchpad')?.value || '');
-    showToast('Notas copiadas al portapapeles', 'success');
+    copyElementValue('scratchpad');
 };
 
 window.toolDownload = function () {
-    downloadTextFile(`notas_${activeNotesTab}.md`, document.getElementById('scratchpad')?.value || '', 'text/markdown');
+    const content = document.getElementById('scratchpad').value;
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `notas-${activeNotesTab}.md`;
+    a.click();
 };
 
 window.openNoteHistoryModal = function () {
-    appState.noteHistory.unshift({
-        date: new Date().toLocaleString('es-ES'),
-        tab: activeNotesTab,
-        content: appState.notes[activeNotesTab]
-    });
-    appState.noteHistory = appState.noteHistory.slice(0, 10);
-    saveState(false);
-    showToast('Versión actual guardada en historial de notas', 'success');
+    showToast('Usa Snapshots en la barra superior para restaurar versiones', 'info');
 };
 
 window.copyStickyNote = function () {
-    navigator.clipboard.writeText(document.getElementById('sticky-note-input')?.value || '');
-    showToast('Sticky copiado');
+    copyElementValue('sticky-note-input');
 };
 
 window.clearStickyNote = function () {
-    const el = document.getElementById('sticky-note-input');
-    if (el) el.value = '';
+    document.getElementById('sticky-note-input').value = '';
     appState.stickyNote = '';
     saveState();
 };
 
-/* ==========================================================================
-   ACADEMIA: KANBAN, NOTAS PONDERADAS + SIMULADOR, STUDY HUB & PROYECTOS
-   ========================================================================== */
+/* ----------------------------------------------------------
+   WORKSPACE 2: LIVE CODE STUDIO
+   ---------------------------------------------------------- */
+window.switchStudioEditorTab = function (tab) {
+    activeStudioTab = tab;
+    ['html', 'css', 'js', 'saved'].forEach(t => {
+        document.getElementById('ed-tab-' + t)?.classList.toggle('active', t === tab);
+        document.getElementById('ed-pane-' + t)?.classList.toggle('active', t === tab);
+    });
+    if (tab === 'saved') renderStudioSavedProjects();
+};
+
+window.runStudioPreview = function () {
+    const html = document.getElementById('code-html')?.value || '';
+    const css = document.getElementById('code-css')?.value || '';
+    const js = document.getElementById('code-js')?.value || '';
+    const font = appState.studio.previewFont;
+    const fontLink = font ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;600;700&display=swap"><style>body{font-family:'${font}',sans-serif;}</style>` : '';
+
+    const consoleBridge = `<script>
+      (function(){
+        const send = (level, args) => parent.postMessage({ source: 'studio-console', level, msg: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+        console.log = (...a) => send('log', a);
+        console.warn = (...a) => send('warn', a);
+        console.error = (...a) => send('error', a);
+        window.onerror = (m, s, l) => send('error', [m + ' (L' + l + ')']);
+      })();
+    <\/script>`;
+
+    const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8">${fontLink}<style>${css}</style>${consoleBridge}</head><body>${html}<script>${js}<\/script></body></html>`;
+    const iframe = document.getElementById('studio-preview-iframe');
+    if (iframe) iframe.srcdoc = doc;
+};
+
+window.loadStudioTemplate = function (tpl) {
+    if (!tpl) return;
+    const templates = {
+        blank: { html: '<h1>Hola Mundo</h1>', css: 'body { font-family: sans-serif; padding: 20px; }', js: '' },
+        cybercard: {
+            html: '<div class="cyber-box"><h2>SYSTEM ONLINE</h2><p>Terminal lista.</p></div>',
+            css: 'body{background:#060813;color:#38bdf8;font-family:monospace;display:grid;place-items:center;height:100vh}.cyber-box{border:1px solid #38bdf8;padding:24px;box-shadow:0 0 20px rgba(56,189,248,.3)}',
+            js: 'console.log("Cybercard iniciada");'
+        },
+        flexgrid: {
+            html: '<div class="grid"><div>1</div><div>2</div><div>3</div></div>',
+            css: '.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:20px}.grid div{background:#1e293b;color:#fff;padding:30px;text-align:center;border-radius:8px}',
+            js: ''
+        },
+        domlab: {
+            html: '<input id="inp" placeholder="Escribe algo"><ul id="out"></ul>',
+            css: 'body{font-family:sans-serif;padding:20px;background:#0f172a;color:#fff}',
+            js: 'document.getElementById("inp").addEventListener("keydown", e => { if(e.key==="Enter"){ const li=document.createElement("li"); li.textContent=e.target.value; document.getElementById("out").appendChild(li); e.target.value=""; } });'
+        }
+    };
+    const chosen = templates[tpl];
+    if (!chosen) return;
+    document.getElementById('code-html').value = chosen.html;
+    document.getElementById('code-css').value = chosen.css;
+    document.getElementById('code-js').value = chosen.js;
+    syncStudioStateFromInputs();
+    runStudioPreview();
+};
+
+window.injectStudioCdn = function (cdn) {
+    const cdns = {
+        tailwind: '<script src="https://cdn.tailwindcss.com"><\/script>\n',
+        bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">\n',
+        alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>\n',
+        chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>\n'
+    };
+    if (!cdns[cdn]) return;
+    const htmlEl = document.getElementById('code-html');
+    htmlEl.value = cdns[cdn] + htmlEl.value;
+    syncStudioStateFromInputs();
+    runStudioPreview();
+    showToast('CDN inyectado en HTML', 'success');
+};
+
+window.applyFontToStudioPreview = function (fontName) {
+    appState.studio.previewFont = fontName;
+    saveState();
+    runStudioPreview();
+};
+
+window.setStudioViewport = function (width) {
+    const iframe = document.getElementById('studio-preview-iframe');
+    if (iframe) iframe.style.width = width;
+    ['vp-desktop', 'vp-tablet', 'vp-mobile'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+    if (width === '100%') document.getElementById('vp-desktop')?.classList.add('active');
+    else if (width === '768px') document.getElementById('vp-tablet')?.classList.add('active');
+    else document.getElementById('vp-mobile')?.classList.add('active');
+};
+
+window.toggleStudioFullscreen = function () {
+    document.getElementById('studio-workbench')?.classList.toggle('studio-fullscreen');
+};
+
+window.clearStudioConsole = function () {
+    studioConsoleLogs = [];
+    renderStudioConsole();
+};
+
+function renderStudioConsole() {
+    const out = document.getElementById('studio-console-output');
+    const cnt = document.getElementById('studio-console-count');
+    if (cnt) cnt.textContent = `${studioConsoleLogs.length} logs`;
+    if (out) {
+        out.innerHTML = studioConsoleLogs.map(l => `<div class="console-line-${l.level}">[${l.level.toUpperCase()}] ${escapeHtml(l.msg)}</div>`).join('');
+        out.scrollTop = out.scrollHeight;
+    }
+}
+
+window.inspectStudioDomStructure = function () {
+    const html = document.getElementById('code-html').value;
+    const ids = [...html.matchAll(/id=["']([^"']+)["']/g)].map(m => '#' + m[1]);
+    showToast(ids.length ? `IDs detectados: ${ids.join(', ')}` : 'Sin atributos id en HTML', 'info');
+};
+
+function syncStudioStateFromInputs() {
+    appState.studio.currentTitle = document.getElementById('studio-project-title').value;
+    appState.studio.html = document.getElementById('code-html').value;
+    appState.studio.css = document.getElementById('code-css').value;
+    appState.studio.js = document.getElementById('code-js').value;
+    saveState();
+}
+
+window.saveStudioProject = function () {
+    syncStudioStateFromInputs();
+    const title = appState.studio.currentTitle.trim() || 'Sin título';
+    const existing = appState.studio.savedProjects.find(p => p.title === title);
+    const payload = {
+        id: existing ? existing.id : Date.now().toString(),
+        title,
+        html: appState.studio.html,
+        css: appState.studio.css,
+        js: appState.studio.js,
+        updatedAt: getNow().toLocaleString('es-ES')
+    };
+    if (existing) Object.assign(existing, payload);
+    else appState.studio.savedProjects.unshift(payload);
+    saveState();
+    renderStudioSavedProjects();
+    showToast(`Proyecto "${title}" guardado`, 'success');
+};
+
+window.loadSavedStudioProject = function (id) {
+    const p = appState.studio.savedProjects.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('studio-project-title').value = p.title;
+    document.getElementById('code-html').value = p.html;
+    document.getElementById('code-css').value = p.css;
+    document.getElementById('code-js').value = p.js;
+    syncStudioStateFromInputs();
+    switchStudioEditorTab('html');
+    runStudioPreview();
+};
+
+window.deleteSavedStudioProject = function (id) {
+    appState.studio.savedProjects = appState.studio.savedProjects.filter(x => x.id !== id);
+    saveState();
+    renderStudioSavedProjects();
+};
+
+function renderStudioSavedProjects() {
+    const container = document.getElementById('studio-saved-projects-list');
+    if (!container) return;
+    container.innerHTML = appState.studio.savedProjects.length
+        ? appState.studio.savedProjects.map(p => `
+            <div class="deadline-card-item">
+                <div class="deadline-card-top">
+                    <div>
+                        <div class="deadline-title">${escapeHtml(p.title)}</div>
+                        <div class="deadline-meta">${p.updatedAt}</div>
+                    </div>
+                    <div class="card-actions">
+                        <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject('${p.id}')">Abrir</button>
+                        <button type="button" class="btn-icon" onclick="deleteSavedStudioProject('${p.id}')">🗑️</button>
+                    </div>
+                </div>
+            </div>`).join('')
+        : '<p class="mono-muted">Aún no has guardado proyectos en Live Code Studio.</p>';
+}
+
+window.exportStudioSingleHtml = function () {
+    syncStudioStateFromInputs();
+    const full = `<!DOCTYPE html>\n<html lang="es">\n<head>\n<meta charset="UTF-8">\n<title>${escapeHtml(appState.studio.currentTitle)}</title>\n<style>\n${appState.studio.css}\n</style>\n</head>\n<body>\n${appState.studio.html}\n<script>\n${appState.studio.js}\n<\/script>\n</body>\n</html>`;
+    const blob = new Blob([full], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(appState.studio.currentTitle || 'proyecto').toLowerCase().replace(/\s+/g, '-')}.html`;
+    a.click();
+};
+
+window.importStudioHtmlFile = function (event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('studio-project-title').value = file.name.replace(/\.html?$/i, '');
+        document.getElementById('code-html').value = e.target.result;
+        document.getElementById('code-css').value = '';
+        document.getElementById('code-js').value = '';
+        syncStudioStateFromInputs();
+        runStudioPreview();
+        showToast('HTML importado', 'success');
+    };
+    reader.readAsText(file);
+};
+
+/* ----------------------------------------------------------
+   ACADEMIA: KANBAN, NOTAS, STUDY HUB & PLANIFICADOR
+   ---------------------------------------------------------- */
 window.toggleExamCramFilter = function () {
     examCramOnly = !examCramOnly;
     document.getElementById('btn-exam-cram-mode')?.classList.toggle('active', examCramOnly);
     renderKanban();
-    renderFlashcards();
 };
 
 window.addKanbanTask = function () {
-    const title = document.getElementById('kanban-new-title')?.value.trim();
-    const subject = document.getElementById('kanban-new-subject')?.value.trim() || 'DAM';
-    const pomosEst = Number(document.getElementById('kanban-new-pomos')?.value || 2);
-    const prio = document.getElementById('kanban-new-prio')?.value || 'medium';
+    const title = document.getElementById('kanban-new-title').value.trim();
+    const subject = document.getElementById('kanban-new-subject').value.trim() || 'DAM';
+    const pomos = Number(document.getElementById('kanban-new-pomos').value) || 2;
+    const prio = document.getElementById('kanban-new-prio').value;
     if (!title) return;
 
-    appState.kanban.push({ id: 'kb_' + Date.now(), title, subject, pomosEst, pomosDone: 0, prio, status: 'todo' });
+    appState.kanban.push({ id: Date.now().toString(), title, subject, pomos, prio, status: 'todo' });
     document.getElementById('kanban-new-title').value = '';
-    toggleForm('form-kanban-add');
+    saveState();
+    renderKanban();
+};
+
+window.moveKanbanTask = function (id, newStatus) {
+    const item = appState.kanban.find(k => k.id === id);
+    if (item) item.status = newStatus;
+    saveState();
+    renderKanban();
+};
+
+window.deleteKanbanTask = function (id) {
+    appState.kanban = appState.kanban.filter(k => k.id !== id);
     saveState();
     renderKanban();
 };
 
 function renderKanban() {
     ['todo', 'doing', 'done'].forEach(col => {
-        const box = document.getElementById(`kanban-list-${col}`);
-        const badge = document.getElementById(`kanban-count-${col}`);
-        let items = appState.kanban.filter(k => k.status === col);
-        if (examCramOnly) {
-            items = items.filter(k => k.status !== 'done');
-        }
-        if (badge) badge.textContent = items.length;
-        if (!box) return;
-
-        box.innerHTML = items.map(k => `
+        const items = appState.kanban.filter(k => k.status === col && (!examCramOnly || k.prio === 'high'));
+        document.getElementById('kanban-count-' + col).textContent = items.length;
+        document.getElementById('kanban-list-' + col).innerHTML = items.map(k => `
             <div class="kanban-card">
                 <div class="kanban-card-header">
                     <span class="kanban-subject-tag">${escapeHtml(k.subject)}</span>
-                    <span>${k.prio === 'high' ? '🔴' : k.prio === 'medium' ? '🟠' : '🔵'}</span>
+                    <button type="button" class="btn-icon" onclick="deleteKanbanTask('${k.id}')">✖</button>
                 </div>
-                <div style="font-weight:600;font-size:0.78rem;">${escapeHtml(k.title)}</div>
+                <div>${escapeHtml(k.title)}</div>
                 <div class="kanban-card-footer">
-                    <span>🍅 ${k.pomosDone}/${k.pomosEst}</span>
+                    <span>🍅 ${k.pomos}</span>
                     <div>
-                        <button type="button" class="btn-icon" onclick="startCustomPomodoro('focus', '${escapeHtml(k.title)}', '${k.id}')" title="Iniciar Pomodoro">▶</button>
-                        ${col !== 'done' ? `<button type="button" class="btn-icon" onclick="advanceKanban('${k.id}')" title="Avanzar columna">➡</button>` : ''}
-                        <button type="button" class="btn-icon" onclick="deleteKanban('${k.id}')">🗑️</button>
+                        ${col !== 'todo' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','todo')">⬅️</button>` : ''}
+                        ${col !== 'doing' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','doing')">🔄</button>` : ''}
+                        ${col !== 'done' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','done')">✅</button>` : ''}
                     </div>
                 </div>
-            </div>
-        `).join('');
+            </div>`).join('');
     });
 }
 
-window.advanceKanban = function (id) {
-    const k = appState.kanban.find(x => x.id === id);
-    if (!k) return;
-    k.status = k.status === 'todo' ? 'doing' : 'done';
-    saveState();
-    renderKanban();
-};
-
-window.deleteKanban = function (id) {
-    appState.kanban = appState.kanban.filter(x => x.id !== id);
-    saveState();
-    renderKanban();
-};
-
-function incrementKanbanPomo(id) {
-    const k = appState.kanban.find(x => x.id === id);
-    if (k) {
-        k.pomosDone += 1;
-        saveState();
-        renderKanban();
-    }
-}
-
 window.addGradeSubject = function () {
-    const name = document.getElementById('new-grade-subj-name')?.value.trim();
-    const target = Number(document.getElementById('new-grade-subj-target')?.value || 5.0);
-    const credits = Number(document.getElementById('new-grade-subj-credits')?.value || 6);
+    const name = document.getElementById('new-grade-subj-name').value.trim();
+    const target = Number(document.getElementById('new-grade-subj-target').value) || 5;
+    const credits = Number(document.getElementById('new-grade-subj-credits').value) || 6;
     if (!name) return;
 
-    appState.gradeSubjects.push({ id: 'gs_' + Date.now(), name, target, credits, items: [] });
+    appState.grades.push({ id: Date.now().toString(), name, target, credits, items: [] });
     document.getElementById('new-grade-subj-name').value = '';
-    toggleForm('form-add-grade-subject');
+    saveState();
+    renderGrades();
+};
+
+window.addGradeItem = function (subjId) {
+    const titleEl = document.getElementById(`gi-title-${subjId}`);
+    const weightEl = document.getElementById(`gi-weight-${subjId}`);
+    const scoreEl = document.getElementById(`gi-score-${subjId}`);
+    const title = titleEl?.value.trim() || 'Examen';
+    const weight = Number(weightEl?.value) || 0;
+    const score = Number(scoreEl?.value) || 0;
+    if (weight <= 0) return;
+
+    const subj = appState.grades.find(s => s.id === subjId);
+    if (subj) subj.items.push({ id: Date.now().toString(), title, weight, score });
+    saveState();
+    renderGrades();
+};
+
+window.deleteGradeSubject = function (subjId) {
+    appState.grades = appState.grades.filter(s => s.id !== subjId);
     saveState();
     renderGrades();
 };
 
 function renderGrades() {
     const container = document.getElementById('grades-subjects-container');
-    const globalBadge = document.getElementById('global-course-avg-badge');
     if (!container) return;
+    let totalWeighted = 0, totalCredits = 0;
 
-    let weightedSum = 0;
-    let totalCredits = 0;
-
-    container.innerHTML = appState.gradeSubjects.map(subj => {
-        let evalWeight = 0;
-        let currentPoints = 0;
-        subj.items.forEach(it => {
-            evalWeight += Number(it.weight);
-            currentPoints += (Number(it.score) * Number(it.weight)) / 100;
-        });
-        const currentAvg = evalWeight > 0 ? (currentPoints / (evalWeight / 100)) : 0;
-        const remWeight = Math.max(0, 100 - evalWeight);
-        const needed = remWeight > 0 ? ((subj.target - currentPoints) / (remWeight / 100)) : 0;
-
+    container.innerHTML = appState.grades.map(s => {
+        const evalWeight = s.items.reduce((acc, i) => acc + i.weight, 0);
+        const currentPoints = s.items.reduce((acc, i) => acc + (i.score * i.weight) / 100, 0);
+        const avg = evalWeight > 0 ? (currentPoints / (evalWeight / 100)) : 0;
         if (evalWeight > 0) {
-            weightedSum += currentAvg * subj.credits;
-            totalCredits += subj.credits;
+            totalWeighted += avg * s.credits;
+            totalCredits += s.credits;
         }
+        const remWeight = Math.max(0, 100 - evalWeight);
+        const needed = remWeight > 0 ? Math.max(0, ((s.target - currentPoints) / (remWeight / 100))).toFixed(2) : null;
 
-        const passClass = currentAvg >= subj.target ? 'score-pass' : 'score-fail';
-
-        return `
-            <div class="grade-subject-card">
-                <div class="grade-subj-header">
-                    <strong>${escapeHtml(subj.name)} (${subj.credits}h)</strong>
-                    <div class="filter-pills-row">
-                        <span class="grade-subj-score ${passClass}">Media: ${currentAvg.toFixed(2)} / Obj: ${subj.target}</span>
-                        <button type="button" class="btn-icon" onclick="deleteGradeSubject('${subj.id}')">🗑️</button>
-                    </div>
-                </div>
-                <div class="grade-progress-bar-bg">
-                    <div class="grade-progress-bar-fill" style="width:${Math.min(100, evalWeight)}%"></div>
-                </div>
-                <div class="grade-needed-banner">
-                    Evaluado: ${evalWeight}% • ${remWeight > 0 ? `Necesitas <strong>${Math.max(0, needed).toFixed(2)}</strong> en el ${remWeight}% restante para llegar a ${subj.target}` : '100% evaluado'}
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    ${subj.items.map(it => `
-                        <div class="form-inline-between" style="font-size:0.74rem;font-family:var(--font-mono);">
-                            <span>${escapeHtml(it.name)} (${it.weight}%) → <strong>${it.score}</strong></span>
-                            <button type="button" class="btn-icon" onclick="deleteGradeItem('${subj.id}', '${it.id}')">×</button>
-                        </div>
-                    `).join('')}
-                </div>
-                <div class="form-inline-row">
-                    <input type="text" id="gi-name-${subj.id}" placeholder="Prueba">
-                    <input type="number" id="gi-w-${subj.id}" placeholder="%" style="max-width:65px;">
-                    <input type="number" id="gi-s-${subj.id}" placeholder="Nota" step="0.1" style="max-width:75px;">
-                    <button type="button" class="btn-cyan btn-sm" onclick="addGradeItem('${subj.id}')">✚</button>
+        return `<div class="grade-subject-card">
+            <div class="grade-subj-header">
+                <strong>${escapeHtml(s.name)} (${evalWeight}% eval.)</strong>
+                <div class="card-actions">
+                    <span class="grade-subj-score ${avg >= s.target ? 'score-pass' : 'score-fail'}">${avg.toFixed(2)}</span>
+                    <button type="button" class="btn-icon" onclick="deleteGradeSubject('${s.id}')">🗑️</button>
                 </div>
             </div>
-        `;
+            <div class="grade-progress-bar-bg"><div class="grade-progress-bar-fill" style="width:${Math.min(100, evalWeight)}%"></div></div>
+            ${remWeight > 0 ? `<div class="grade-needed-banner">Necesitas un <strong>${needed}</strong> en el ${remWeight}% restante para llegar a ${s.target}</div>` : ''}
+            <div class="form-inline-row">
+                <input type="text" id="gi-title-${s.id}" placeholder="Prueba">
+                <input type="number" id="gi-weight-${s.id}" placeholder="%" style="max-width:65px;">
+                <input type="number" id="gi-score-${s.id}" placeholder="Nota" step="0.1" style="max-width:75px;">
+                <button type="button" class="btn-green btn-sm" onclick="addGradeItem('${s.id}')">✚</button>
+            </div>
+        </div>`;
     }).join('');
 
-    if (globalBadge) {
-        const gAvg = totalCredits > 0 ? (weightedSum / totalCredits).toFixed(2) : '--';
-        globalBadge.textContent = `Media Global: ${gAvg}`;
-    }
+    const globalAvg = totalCredits > 0 ? (totalWeighted / totalCredits).toFixed(2) : '--';
+    document.getElementById('global-course-avg-badge').textContent = `Media: ${globalAvg}`;
 }
 
-window.addGradeItem = function (subjId) {
-    const subj = appState.gradeSubjects.find(s => s.id === subjId);
-    if (!subj) return;
-    const name = document.getElementById(`gi-name-${subjId}`)?.value.trim() || 'Prueba';
-    const weight = Number(document.getElementById(`gi-w-${subjId}`)?.value || 0);
-    const score = Number(document.getElementById(`gi-s-${subjId}`)?.value || 0);
-    if (weight <= 0) return;
-
-    subj.items.push({ id: 'gi_' + Date.now(), name, weight, score });
-    saveState();
-    renderGrades();
-};
-
-window.deleteGradeItem = function (subjId, itemId) {
-    const subj = appState.gradeSubjects.find(s => s.id === subjId);
-    if (subj) {
-        subj.items = subj.items.filter(i => i.id !== itemId);
-        saveState();
-        renderGrades();
-    }
-};
-
-window.deleteGradeSubject = function (subjId) {
-    appState.gradeSubjects = appState.gradeSubjects.filter(s => s.id !== subjId);
-    saveState();
-    renderGrades();
-};
-
-// Study Hub: Flashcards, Bug Log & Dudas
 window.setStudyHubTab = function (tab) {
-    studyHubTab = tab;
+    activeStudyHubTab = tab;
     ['flashcards', 'bugs', 'doubts'].forEach(t => {
-        document.getElementById(`hub-tab-${t}`)?.classList.toggle('active', t === tab);
-        const view = document.getElementById(`hub-view-${t}`);
-        if (view) view.style.display = t === tab ? 'block' : 'none';
+        document.getElementById('hub-tab-' + t)?.classList.toggle('active', t === tab);
+        document.getElementById('hub-view-' + t).style.display = t === tab ? 'block' : 'none';
     });
 };
 
-function getFilteredFlashcards() {
-    const subj = document.getElementById('fc-filter-subject')?.value || 'all';
-    return appState.flashcards.filter(fc => {
-        if (subj !== 'all' && fc.subject !== subj) return false;
-        if (examCramOnly && fc.mastered) return false;
-        return true;
-    });
-}
-
-function renderFlashcards() {
-    const stage = document.getElementById('flashcard-stage');
-    const sel = document.getElementById('fc-filter-subject');
-    if (sel) {
-        const cur = sel.value;
-        const subjects = Array.from(new Set(appState.flashcards.map(f => f.subject)));
-        sel.innerHTML = `<option value="all">Todas las asignaturas</option>` +
-            subjects.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-        if (subjects.includes(cur)) sel.value = cur;
-    }
-
-    if (!stage) return;
-    const deck = getFilteredFlashcards();
-    if (!deck.length) {
-        stage.innerHTML = `<span class="fc-hint">No hay tarjetas pendientes en este filtro. ¡Añade una arriba!</span>`;
-        return;
-    }
-
-    if (currentFlashcardIndex >= deck.length) currentFlashcardIndex = 0;
-    const card = deck[currentFlashcardIndex];
-
-    stage.innerHTML = `
-        <span class="badge-version" style="margin-bottom:8px;">${escapeHtml(card.subject)} • ${currentFlashcardIndex + 1}/${deck.length} ${card.mastered ? '✅' : ''}</span>
-        <div class="${flashcardFlipped ? 'fc-answer-text' : 'fc-question-text'}">
-            ${escapeHtml(flashcardFlipped ? card.a : card.q)}
-        </div>
-        <span class="fc-hint" style="margin-top:10px;">(Clic para girar)</span>
-    `;
-}
+window.addFlashcard = function () {
+    const subj = document.getElementById('fc-new-subj').value.trim() || 'General';
+    const q = document.getElementById('fc-new-q').value.trim();
+    const a = document.getElementById('fc-new-a').value.trim();
+    if (!q || !a) return;
+    appState.flashcards.push({ id: Date.now().toString(), subj, q, a, mastered: false });
+    document.getElementById('fc-new-q').value = '';
+    document.getElementById('fc-new-a').value = '';
+    saveState();
+    renderFlashcards();
+};
 
 window.flipCurrentFlashcard = function () {
-    flashcardFlipped = !flashcardFlipped;
+    isFlashcardFlipped = !isFlashcardFlipped;
     renderFlashcards();
 };
 
 window.nextFlashcard = function () {
-    currentFlashcardIndex++;
-    flashcardFlipped = false;
+    isFlashcardFlipped = false;
+    currentFlashcardIdx++;
     renderFlashcards();
 };
 
 window.markFlashcardStatus = function (mastered) {
     const deck = getFilteredFlashcards();
-    const card = deck[currentFlashcardIndex];
-    if (card) {
-        card.mastered = mastered;
-        saveState();
-        nextFlashcard();
-    }
-};
-
-window.addFlashcard = function () {
-    const subject = document.getElementById('fc-new-subj')?.value.trim() || 'General';
-    const q = document.getElementById('fc-new-q')?.value.trim();
-    const a = document.getElementById('fc-new-a')?.value.trim();
-    if (!q || !a) return;
-
-    appState.flashcards.push({ id: 'fc_' + Date.now(), subject, q, a, mastered: false });
-    document.getElementById('fc-new-q').value = '';
-    document.getElementById('fc-new-a').value = '';
-    toggleForm('form-add-flashcard');
+    if (!deck.length) return;
+    const card = deck[currentFlashcardIdx % deck.length];
+    card.mastered = mastered;
     saveState();
-    renderFlashcards();
+    nextFlashcard();
 };
 
 window.deleteCurrentFlashcard = function () {
     const deck = getFilteredFlashcards();
-    const card = deck[currentFlashcardIndex];
-    if (card) {
-        appState.flashcards = appState.flashcards.filter(f => f.id !== card.id);
-        saveState();
-        renderFlashcards();
-    }
+    if (!deck.length) return;
+    const card = deck[currentFlashcardIdx % deck.length];
+    appState.flashcards = appState.flashcards.filter(c => c.id !== card.id);
+    saveState();
+    renderFlashcards();
 };
 
-window.addBugLog = function () {
-    const subj = document.getElementById('bug-new-subj')?.value.trim() || 'Código';
-    const error = document.getElementById('bug-new-error')?.value.trim();
-    const cause = document.getElementById('bug-new-cause')?.value.trim();
-    const fix = document.getElementById('bug-new-fix')?.value.trim();
-    if (!error) return;
+function getFilteredFlashcards() {
+    const sel = document.getElementById('fc-filter-subject')?.value || 'all';
+    return appState.flashcards.filter(c => sel === 'all' || c.subj === sel);
+}
 
-    appState.bugLogs.unshift({ id: 'bug_' + Date.now(), subj, error, cause, fix, date: new Date().toLocaleDateString('es-ES') });
-    toggleForm('form-add-bug');
+function renderFlashcards() {
+    const select = document.getElementById('fc-filter-subject');
+    if (select) {
+        const current = select.value;
+        const subjs = [...new Set(appState.flashcards.map(c => c.subj))];
+        select.innerHTML = '<option value="all">Todas las asignaturas</option>' +
+            subjs.map(s => `<option value="${escapeHtml(s)}" ${s === current ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+    }
+    const stage = document.getElementById('flashcard-stage');
+    if (!stage) return;
+    const deck = getFilteredFlashcards();
+    if (!deck.length) {
+        stage.innerHTML = '<span class="fc-hint">Sin tarjetas. Añade una con ✚ Tarjeta.</span>';
+        return;
+    }
+    const card = deck[currentFlashcardIdx % deck.length];
+    stage.innerHTML = isFlashcardFlipped
+        ? `<div class="fc-answer-text">${escapeHtml(card.a)}</div><div class="fc-hint" style="margin-top:8px;">(Clic para volver a pregunta)</div>`
+        : `<div class="kanban-subject-tag" style="margin-bottom:8px;">${escapeHtml(card.subj)} ${card.mastered ? '✅' : ''}</div><div class="fc-question-text">${escapeHtml(card.q)}</div><div class="fc-hint" style="margin-top:8px;">(Clic para voltear)</div>`;
+}
+
+window.addBugLog = function () {
+    const subj = document.getElementById('bug-new-subj').value.trim() || 'Código';
+    const error = document.getElementById('bug-new-error').value.trim();
+    const cause = document.getElementById('bug-new-cause').value.trim();
+    const fix = document.getElementById('bug-new-fix').value.trim();
+    if (!error) return;
+    appState.bugLogs.unshift({ id: Date.now().toString(), subj, error, cause, fix });
+    document.getElementById('bug-new-error').value = '';
     saveState();
     renderBugLogs();
 };
 
 function renderBugLogs() {
-    const list = document.getElementById('bug-log-list');
-    if (!list) return;
     const q = (document.getElementById('bug-search-input')?.value || '').toLowerCase();
-    const filtered = appState.bugLogs.filter(b => `${b.subj} ${b.error} ${b.cause} ${b.fix}`.toLowerCase().includes(q));
-
-    list.innerHTML = filtered.map(b => `
+    const list = appState.bugLogs.filter(b => `${b.subj} ${b.error} ${b.fix}`.toLowerCase().includes(q));
+    document.getElementById('bug-log-list').innerHTML = list.map(b => `
         <div class="hub-item-card">
-            <div class="form-inline-between">
-                <span class="kanban-subject-tag">${escapeHtml(b.subj)}</span>
-                <button type="button" class="btn-icon" onclick="deleteBugLog('${b.id}')">🗑️</button>
-            </div>
-            <strong style="color:var(--accent-red);font-size:0.78rem;">${escapeHtml(b.error)}</strong>
-            <div class="mono-muted">Causa: ${escapeHtml(b.cause || '-')}</div>
-            <div style="color:var(--accent-green);font-size:0.76rem;">Solución: ${escapeHtml(b.fix || '-')}</div>
-        </div>
-    `).join('');
+            <strong>[${escapeHtml(b.subj)}] ${escapeHtml(b.error)}</strong>
+            <div class="mono-muted">Causa: ${escapeHtml(b.cause || '-')} • Solución: ${escapeHtml(b.fix || '-')}</div>
+        </div>`).join('') || '<p class="mono-muted">Sin bugs registrados.</p>';
 }
 
-window.deleteBugLog = function (id) {
-    appState.bugLogs = appState.bugLogs.filter(b => b.id !== id);
-    saveState();
-    renderBugLogs();
-};
-
 window.addClassDoubt = function () {
-    const subj = document.getElementById('doubt-new-subj')?.value.trim() || 'Clase';
-    const text = document.getElementById('doubt-new-text')?.value.trim();
+    const subj = document.getElementById('doubt-new-subj').value.trim() || 'Clase';
+    const text = document.getElementById('doubt-new-text').value.trim();
     if (!text) return;
-
-    appState.doubts.unshift({ id: 'db_' + Date.now(), subj, text, resolved: false });
+    appState.doubts.unshift({ id: Date.now().toString(), subj, text, resolved: false });
     document.getElementById('doubt-new-text').value = '';
     saveState();
     renderDoubts();
 };
 
-function renderDoubts() {
-    const list = document.getElementById('doubts-list');
-    if (!list) return;
-    list.innerHTML = appState.doubts.map(d => `
-        <div class="hub-item-card" style="flex-direction:row;justify-content:space-between;align-items:center;">
-            <span style="${d.resolved ? 'text-decoration:line-through;opacity:0.6;' : ''}">
-                <span class="kanban-subject-tag">${escapeHtml(d.subj)}</span> ${escapeHtml(d.text)}
-            </span>
-            <div>
-                <button type="button" class="btn-icon" onclick="toggleDoubtResolved('${d.id}')">✅</button>
-                <button type="button" class="btn-icon" onclick="deleteDoubt('${d.id}')">🗑️</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-window.toggleDoubtResolved = function (id) {
+window.toggleDoubt = function (id) {
     const d = appState.doubts.find(x => x.id === id);
-    if (d) { d.resolved = !d.resolved; saveState(); renderDoubts(); }
-};
-
-window.deleteDoubt = function (id) {
-    appState.doubts = appState.doubts.filter(x => x.id !== id);
+    if (d) d.resolved = !d.resolved;
     saveState();
     renderDoubts();
 };
 
+function renderDoubts() {
+    document.getElementById('doubts-list').innerHTML = appState.doubts.map(d => `
+        <div class="hub-item-card" style="flex-direction:row;justify-content:space-between;align-items:center;">
+            <span style="${d.resolved ? 'text-decoration:line-through;opacity:0.6;' : ''}"><strong>[${escapeHtml(d.subj)}]</strong> ${escapeHtml(d.text)}</span>
+            <button type="button" class="btn-icon" onclick="toggleDoubt('${d.id}')">✅</button>
+        </div>`).join('') || '<p class="mono-muted">Sin dudas pendientes.</p>';
+}
+
 window.exportStudyHubMarkdown = function () {
-    const md = [
-        '# Study Hub Export',
-        '## Flashcards',
-        ...appState.flashcards.map(f => `- **${f.subject}**: ${f.q} -> _${f.a}_`),
-        '\n## Bug Log',
-        ...appState.bugLogs.map(b => `- [${b.subj}] **${b.error}**: ${b.fix}`),
-        '\n## Dudas',
-        ...appState.doubts.map(d => `- [${d.resolved ? 'x' : ' '}] (${d.subj}) ${d.text}`)
-    ].join('\n');
-    navigator.clipboard.writeText(md);
-    showToast('Study Hub copiado en Markdown', 'success');
+    const md = '# Study Hub\n\n## Bugs\n' + appState.bugLogs.map(b => `- **${b.error}**: ${b.fix}`).join('\n');
+    navigator.clipboard.writeText(md).then(() => showToast('Study Hub copiado en MD', 'success'));
 };
 
 window.calculateStudyPlan = function () {
-    const examDateVal = document.getElementById('planner-exam-date')?.value;
-    const topics = Number(document.getElementById('planner-topics-count')?.value || 8);
-    const minsPerTopic = Number(document.getElementById('planner-mins-topic')?.value || 45);
-    const out = document.getElementById('study-planner-result');
-    if (!out || !examDateVal) return;
-
-    const daysLeft = Math.max(1, Math.ceil((new Date(examDateVal) - getNow()) / 86400000));
+    const dateVal = document.getElementById('planner-exam-date').value;
+    const topics = Number(document.getElementById('planner-topics-count').value) || 1;
+    const minsPerTopic = Number(document.getElementById('planner-mins-topic').value) || 45;
+    if (!dateVal) return;
+    const days = Math.max(1, Math.ceil((new Date(dateVal) - getNow()) / 86400000));
     const totalMins = topics * minsPerTopic;
-    const minsPerDay = Math.ceil(totalMins / daysLeft);
-    const pomosPerDay = Math.ceil(minsPerDay / 25);
-
-    out.textContent = `Quedan ${daysLeft} días → Dedica ${minsPerDay} min/día (~${pomosPerDay} Pomodoros/día) para cubrir los ${topics} temas.`;
+    document.getElementById('study-planner-result').textContent =
+        `Quedan ${days} días → ${(topics / days).toFixed(1)} temas/día (${Math.ceil(totalMins / days)} min/día).`;
 };
 
 window.addTeamProject = function () {
-    const name = document.getElementById('proj-new-name')?.value.trim();
-    const repo = document.getElementById('proj-new-repo')?.value.trim();
-    const working = document.getElementById('proj-new-working')?.value.trim();
-    const pending = document.getElementById('proj-new-pending')?.value.trim();
+    const name = document.getElementById('proj-new-name').value.trim();
+    const repo = document.getElementById('proj-new-repo').value.trim();
+    const working = document.getElementById('proj-new-working').value.trim();
+    const pending = document.getElementById('proj-new-pending').value.trim();
     if (!name) return;
-
-    appState.teamProjects.unshift({ id: 'prj_' + Date.now(), name, repo, working, pending });
-    toggleForm('form-add-project');
+    appState.projects.unshift({ id: Date.now().toString(), name, repo, working, pending });
+    document.getElementById('proj-new-name').value = '';
     saveState();
-    renderTeamProjects();
+    renderProjects();
 };
 
-function renderTeamProjects() {
-    const list = document.getElementById('team-projects-list');
-    if (!list) return;
-    list.innerHTML = appState.teamProjects.map(p => `
+function renderProjects() {
+    document.getElementById('team-projects-list').innerHTML = appState.projects.map(p => `
         <div class="hub-item-card">
-            <div class="form-inline-between">
+            <div class="deadline-card-top">
                 <strong>${escapeHtml(p.name)}</strong>
-                <div>
-                    ${p.repo ? `<a href="${escapeHtml(p.repo)}" target="_blank" class="btn-cyan btn-sm" style="text-decoration:none;">Repo</a>` : ''}
-                    <button type="button" class="btn-icon" onclick="deleteTeamProject('${p.id}')">🗑️</button>
-                </div>
+                ${p.repo ? `<a href="${escapeHtml(p.repo)}" target="_blank" class="footer-link-cyan">Repo ↗</a>` : ''}
             </div>
-            <div style="color:var(--accent-green);font-size:0.74rem;">✅ OK: ${escapeHtml(p.working || '-')}</div>
-            <div style="color:var(--accent-yellow);font-size:0.74rem;">⏳ Pendiente: ${escapeHtml(p.pending || '-')}</div>
-        </div>
-    `).join('');
+            <div class="mono-muted">✅ ${escapeHtml(p.working || '-')} | ⏳ ${escapeHtml(p.pending || '-')}</div>
+        </div>`).join('') || '<p class="mono-muted">Sin proyectos activos.</p>';
 }
 
-window.deleteTeamProject = function (id) {
-    appState.teamProjects = appState.teamProjects.filter(p => p.id !== id);
-    saveState();
-    renderTeamProjects();
-};
-
-/* ==========================================================================
-   DEV & SYSADMIN LAB (TOOLBOX, SERVIDORES, SNIPPETS Y ENLACES)
-   ========================================================================== */
+/* ----------------------------------------------------------
+   DEV & SYSADMIN TOOLBOX + SERVIDORES + SNIPPETS
+   ---------------------------------------------------------- */
 window.setToolboxTab = function (tab) {
+    activeToolboxTab = tab;
     ['format', 'encode', 'regex', 'net', 'sys', 'gen'].forEach(t => {
-        document.getElementById(`tb-tab-${t}`)?.classList.toggle('active', t === tab);
-        const view = document.getElementById(`tb-view-${t}`);
-        if (view) view.style.display = t === tab ? 'flex' : 'none';
+        document.getElementById('tb-tab-' + t)?.classList.toggle('active', t === tab);
+        document.getElementById('tb-view-' + t).style.display = t === tab ? 'flex' : 'none';
     });
 };
 
 window.tbFormatJson = function (minify) {
-    const inp = document.getElementById('tb-json-input');
-    const status = document.getElementById('tb-json-status');
+    const el = document.getElementById('tb-json-input');
+    const st = document.getElementById('tb-json-status');
     try {
-        const obj = JSON.parse(inp.value);
-        inp.value = minify ? JSON.stringify(obj) : JSON.stringify(obj, null, 2);
-        if (status) status.textContent = '✅ JSON válido';
+        const obj = JSON.parse(el.value);
+        el.value = JSON.stringify(obj, null, minify ? 0 : 2);
+        st.textContent = '✅ JSON válido';
     } catch (e) {
-        if (status) status.textContent = `❌ Error JSON: ${e.message}`;
+        st.textContent = '❌ Error JSON: ' + e.message;
     }
 };
 
 window.tbJsonToCsv = function () {
-    const inp = document.getElementById('tb-json-input');
+    const el = document.getElementById('tb-json-input');
     try {
-        const arr = JSON.parse(inp.value);
-        if (!Array.isArray(arr) || !arr.length) throw new Error('Debe ser un array de objetos');
+        const arr = JSON.parse(el.value);
+        if (!Array.isArray(arr) || !arr.length) throw new Error('Debe ser un array JSON');
         const keys = Object.keys(arr[0]);
-        const csv = [keys.join(','), ...arr.map(row => keys.map(k => JSON.stringify(row[k] ?? '')).join(','))].join('\n');
-        inp.value = csv;
+        el.value = [keys.join(','), ...arr.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))].join('\n');
     } catch (e) {
-        document.getElementById('tb-json-status').textContent = `❌ ${e.message}`;
+        document.getElementById('tb-json-status').textContent = '❌ ' + e.message;
     }
 };
 
 window.tbCsvToJson = function () {
-    const inp = document.getElementById('tb-json-input');
-    const lines = inp.value.trim().split('\n');
+    const el = document.getElementById('tb-json-input');
+    const lines = el.value.trim().split('\n');
     if (lines.length < 2) return;
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    const res = lines.slice(1).map(line => {
-        const vals = line.split(',');
-        const obj = {};
-        headers.forEach((h, i) => { obj[h] = (vals[i] || '').trim().replace(/^"|"$/g, ''); });
-        return obj;
+    const headers = lines[0].split(',').map(h => h.trim());
+    const data = lines.slice(1).map(l => {
+        const vals = l.split(',');
+        return Object.fromEntries(headers.map((h, i) => [h, vals[i]?.trim() ?? '']));
     });
-    inp.value = JSON.stringify(res, null, 2);
+    el.value = JSON.stringify(data, null, 2);
 };
 
 window.tbFormatSql = function () {
-    const inp = document.getElementById('tb-json-input');
-    inp.value = inp.value
-        .replace(/\b(SELECT|FROM|WHERE|JOIN|LEFT JOIN|INNER JOIN|GROUP BY|ORDER BY|HAVING|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM)\b/gi, '\n$1')
-        .trim();
+    const el = document.getElementById('tb-json-input');
+    el.value = el.value.replace(/\b(SELECT|FROM|WHERE|AND|OR|ORDER BY|GROUP BY|JOIN|LEFT JOIN|INSERT INTO|VALUES|UPDATE|SET)\b/gi, '\n$1').trim();
 };
 
-window.tbEncodeAction = function (action) {
-    const val = document.getElementById('tb-encode-input')?.value || '';
+window.tbEncodeAction = function (act) {
+    const val = document.getElementById('tb-encode-input').value;
     const out = document.getElementById('tb-encode-output');
     try {
-        if (action === 'b64e') out.textContent = btoa(unescape(encodeURIComponent(val)));
-        if (action === 'b64d') out.textContent = decodeURIComponent(escape(atob(val.trim())));
-        if (action === 'urle') out.textContent = encodeURIComponent(val);
-        if (action === 'urld') out.textContent = decodeURIComponent(val);
+        if (act === 'b64e') out.textContent = btoa(unescape(encodeURIComponent(val)));
+        else if (act === 'b64d') out.textContent = decodeURIComponent(escape(atob(val)));
+        else if (act === 'urle') out.textContent = encodeURIComponent(val);
+        else if (act === 'urld') out.textContent = decodeURIComponent(val);
     } catch (e) {
-        out.textContent = `Error: ${e.message}`;
+        out.textContent = 'Error: ' + e.message;
     }
 };
 
 window.tbDecodeJwt = function () {
-    const token = (document.getElementById('tb-encode-input')?.value || '').trim();
+    const token = document.getElementById('tb-encode-input').value.trim();
     const out = document.getElementById('tb-encode-output');
     try {
         const parts = token.split('.');
-        if (parts.length < 2) throw new Error('JWT inválido');
         const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        out.textContent = `HEADER:\n${JSON.stringify(header, null, 2)}\n\nPAYLOAD:\n${JSON.stringify(payload, null, 2)}`;
-    } catch (e) {
-        out.textContent = `Error JWT: ${e.message}`;
+        out.textContent = JSON.stringify({ header, payload }, null, 2);
+    } catch (_) {
+        out.textContent = 'Token JWT inválido';
     }
 };
 
 window.tbComputeHashes = async function () {
-    const text = document.getElementById('tb-encode-input')?.value || '';
-    const out = document.getElementById('tb-encode-output');
-    const data = new TextEncoder().encode(text);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    out.textContent = `SHA-256:\n${hashHex}`;
+    const txt = document.getElementById('tb-encode-input').value;
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    document.getElementById('tb-encode-output').textContent = `SHA-256:\n${hex}`;
 };
 
 window.runRegexTester = function () {
-    const pattern = document.getElementById('tb-regex-pattern')?.value || '';
-    const flags = document.getElementById('tb-regex-flags')?.value || 'g';
-    const text = document.getElementById('tb-regex-text')?.value || '';
-    const resEl = document.getElementById('tb-regex-result');
+    const pat = document.getElementById('tb-regex-pattern').value;
+    const flags = document.getElementById('tb-regex-flags').value;
+    const txt = document.getElementById('tb-regex-text').value;
     try {
-        const rx = new RegExp(pattern, flags);
-        const matches = text.match(rx) || [];
-        resEl.textContent = `Coincidencias (${matches.length}): ${matches.join(' | ')}`;
+        const rx = new RegExp(pat, flags);
+        const matches = txt.match(rx) || [];
+        document.getElementById('tb-regex-result').textContent = `Coincidencias (${matches.length}): ${matches.join(' | ')}`;
     } catch (e) {
-        resEl.textContent = `Regex inválido: ${e.message}`;
+        document.getElementById('tb-regex-result').textContent = 'Regex inválida: ' + e.message;
     }
 };
 
 window.runSimpleDiff = function () {
-    const a = (document.getElementById('tb-regex-text')?.value || '').split('\n');
-    const b = (document.getElementById('tb-diff-b')?.value || '').split('\n');
-    const out = document.getElementById('tb-diff-output');
+    const a = document.getElementById('tb-regex-text').value.split('\n');
+    const b = document.getElementById('tb-diff-b').value.split('\n');
     const max = Math.max(a.length, b.length);
-    const lines = [];
+    const diffs = [];
     for (let i = 0; i < max; i++) {
-        if (a[i] !== b[i]) {
-            lines.push(`Línea ${i + 1}:\n  - A: ${a[i] ?? '(vacío)'}\n  + B: ${b[i] ?? '(vacío)'}`);
-        }
+        if (a[i] !== b[i]) diffs.push(`L${i + 1}: - "${a[i] || ''}" | + "${b[i] || ''}"`);
     }
-    out.textContent = lines.length ? lines.join('\n') : 'Sin diferencias entre Bloque A y Bloque B.';
+    document.getElementById('tb-diff-output').textContent = diffs.length ? diffs.join('\n') : 'Sin diferencias.';
 };
 
 window.calculateSubnet = function () {
-    const raw = (document.getElementById('tb-ip-input')?.value || '').trim();
+    const raw = document.getElementById('tb-ip-input').value.trim();
     const out = document.getElementById('tb-subnet-output');
-    const match = raw.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)\/(\d+)$/);
-    if (!match) {
-        out.textContent = 'Formato esperado: 192.168.1.50/24';
+    const [ipStr, cidrStr] = raw.split('/');
+    const cidr = Number(cidrStr);
+    const octets = (ipStr || '').split('.').map(Number);
+    if (octets.length !== 4 || octets.some(o => isNaN(o) || o < 0 || o > 255) || isNaN(cidr) || cidr < 0 || cidr > 32) {
+        out.textContent = 'Formato inválido. Usa ej: 192.168.1.50/24';
         return;
     }
-    const octs = match.slice(1, 5).map(Number);
-    const cidr = Number(match[5]);
-    if (octs.some(o => o > 255) || cidr > 32) {
-        out.textContent = 'IP o máscara fuera de rango';
-        return;
-    }
-    const ipInt = ((octs[0] << 24) | (octs[1] << 16) | (octs[2] << 8) | octs[3]) >>> 0;
-    const maskInt = cidr === 0 ? 0 : (0xffffffff << (32 - cidr)) >>> 0;
-    const netInt = (ipInt & maskInt) >>> 0;
-    const bcastInt = (netInt | (~maskInt >>> 0)) >>> 0;
-    const toIp = n => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
-    const hosts = cidr >= 31 ? (cidr === 32 ? 1 : 2) : Math.pow(2, 32 - cidr) - 2;
-
-    out.textContent = `Red: ${toIp(netInt)}/${cidr}\nMáscara: ${toIp(maskInt)}\nBroadcast: ${toIp(bcastInt)}\nHosts útiles: ${hosts}`;
+    const ipInt = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
+    const mask = cidr === 0 ? 0 : (0xffffffff << (32 - cidr)) >>> 0;
+    const net = (ipInt & mask) >>> 0;
+    const bcast = (net | (~mask >>> 0)) >>> 0;
+    const toIp = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+    const hosts = cidr >= 31 ? 0 : Math.pow(2, 32 - cidr) - 2;
+    out.textContent = `Red: ${toIp(net)}/${cidr}\nMáscara: ${toIp(mask)}\nBroadcast: ${toIp(bcast)}\nRango útil: ${toIp(net + 1)} - ${toIp(bcast - 1)}\nHosts útiles: ${hosts}`;
 };
 
-window.convertNumberBase = function (fromBase, val) {
-    const clean = val.trim();
-    if (!clean) return;
+window.convertNumberBase = function (from, val) {
     const radices = { dec: 10, bin: 2, hex: 16, oct: 8 };
-    const num = parseInt(clean, radices[fromBase]);
+    const num = parseInt(val.trim(), radices[from]);
     if (isNaN(num)) return;
-    if (fromBase !== 'dec') document.getElementById('base-dec').value = num.toString(10);
-    if (fromBase !== 'bin') document.getElementById('base-bin').value = num.toString(2);
-    if (fromBase !== 'hex') document.getElementById('base-hex').value = num.toString(16).toUpperCase();
-    if (fromBase !== 'oct') document.getElementById('base-oct').value = num.toString(8);
+    if (from !== 'dec') document.getElementById('base-dec').value = num.toString(10);
+    if (from !== 'bin') document.getElementById('base-bin').value = num.toString(2);
+    if (from !== 'hex') document.getElementById('base-hex').value = num.toString(16).toUpperCase();
+    if (from !== 'oct') document.getElementById('base-oct').value = num.toString(8);
 };
 
 window.updateChmodCalc = function () {
-    const calc = p => (document.getElementById(`ch-${p}r`)?.checked ? 4 : 0) +
-        (document.getElementById(`ch-${p}w`)?.checked ? 2 : 0) +
-        (document.getElementById(`ch-${p}x`)?.checked ? 1 : 0);
-    const sym = p => (document.getElementById(`ch-${p}r`)?.checked ? 'r' : '-') +
-        (document.getElementById(`ch-${p}w`)?.checked ? 'w' : '-') +
-        (document.getElementById(`ch-${p}x`)?.checked ? 'x' : '-');
-
-    const oct = `${calc('u')}${calc('g')}${calc('o')}`;
-    document.getElementById('chmod-octal').textContent = oct;
+    const calc = p => (document.getElementById(`ch-${p}r`).checked ? 4 : 0) +
+        (document.getElementById(`ch-${p}w`).checked ? 2 : 0) +
+        (document.getElementById(`ch-${p}x`).checked ? 1 : 0);
+    const sym = p => (document.getElementById(`ch-${p}r`).checked ? 'r' : '-') +
+        (document.getElementById(`ch-${p}w`).checked ? 'w' : '-') +
+        (document.getElementById(`ch-${p}x`).checked ? 'x' : '-');
+    document.getElementById('chmod-octal').textContent = `${calc('u')}${calc('g')}${calc('o')}`;
     document.getElementById('chmod-symbolic').textContent = `${sym('u')}${sym('g')}${sym('o')}`;
 };
 
 window.copyChmodCmd = function () {
-    const oct = document.getElementById('chmod-octal')?.textContent || '755';
-    navigator.clipboard.writeText(`chmod ${oct} `);
-    showToast(`Copiado: chmod ${oct}`, 'success');
+    const oct = document.getElementById('chmod-octal').textContent;
+    navigator.clipboard.writeText(`chmod ${oct} archivo`).then(() => showToast(`Copiado: chmod ${oct} archivo`, 'success'));
 };
 
 window.explainCronExpr = function () {
-    const expr = (document.getElementById('cron-expr-input')?.value || '').trim();
-    const out = document.getElementById('cron-explanation');
-    const parts = expr.split(/\s+/);
+    const parts = document.getElementById('cron-expr-input').value.trim().split(/\s+/);
     if (parts.length !== 5) {
-        out.textContent = 'Formato estándar: minuto hora día_mes mes día_semana (5 campos)';
+        document.getElementById('cron-explanation').textContent = 'Formato cron estándar: min hora día mes día_sem';
         return;
     }
-    out.textContent = `Minuto: ${parts[0]} | Hora: ${parts[1]} | Día mes: ${parts[2]} | Mes: ${parts[3]} | Día semana: ${parts[4]}`;
+    document.getElementById('cron-explanation').textContent =
+        `Minuto: ${parts[0]} | Hora: ${parts[1]} | Día mes: ${parts[2]} | Mes: ${parts[3]} | Día semana: ${parts[4]}`;
 };
 
 window.generateMockUsers = function (count) {
-    const names = ['Marcos', 'Aitor', 'Rubén', 'Elena', 'Carlos'];
-    const arr = Array.from({ length: count }, (_, i) => ({
+    const users = Array.from({ length: count }, (_, i) => ({
         id: i + 1,
-        nombre: names[i % names.length],
-        email: `${names[i % names.length].toLowerCase()}${i + 1}@example.com`,
-        activo: true
+        username: `dev_user_${i + 1}`,
+        email: `user${i + 1}@example.com`,
+        active: true
     }));
-    document.getElementById('tb-gen-output').value = JSON.stringify(arr, null, 2);
+    document.getElementById('tb-gen-output').value = JSON.stringify(users, null, 2);
 };
 
 window.generateUuidsAndDni = function () {
-    const uuid = crypto.randomUUID();
-    const num = Math.floor(10000000 + Math.random() * 89999999);
     const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+    const num = Math.floor(10000000 + Math.random() * 89999999);
     const dni = `${num}${letters[num % 23]}`;
-    document.getElementById('tb-gen-output').value = `UUID v4: ${uuid}\nDNI Test: ${dni}`;
+    document.getElementById('tb-gen-output').value = `UUID: ${crypto.randomUUID()}\nDNI Prueba: ${dni}`;
 };
 
 window.generateSecurePassword = function () {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*';
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-';
     const arr = new Uint32Array(16);
     crypto.getRandomValues(arr);
-    const pass = Array.from(arr, x => chars[x % chars.length]).join('');
-    document.getElementById('tb-gen-output').value = pass;
+    document.getElementById('tb-gen-output').value = [...arr].map(x => chars[x % chars.length]).join('');
 };
 
 window.loadBoilerplate = function (type) {
-    const files = {
-        dockerfile: `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --only=production\nCOPY . .\nEXPOSE 3000\nCMD ["node", "index.js"]`,
-        compose: `services:\n  app:\n    image: nginx:alpine\n    restart: unless-stopped\n    ports:\n      - "8080:80"\n    volumes:\n      - ./html:/usr/share/nginx/html:ro`
+    const bp = {
+        dockerfile: 'FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --only=production\nCOPY . .\nEXPOSE 3000\nCMD ["node", "index.js"]',
+        compose: 'services:\n  app:\n    image: nginx:alpine\n    restart: unless-stopped\n    ports:\n      - "8080:80"\n    volumes:\n      - ./html:/usr/share/nginx/html:ro'
     };
-    document.getElementById('tb-gen-output').value = files[type] || '';
+    document.getElementById('tb-gen-output').value = bp[type] || '';
 };
 
-// Servidores & Changelog
 window.addServer = function () {
-    const name = document.getElementById('srv-name')?.value.trim();
-    const ip = document.getElementById('srv-ip')?.value.trim();
-    const port = document.getElementById('srv-port')?.value.trim() || '22';
-    const user = document.getElementById('srv-creds')?.value.trim() || 'root';
-    const logs = document.getElementById('srv-logs')?.value.trim() || '';
+    const name = document.getElementById('srv-name').value.trim();
+    const ip = document.getElementById('srv-ip').value.trim();
+    const port = document.getElementById('srv-port').value.trim() || '22';
+    const creds = document.getElementById('srv-creds').value.trim() || 'root';
+    const logs = document.getElementById('srv-logs').value.trim();
     if (!name || !ip) return;
-
-    appState.servers.push({ id: 'srv_' + Date.now(), name, ip, port, user, logs });
-    toggleForm('form-servers');
+    appState.servers.push({ id: Date.now().toString(), name, ip, port, creds, logs });
+    document.getElementById('srv-name').value = '';
     saveState();
     renderServers();
 };
-
-function renderServers() {
-    const list = document.getElementById('servers-list');
-    if (!list) return;
-    const q = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
-    const items = appState.servers.filter(s => `${s.name} ${s.ip} ${s.port} ${s.logs}`.toLowerCase().includes(q));
-
-    list.innerHTML = items.map(s => {
-        const sshCmd = `ssh -p ${s.port || 22} ${s.user || 'root'}@${s.ip}`;
-        return `
-            <li style="flex-direction:column;align-items:stretch;">
-                <div class="form-inline-between">
-                    <strong>${escapeHtml(s.name)} <span class="mono-muted">(${escapeHtml(s.ip)}:${escapeHtml(s.port || '22')})</span></strong>
-                    <div>
-                        <button type="button" class="btn-cyan btn-sm" onclick="copyRawText('${escapeHtml(sshCmd)}')" title="Copiar comando SSH">SSH</button>
-                        <button type="button" class="btn-icon" onclick="deleteServer('${s.id}')">🗑️</button>
-                    </div>
-                </div>
-                ${s.logs ? `<small class="mono-muted">Ruta: ${escapeHtml(s.logs)}</small>` : ''}
-            </li>
-        `;
-    }).join('');
-}
 
 window.deleteServer = function (id) {
     appState.servers = appState.servers.filter(s => s.id !== id);
@@ -2280,98 +1747,87 @@ window.deleteServer = function (id) {
     renderServers();
 };
 
+window.copySshCmd = function (user, ip, port) {
+    navigator.clipboard.writeText(`ssh ${user}@${ip} -p ${port}`).then(() => showToast('Comando SSH copiado', 'success'));
+};
+
+function renderServers() {
+    const q = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
+    const list = appState.servers.filter(s => `${s.name} ${s.ip} ${s.port} ${s.logs}`.toLowerCase().includes(q));
+    document.getElementById('servers-list').innerHTML = list.map(s => `
+        <li>
+            <div>
+                <strong>${escapeHtml(s.name)}</strong> <span class="mono-muted">(${escapeHtml(s.creds)}@${escapeHtml(s.ip)}:${escapeHtml(s.port)})</span>
+                ${s.logs ? `<div class="mono-muted">Logs: ${escapeHtml(s.logs)}</div>` : ''}
+            </div>
+            <div class="card-actions">
+                <button type="button" class="btn-cyan btn-sm" onclick="copySshCmd('${escapeHtml(s.creds)}','${escapeHtml(s.ip)}','${escapeHtml(s.port)}')">SSH</button>
+                <button type="button" class="btn-icon" onclick="deleteServer('${s.id}')">🗑️</button>
+            </div>
+        </li>`).join('') || '<li class="mono-muted">Sin servidores registrados.</li>';
+}
+
 window.addInfraChangelog = function () {
-    const inp = document.getElementById('infra-changelog-input');
-    const text = inp?.value.trim();
+    const input = document.getElementById('infra-changelog-input');
+    const text = input.value.trim();
     if (!text) return;
-    appState.infraChangelog.unshift({ id: 'cl_' + Date.now(), text, date: new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) });
-    inp.value = '';
+    appState.infraChangelog.unshift({ id: Date.now().toString(), date: getNow().toLocaleString('es-ES'), text });
+    input.value = '';
     saveState();
     renderInfraChangelog();
 };
 
 function renderInfraChangelog() {
-    const list = document.getElementById('infra-changelog-list');
-    if (!list) return;
-    list.innerHTML = appState.infraChangelog.map(c => `
-        <div class="form-inline-between" style="font-size:0.72rem;font-family:var(--font-mono);padding:3px 0;border-bottom:1px dashed rgba(255,255,255,0.06);">
-            <span>[${c.date}] ${escapeHtml(c.text)}</span>
-            <button type="button" class="btn-icon" onclick="deleteInfraChangelog('${c.id}')">×</button>
-        </div>
-    `).join('');
+    document.getElementById('infra-changelog-list').innerHTML = appState.infraChangelog.map(c =>
+        `<div class="mono-muted">• [${c.date}] ${escapeHtml(c.text)}</div>`).join('');
 }
 
-window.deleteInfraChangelog = function (id) {
-    appState.infraChangelog = appState.infraChangelog.filter(c => c.id !== id);
-    saveState();
-    renderInfraChangelog();
-};
-
-// Snippets & Bookmarks
 window.addCustomSnippet = function () {
-    const title = document.getElementById('snip-new-title')?.value.trim();
-    const cat = document.getElementById('snip-new-cat')?.value.trim() || 'CLI';
-    const cmd = document.getElementById('snip-new-cmd')?.value.trim();
+    const title = document.getElementById('snip-new-title').value.trim();
+    const cat = document.getElementById('snip-new-cat').value.trim() || 'General';
+    const cmd = document.getElementById('snip-new-cmd').value.trim();
     if (!title || !cmd) return;
-
-    appState.customSnippets.unshift({ id: 'sn_' + Date.now(), title, cat, cmd });
-    toggleForm('form-add-snippet');
+    appState.snippets.unshift({ id: Date.now().toString(), title, cat, cmd });
+    document.getElementById('snip-new-title').value = '';
+    document.getElementById('snip-new-cmd').value = '';
     saveState();
     renderSnippets();
+};
+
+window.copyResolvedSnippet = function (encodedCmd) {
+    const cmd = decodeURIComponent(encodedCmd);
+    navigator.clipboard.writeText(cmd).then(() => showToast('Comando copiado', 'success'));
 };
 
 function renderSnippets() {
-    const box = document.getElementById('snippet-list-container');
-    if (!box) return;
-    const q = (document.getElementById('snippet-search')?.value || '').toLowerCase();
-    const u = document.getElementById('cli-var-user')?.value || 'root';
+    const user = document.getElementById('cli-var-user')?.value || 'root';
     const ip = document.getElementById('cli-var-ip')?.value || '192.168.1.10';
     const port = document.getElementById('cli-var-port')?.value || '22';
+    const q = (document.getElementById('snippet-search')?.value || '').toLowerCase();
 
-    const items = appState.customSnippets.filter(s => `${s.title} ${s.cat} ${s.cmd}`.toLowerCase().includes(q));
-    box.innerHTML = items.map(s => {
-        const resolved = s.cmd.replace(/\{\{USER\}\}/g, u).replace(/\{\{IP\}\}/g, ip).replace(/\{\{PORT\}\}/g, port);
-        return `
-            <div class="snippet-box">
-                <div>
-                    <div class="mono-muted">[${escapeHtml(s.cat)}] ${escapeHtml(s.title)}</div>
-                    <div class="snippet-cmd-text">${escapeHtml(resolved)}</div>
-                </div>
-                <div class="filter-pills-row">
-                    <button type="button" class="btn-cyan btn-sm" onclick="copyRawText('${escapeHtml(resolved)}')">📋</button>
-                    <button type="button" class="btn-icon" onclick="deleteSnippet('${s.id}')">🗑️</button>
-                </div>
+    const list = appState.snippets.filter(s => `${s.title} ${s.cat} ${s.cmd}`.toLowerCase().includes(q));
+    document.getElementById('snippet-list-container').innerHTML = list.map(s => {
+        const resolved = s.cmd.replace(/\{\{USER\}\}/g, user).replace(/\{\{IP\}\}/g, ip).replace(/\{\{PORT\}\}/g, port);
+        return `<div class="snippet-box">
+            <div>
+                <div class="mono-muted">[${escapeHtml(s.cat)}] ${escapeHtml(s.title)}</div>
+                <div class="snippet-cmd-text">${escapeHtml(resolved)}</div>
             </div>
-        `;
+            <button type="button" class="btn-cyan btn-sm" onclick="copyResolvedSnippet('${encodeURIComponent(resolved)}')">📋</button>
+        </div>`;
     }).join('');
 }
 
-window.deleteSnippet = function (id) {
-    appState.customSnippets = appState.customSnippets.filter(s => s.id !== id);
-    saveState();
-    renderSnippets();
-};
-
 window.addBookmark = function () {
-    const name = document.getElementById('bm-name')?.value.trim();
-    const url = document.getElementById('bm-url')?.value.trim();
+    const name = document.getElementById('bm-name').value.trim();
+    const url = document.getElementById('bm-url').value.trim();
     if (!name || !url) return;
-    appState.bookmarks.push({ id: 'bm_' + Date.now(), name, url });
-    toggleForm('form-bookmarks');
+    appState.bookmarks.push({ id: Date.now().toString(), name, url });
+    document.getElementById('bm-name').value = '';
+    document.getElementById('bm-url').value = '';
     saveState();
     renderBookmarks();
 };
-
-function renderBookmarks() {
-    const list = document.getElementById('bookmarks-list');
-    if (!list) return;
-    list.innerHTML = appState.bookmarks.map(b => `
-        <li>
-            <a href="${escapeHtml(b.url)}" target="_blank" style="color:var(--accent-cyan);text-decoration:none;">🔗 ${escapeHtml(b.name)}</a>
-            <button type="button" class="btn-icon" onclick="deleteBookmark('${b.id}')">🗑️</button>
-        </li>
-    `).join('');
-}
 
 window.deleteBookmark = function (id) {
     appState.bookmarks = appState.bookmarks.filter(b => b.id !== id);
@@ -2379,16 +1835,159 @@ window.deleteBookmark = function (id) {
     renderBookmarks();
 };
 
-/* ==========================================================================
-   BUSCADOR GLOBAL (CTRL + K), SNAPSHOTS Y UTILIDADES
-   ========================================================================== */
+function renderBookmarks() {
+    document.getElementById('bookmarks-list').innerHTML = appState.bookmarks.map(b => `
+        <li>
+            <a href="${escapeHtml(b.url)}" target="_blank" class="footer-link-cyan">${escapeHtml(b.name)} ↗</a>
+            <button type="button" class="btn-icon" onclick="deleteBookmark('${b.id}')">🗑️</button>
+        </li>`).join('');
+}
+
+/* ----------------------------------------------------------
+   GOOGLE FONTS & THEME STUDIO
+   ---------------------------------------------------------- */
+function injectGoogleFontStylesheet(fontName) {
+    if (!fontName) return;
+    const link = document.getElementById('dynamic-google-fonts');
+    const families = new Set([
+        appState.appearance.fontSans,
+        appState.appearance.fontMono,
+        fontName,
+        ...appState.favoriteFonts
+    ].filter(Boolean));
+    const query = [...families].map(f => `family=${encodeURIComponent(f)}:wght@400;600;700`).join('&');
+    if (link) link.href = `https://fonts.googleapis.com/css2?${query}&display=swap`;
+}
+
+window.loadGoogleFontByName = function () {
+    const name = document.getElementById('gf-input-name').value.trim();
+    if (!name) return;
+    quickLoadGoogleFont(name);
+};
+
+window.quickLoadGoogleFont = function (name) {
+    lastLoadedGoogleFont = name;
+    document.getElementById('gf-input-name').value = name;
+    injectGoogleFontStylesheet(name);
+    document.getElementById('gf-active-preview-label').textContent = `Vista previa: ${name}`;
+    const sample = document.getElementById('gf-preview-sample');
+    if (sample) sample.style.fontFamily = `'${name}', monospace`;
+};
+
+window.updateFontPlaygroundStyle = function () {
+    const size = document.getElementById('gf-preview-size').value;
+    const sample = document.getElementById('gf-preview-sample');
+    if (sample) sample.style.fontSize = `${size}px`;
+};
+
+window.saveGoogleFontFavorite = function () {
+    if (!lastLoadedGoogleFont) return;
+    if (!appState.favoriteFonts.includes(lastLoadedGoogleFont)) {
+        appState.favoriteFonts.push(lastLoadedGoogleFont);
+        saveState();
+        renderFavoriteFonts();
+        showToast(`Fuente "${lastLoadedGoogleFont}" guardada`, 'success');
+    }
+};
+
+window.applyLoadedFontToUi = function (target) {
+    if (target === 'sans') appState.appearance.fontSans = lastLoadedGoogleFont;
+    else appState.appearance.fontMono = lastLoadedGoogleFont;
+    applyAllAppearance();
+    saveState();
+    showToast(`Fuente aplicada a ${target.toUpperCase()}`, 'success');
+};
+
+window.applyLoadedFontToStudio = function () {
+    appState.studio.previewFont = lastLoadedGoogleFont;
+    saveState();
+    renderStudioFontSelector();
+    showToast(`Fuente "${lastLoadedGoogleFont}" asignada a Live Code Studio`, 'success');
+};
+
+function renderFavoriteFonts() {
+    const box = document.getElementById('gf-favorites-list');
+    if (!box) return;
+    box.innerHTML = appState.favoriteFonts.map(f =>
+        `<button type="button" class="pill-btn" onclick="quickLoadGoogleFont('${escapeHtml(f)}')">${escapeHtml(f)}</button>`
+    ).join('');
+    renderStudioFontSelector();
+}
+
+function renderStudioFontSelector() {
+    const sel = document.getElementById('studio-font-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">🔤 Fuente Preview (Por defecto)</option>' +
+        appState.favoriteFonts.map(f => `<option value="${escapeHtml(f)}" ${appState.studio.previewFont === f ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
+}
+
+window.updateAppearanceSettings = function () {
+    appState.appearance.scale = document.getElementById('ui-scale-select').value;
+    applyAllAppearance();
+    saveState();
+};
+
+window.activateCustomTheme = function () {
+    appState.theme = 'custom';
+    appState.appearance.customName = document.getElementById('custom-theme-name').value || 'Mi Tema';
+    appState.appearance.colors = {
+        bg: document.getElementById('cp-bg').value,
+        card: document.getElementById('cp-card').value,
+        border: document.getElementById('cp-border').value,
+        text: document.getElementById('cp-text').value,
+        cyan: document.getElementById('cp-cyan').value,
+        violet: document.getElementById('cp-violet').value
+    };
+    document.getElementById('theme-select').value = 'custom';
+    applyAllAppearance();
+    saveState();
+};
+
+window.resetAppearanceDefaults = function () {
+    appState.appearance.fontSans = 'Inter';
+    appState.appearance.fontMono = 'JetBrains Mono';
+    appState.appearance.scale = '1';
+    applyAllAppearance();
+    saveState();
+};
+
+function applyAllAppearance() {
+    document.documentElement.setAttribute('data-theme', appState.theme);
+    document.body.classList.toggle('density-compact', !!appState.densityCompact);
+    const dBtn = document.getElementById('btn-density-mode');
+    if (dBtn) dBtn.textContent = appState.densityCompact ? '📐 Compacto' : '📐 Aireado';
+
+    const root = document.documentElement.style;
+    root.setProperty('--ui-scale', appState.appearance.scale || '1');
+    root.setProperty('--font-sans', `'${appState.appearance.fontSans}', system-ui, sans-serif`);
+    root.setProperty('--font-mono', `'${appState.appearance.fontMono}', monospace`);
+    injectGoogleFontStylesheet(appState.appearance.fontSans);
+
+    if (appState.theme === 'custom') {
+        const c = appState.appearance.colors;
+        root.setProperty('--bg-color', c.bg);
+        root.setProperty('--card-bg', c.card);
+        root.setProperty('--card-border', c.border);
+        root.setProperty('--text-main', c.text);
+        root.setProperty('--accent-cyan', c.cyan);
+        root.setProperty('--accent-violet', c.violet);
+    } else {
+        ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'].forEach(v => root.removeProperty(v));
+    }
+
+    const themeSel = document.getElementById('theme-select');
+    if (themeSel) themeSel.value = appState.theme;
+}
+
+/* ----------------------------------------------------------
+   BUSCADOR GLOBAL, SNAPSHOTS, RESUMEN Y BACKUPS
+   ---------------------------------------------------------- */
 window.openGlobalSearch = function () {
-    const modal = document.getElementById('global-search-modal');
-    if (!modal) return;
-    modal.style.display = 'flex';
+    document.getElementById('global-search-modal').style.display = 'flex';
     const inp = document.getElementById('global-search-input');
-    if (inp) { inp.value = ''; inp.focus(); }
+    inp.value = '';
     filterGlobalSearch();
+    inp.focus();
 };
 
 window.closeGlobalSearch = function () {
@@ -2396,57 +1995,36 @@ window.closeGlobalSearch = function () {
 };
 
 window.filterGlobalSearch = function () {
-    const q = (document.getElementById('global-search-input')?.value || '').toLowerCase();
-    const resList = document.getElementById('global-search-results');
-    if (!resList) return;
-
+    const q = (document.getElementById('global-search-input').value || '').toLowerCase();
     const results = [];
     appState.tasks.forEach(t => {
-        if (t.text.toLowerCase().includes(q)) results.push({ type: 'Tarea', label: t.text, action: () => switchWorkspace('cockpit') });
+        if (t.text.toLowerCase().includes(q)) results.push({ type: 'Tarea', label: t.text, ws: 'cockpit' });
     });
-    appState.studioProjects.forEach(p => {
-        if (p.title.toLowerCase().includes(q)) results.push({ type: 'Proyecto HTML', label: p.title, action: () => { switchWorkspace('studio'); loadSavedStudioProject(p.id); } });
+    appState.studio.savedProjects.forEach(p => {
+        if (p.title.toLowerCase().includes(q)) results.push({ type: 'Proyecto Web', label: p.title, ws: 'studio' });
     });
-    appState.customSnippets.forEach(s => {
-        if (`${s.title} ${s.cmd}`.toLowerCase().includes(q)) results.push({ type: 'Snippet', label: `${s.title}: ${s.cmd}`, action: () => { switchWorkspace('devlab'); copyRawText(s.cmd); } });
+    appState.snippets.forEach(s => {
+        if (`${s.title} ${s.cmd}`.toLowerCase().includes(q)) results.push({ type: 'Snippet', label: `${s.title}: ${s.cmd}`, ws: 'devlab' });
     });
     appState.servers.forEach(s => {
-        if (`${s.name} ${s.ip}`.toLowerCase().includes(q)) results.push({ type: 'Servidor', label: `${s.name} (${s.ip})`, action: () => switchWorkspace('devlab') });
-    });
-    appState.bugLogs.forEach(b => {
-        if (`${b.error} ${b.fix}`.toLowerCase().includes(q)) results.push({ type: 'Bug', label: b.error, action: () => { switchWorkspace('academy'); setStudyHubTab('bugs'); } });
+        if (`${s.name} ${s.ip}`.toLowerCase().includes(q)) results.push({ type: 'Servidor', label: `${s.name} (${s.ip})`, ws: 'devlab' });
     });
 
-    resList.innerHTML = results.slice(0, 15).map((r, i) => `
-        <li class="search-result-item" onclick="window._globalSearchActions[${i}](); closeGlobalSearch();">
-            <span><strong>[${r.type}]</strong> ${escapeHtml(r.label)}</span>
-            <span class="badge-version">Ir ↵</span>
-        </li>
-    `).join('');
-    window._globalSearchActions = results.slice(0, 15).map(r => r.action);
+    const ul = document.getElementById('global-search-results');
+    ul.innerHTML = results.slice(0, 15).map((r, idx) => `
+        <li class="search-result-item ${idx === globalSearchSelectedIdx ? 'selected' : ''}" onclick="switchWorkspace('${r.ws}');closeGlobalSearch();">
+            <span>${escapeHtml(r.label)}</span>
+            <span class="badge-version">${r.type}</span>
+        </li>`).join('') || '<li class="mono-muted">Sin coincidencias.</li>';
 };
 
 window.handleGlobalSearchKeydown = function (e) {
     if (e.key === 'Escape') closeGlobalSearch();
 };
 
-function initKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-            e.preventDefault();
-            openGlobalSearch();
-        } else if (e.altKey && e.key === '1') switchWorkspace('cockpit');
-        else if (e.altKey && e.key === '2') switchWorkspace('studio');
-        else if (e.altKey && e.key === '3') switchWorkspace('academy');
-        else if (e.altKey && e.key === '4') switchWorkspace('devlab');
-        else if (e.altKey && e.key === '5') switchWorkspace('fonts');
-        else if (e.altKey && e.key.toLowerCase() === 'z') toggleZenMode();
-    });
-}
-
 window.openSnapshotsModal = function () {
-    document.getElementById('snapshots-modal').style.display = 'flex';
     renderSnapshotsList();
+    document.getElementById('snapshots-modal').style.display = 'flex';
 };
 
 window.closeSnapshotsModal = function () {
@@ -2455,45 +2033,43 @@ window.closeSnapshotsModal = function () {
 
 window.createManualSnapshot = function () {
     const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    snaps.unshift({ id: Date.now(), date: new Date().toLocaleString('es-ES'), data: JSON.stringify(appState) });
-    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps.slice(0, 8)));
+    snaps.unshift({ id: Date.now().toString(), date: getNow().toLocaleString('es-ES'), data: appState });
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps.slice(0, 10)));
     renderSnapshotsList();
-    showToast('📸 Snapshot guardado localmente', 'success');
+    showToast('Snapshot guardado', 'success');
 };
-
-function renderSnapshotsList() {
-    const box = document.getElementById('snapshots-list-container');
-    if (!box) return;
-    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    box.innerHTML = snaps.length ? snaps.map(s => `
-        <div class="hub-item-card" style="flex-direction:row;justify-content:space-between;align-items:center;">
-            <span>📸 ${escapeHtml(s.date)}</span>
-            <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot(${s.id})">Restaurar</button>
-        </div>
-    `).join('') : '<p class="mono-muted">No hay snapshots guardados todavía.</p>';
-}
 
 window.restoreSnapshot = function (id) {
     const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
     const found = snaps.find(s => s.id === id);
-    if (found) {
-        appState = JSON.parse(found.data);
-        saveState();
-        applyAllAppearance();
-        renderAll();
-        closeSnapshotsModal();
-        showToast('Snapshot restaurado', 'success');
-    }
+    if (!found) return;
+    appState = deepMerge(createDefaultState(), found.data);
+    saveState();
+    applyAllAppearance();
+    renderAll();
+    closeSnapshotsModal();
+    showToast('Snapshot restaurado', 'success');
 };
 
+function renderSnapshotsList() {
+    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    document.getElementById('snapshots-list-container').innerHTML = snaps.map(s => `
+        <div class="deadline-card-item">
+            <div class="deadline-card-top">
+                <span>📸 ${s.date}</span>
+                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot('${s.id}')">Restaurar</button>
+            </div>
+        </div>`).join('') || '<p class="mono-muted">No hay snapshots guardados.</p>';
+}
+
 window.generateDailySummaryModal = function () {
+    const todayStr = getNow().toISOString().slice(0, 10);
     const doneTasks = appState.tasks.filter(t => t.done).map(t => `- [x] ${t.text}`).join('\n') || '- Ninguna';
     const pendingTasks = appState.tasks.filter(t => !t.done).map(t => `- [ ] ${t.text}`).join('\n') || '- Ninguna';
-    const md = `# Resumen de Jornada (${new Date().toLocaleDateString('es-ES')})\n\n` +
-        `- **Tiempo de Foco Hoy:** ${appState.stats.focusMinutesToday} min\n` +
-        `- **Racha Actual:** ${appState.stats.streakDays} días\n\n` +
-        `## Tareas Completadas\n${doneTasks}\n\n## Tareas Pendientes\n${pendingTasks}`;
-    document.getElementById('daily-summary-output').value = md;
+    const mins = appState.pomodoro.lastStudyDate === todayStr ? appState.pomodoro.todayMinutes : 0;
+
+    document.getElementById('daily-summary-output').value =
+        `# Resumen DevWorkspace (${todayStr})\n- **Tiempo Focus:** ${mins} min\n\n## Completadas\n${doneTasks}\n\n## Pendientes\n${pendingTasks}`;
     document.getElementById('daily-summary-modal').style.display = 'flex';
 };
 
@@ -2510,21 +2086,24 @@ window.closeShortcutsModal = function () {
 };
 
 window.exportData = function () {
-    downloadTextFile(`devworkspace_backup_${getTodayIsoKey()}.json`, JSON.stringify(appState, null, 2), 'application/json');
+    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `devworkspace-backup-${getNow().toISOString().slice(0, 10)}.json`;
+    a.click();
 };
 
 window.importData = function (event) {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
         try {
-            const imported = JSON.parse(String(e.target?.result || '{}'));
-            appState = deepMerge(createDefaultState(), imported);
+            appState = deepMerge(createDefaultState(), JSON.parse(e.target.result));
             saveState();
             applyAllAppearance();
             renderAll();
-            showToast('Backup JSON importado correctamente', 'success');
+            showToast('Backup importado correctamente', 'success');
         } catch (_) {
             showToast('Archivo JSON inválido', 'error');
         }
@@ -2533,165 +2112,124 @@ window.importData = function (event) {
 };
 
 window.resetWorkspacePrompt = function () {
-    if (confirm('¿Seguro que quieres vaciar todos los datos locales de DevWorkspace?')) {
-        localStorage.removeItem(STORAGE_KEY);
-        appState = createDefaultState();
-        applyAllAppearance();
-        renderAll();
-        showToast('Workspace reiniciado');
-    }
+    if (!confirm('¿Vaciar todos los datos locales de DevWorkspace?')) return;
+    appState = createDefaultState();
+    saveState();
+    applyAllAppearance();
+    renderAll();
 };
 
-/* ==========================================================================
-   FIREBASE CLOUD SYNC (OPCIONAL SI SE CONFIGURA FIREBASE_CONFIG)
-   ========================================================================== */
-async function initFirebaseIfConfigured() {
-    if (!FIREBASE_CONFIG) return;
-    try {
-        const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-        const { getAuth, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-        const { getFirestore, doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-
-        firebaseApp = initializeApp(FIREBASE_CONFIG);
-        firebaseAuth = getAuth(firebaseApp);
-        firebaseDb = getFirestore(firebaseApp);
-
-        onAuthStateChanged(firebaseAuth, async (user) => {
-            currentUser = user;
-            const profWidget = document.getElementById('user-profile-widget');
-            const loginBtn = document.getElementById('btn-cloud-login');
-            if (user) {
-                if (profWidget) profWidget.style.display = 'flex';
-                if (loginBtn) loginBtn.style.display = 'none';
-                document.getElementById('user-name').textContent = user.email || 'Usuario';
-                const snap = await getDoc(doc(firebaseDb, 'workspaces', user.uid));
-                if (snap.exists()) {
-                    appState = deepMerge(createDefaultState(), snap.data());
-                    saveState(false);
-                    applyAllAppearance();
-                    renderAll();
-                }
-            } else {
-                if (profWidget) profWidget.style.display = 'none';
-                if (loginBtn) loginBtn.style.display = 'inline-flex';
-            }
-        });
-    } catch (e) {
-        console.warn('Firebase no inicializado:', e);
-    }
+function updateStorageQuotaBadge(bytes) {
+    const badge = document.getElementById('storage-quota-badge');
+    if (badge) badge.textContent = `Storage: ${(bytes / 1024).toFixed(1)} KB`;
 }
 
-async function syncToFirebaseCloud() {
-    if (!currentUser || !firebaseDb) return;
-    const ind = document.getElementById('cloud-sync-indicator');
-    try {
-        if (ind) { ind.textContent = 'Guardando...'; ind.className = 'sync-badge sync-saving'; }
-        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-        await setDoc(doc(firebaseDb, 'workspaces', currentUser.uid), appState);
-        if (ind) { ind.textContent = 'Cloud OK'; ind.className = 'sync-badge'; }
-    } catch (_) {
-        if (ind) { ind.textContent = 'Sync Error'; ind.className = 'sync-badge sync-error'; }
-    }
-}
-
-window.openAuthModal = function () { document.getElementById('auth-modal').style.display = 'flex'; };
-window.closeAuthModal = function () { document.getElementById('auth-modal').style.display = 'none'; };
-window.continueAsGuest = function () { closeAuthModal(); showToast('Trabajando en Modo Local'); };
-window.toggleAuthMode = function () {
-    isRegisterMode = !isRegisterMode;
-    document.getElementById('auth-title').textContent = isRegisterMode ? 'Crear Cuenta Cloud' : 'DevWorkspace Cloud';
-    document.getElementById('auth-main-btn').textContent = isRegisterMode ? '✨ Registrarse' : '🔑 Iniciar Sesión';
-};
-
-window.handleEmailAuth = async function () {
-    if (!firebaseAuth) {
-        showToast('Configura window.DEVWORKSPACE_FIREBASE_CONFIG para usar nube', 'error');
-        return;
-    }
-    const email = document.getElementById('auth-email').value.trim();
-    const pass = document.getElementById('auth-password').value;
-    try {
-        const { signInWithEmailAndPassword, createUserWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-        if (isRegisterMode) await createUserWithEmailAndPassword(firebaseAuth, email, pass);
-        else await signInWithEmailAndPassword(firebaseAuth, email, pass);
-        closeAuthModal();
-    } catch (e) {
-        showToast(e.message, 'error');
-    }
-};
-
-window.logoutUser = async function () {
-    if (!firebaseAuth) return;
-    const { signOut } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-    await signOut(firebaseAuth);
-};
-
-/* ==========================================================================
-   HELPERS GENERALES Y RENDERIZADO GLOBAL
-   ========================================================================== */
+/* ----------------------------------------------------------
+   RENDERIZADO GLOBAL Y EVENTOS DE INICIO
+   ---------------------------------------------------------- */
 function renderAll() {
     renderScheduleWidget();
     renderDeliveries();
     renderTasks();
-    updateStatsDisplay();
-    initScratchpad();
+    updateStats();
     renderKanban();
     renderGrades();
     renderFlashcards();
     renderBugLogs();
     renderDoubts();
-    renderTeamProjects();
+    renderProjects();
     renderServers();
     renderInfraChangelog();
     renderSnippets();
     renderBookmarks();
-    updateStorageQuotaBadge(JSON.stringify(appState).length);
-}
+    renderFavoriteFonts();
 
-window.toggleForm = function (id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.display = el.style.display === 'block' ? 'none' : 'block';
-};
+    const pad = document.getElementById('scratchpad');
+    if (pad) pad.value = appState.notes[activeNotesTab] || '';
+    updateScratchpadMetrics();
 
-window.copyElementValue = function (id) {
-    const el = document.getElementById(id);
-    if (el) {
-        navigator.clipboard.writeText(el.value || el.textContent || '');
-        showToast('Copiado al portapapeles', 'success');
+    const sticky = document.getElementById('sticky-note-input');
+    if (sticky) sticky.value = appState.stickyNote || '';
+
+    const stTitle = document.getElementById('studio-project-title');
+    if (stTitle) stTitle.value = appState.studio.currentTitle || 'Mi Proyecto Web';
+    const cHtml = document.getElementById('code-html');
+    const cCss = document.getElementById('code-css');
+    const cJs = document.getElementById('code-js');
+    if (cHtml) cHtml.value = appState.studio.html || '';
+    if (cCss) cCss.value = appState.studio.css || '';
+    if (cJs) cJs.value = appState.studio.js || '';
+
+    document.getElementById('pomo-focus-time').value = appState.pomodoro.focusMins || 25;
+    document.getElementById('pomo-break-time').value = appState.pomodoro.breakMins || 5;
+    if (!pomoRunning) {
+        pomoSecondsLeft = (appState.pomodoro.focusMins || 25) * 60;
+        updatePomodoroDisplay();
     }
-};
-
-window.copyRawText = function (txt) {
-    navigator.clipboard.writeText(txt);
-    showToast(`Copiado: ${txt}`, 'success');
-};
-
-function downloadTextFile(filename, content, mime) {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
 }
 
-function escapeHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
+document.addEventListener('DOMContentLoaded', () => {
+    applyAllAppearance();
+    switchWorkspace(appState.activeWorkspace || 'cockpit');
+    renderAll();
+    updateWeatherBadge();
+    explainCronExpr();
+    syncRealTimeNetwork();
+    updateClockLoop();
+    setInterval(updateClockLoop, 1000);
+    setInterval(renderScheduleWidget, 30000);
 
-function showToast(msg, type = 'info') {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = msg;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3200);
-}
+    // Listeners de auto-guardado en notas
+    document.getElementById('scratchpad')?.addEventListener('input', (e) => {
+        appState.notes[activeNotesTab] = e.target.value;
+        updateScratchpadMetrics();
+        saveState();
+    });
+
+    document.getElementById('sticky-note-input')?.addEventListener('input', (e) => {
+        appState.stickyNote = e.target.value;
+        saveState();
+    });
+
+    // Listeners Live Code Studio
+    ['code-html', 'code-css', 'code-js', 'studio-project-title'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', () => {
+            syncStudioStateFromInputs();
+            if (document.getElementById('studio-autorun')?.checked) {
+                clearTimeout(studioAutoRunTimer);
+                studioAutoRunTimer = setTimeout(runStudioPreview, 350);
+            }
+        });
+    });
+
+    window.addEventListener('message', (ev) => {
+        if (ev.data?.source === 'studio-console') {
+            studioConsoleLogs.push({ level: ev.data.level, msg: ev.data.msg });
+            renderStudioConsole();
+        }
+    });
+
+    document.getElementById('theme-select')?.addEventListener('change', (e) => {
+        appState.theme = e.target.value;
+        applyAllAppearance();
+        saveState();
+    });
+
+    // Atajos de teclado globales
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            openGlobalSearch();
+        } else if (e.altKey && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            toggleZenMode();
+        } else if (e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
+            e.preventDefault();
+            const map = ['cockpit', 'studio', 'academy', 'devlab', 'fonts'];
+            switchWorkspace(map[Number(e.key) - 1]);
+        }
+    });
+
+    updateStorageQuotaBadge((localStorage.getItem(STORAGE_KEY) || '').length);
+    initFirebaseIfConfigured();
+});
