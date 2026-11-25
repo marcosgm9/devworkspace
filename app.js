@@ -4,18 +4,18 @@
    ========================================================== */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-    getAuth, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signOut, 
-    onAuthStateChanged 
+import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { 
-    getFirestore, 
-    doc, 
-    getDoc, 
-    setDoc 
+import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 /* ----------------------------------------------------------
@@ -85,29 +85,33 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function setSyncBadge(state, label) {
+    const badge = document.getElementById('cloud-sync-indicator');
+    if (!badge) return;
+    badge.classList.remove('sync-saving', 'sync-error');
+    if (state === 'saving') badge.classList.add('sync-saving');
+    if (state === 'error') badge.classList.add('sync-error');
+    badge.textContent = label;
+}
+
 /* ----------------------------------------------------------
    NOTIFICACIONES NATIVAS DE ESCRITORIO
    ---------------------------------------------------------- */
 function requestNotificationPermission() {
     if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission();
+        Notification.requestPermission().catch(() => {});
     }
 }
 
 function sendDesktopNotification(title, body) {
     if ("Notification" in window && Notification.permission === "granted") {
         try {
-            new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/3076/3076129.png' });
+            new Notification(title, { body });
         } catch (e) {
             console.warn("No se pudo enviar notificación nativa:", e);
         }
     }
 }
-
-/* ----------------------------------------------------------
-   SNIPPETS POR DEFECTO
-   ---------------------------------------------------------- */
-const defaultSnippets = [];
 
 /* ----------------------------------------------------------
    ESTADO INICIAL Y ESQUEMA
@@ -119,28 +123,33 @@ const defaultCategories = [
     { key: 'focus', label: '⚡ Foco & Productividad' }
 ];
 
+const defaultLayout = {
+    colLeft: ['card-kanban', 'card-grades', 'card-deliveries', 'card-tasks', 'card-notes', 'card-sticky'],
+    colRight: ['card-study-stats', 'card-pomodoro', 'card-audio', 'card-snippets', 'card-schedule', 'card-bookmarks', 'card-servers']
+};
+
 const defaultData = {
     bookmarks: [],
     tasks: [],
     servers: [],
     schedule: [],
     stickyNote: "",
-    notes: { 
-        general: "", 
-        comandos: "", 
-        clases: "" 
+    notes: {
+        general: "",
+        comandos: "",
+        clases: ""
     },
     activeNotesTab: 'general',
     grades: [],
     deliveries: [],
     snippets: [],
     studyKanban: [],
-    studyStats: { 
-        todayFocusMinutes: 0, 
-        totalFocusMinutes: 0, 
-        lastDate: new Date().toISOString().slice(0, 10), 
-        streakDays: 0, 
-        history: [] 
+    studyStats: {
+        todayFocusMinutes: 0,
+        totalFocusMinutes: 0,
+        lastDate: new Date().toISOString().slice(0, 10),
+        streakDays: 0,
+        history: []
     },
     customCategories: [],
     customCards: [],
@@ -149,14 +158,14 @@ const defaultData = {
         timezone: 'Europe/Madrid',
         theme: 'cyberpunk',
         manualSkewOffsetMs: 0,
-        customTheme: { 
-            name: 'Cyber Neon', 
-            bg: '#060813', 
-            card: '#0d131f', 
-            border: '#1e293b', 
-            text: '#f1f5f9', 
-            cyan: '#38bdf8', 
-            violet: '#a855f7' 
+        customTheme: {
+            name: 'Cyber Neon',
+            bg: '#060813',
+            card: '#0d131f',
+            border: '#1e293b',
+            text: '#f1f5f9',
+            cyan: '#38bdf8',
+            violet: '#a855f7'
         },
         scheduleViewMode: 'widget',
         activeDashboardView: 'all',
@@ -164,10 +173,8 @@ const defaultData = {
         hiddenCards: [],
         editMode: false,
         zenMode: false,
-        layout: {
-            colLeft: ['card-kanban', 'card-grades', 'card-deliveries', 'card-tasks', 'card-notes', 'card-sticky'],
-            colRight: ['card-study-stats', 'card-pomodoro', 'card-audio', 'card-snippets', 'card-schedule', 'card-bookmarks', 'card-servers']
-        }
+        compactMode: false,
+        layout: structuredClone(defaultLayout)
     }
 };
 
@@ -210,6 +217,7 @@ window.resetWorkspacePrompt = function () {
 
 async function loadCloudData() {
     if (!currentUser) return;
+    setSyncBadge('saving', 'Sincronizando...');
     try {
         const docRef = doc(db, "users", currentUser.uid, "workspace", "data");
         const docSnap = await getDoc(docRef);
@@ -219,12 +227,14 @@ async function loadCloudData() {
             await setDoc(docRef, appData);
         }
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
+        setSyncBadge('ok', 'Cloud OK');
         applyTheme();
         renderAll();
         applyLayoutState();
         showToast("☁️ Datos sincronizados con Firestore", "success");
     } catch (e) {
-        console.error("Error cargando de Firestore:", e);
+        console.warn("No se pudo cargar desde Firestore:", e);
+        setSyncBadge('error', 'Sin Cloud');
         showToast("Modo local (Sin conexión con Firebase)", "error");
     }
 }
@@ -233,16 +243,21 @@ const saveData = debounce(async function () {
     try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
     } catch (e) {
-        console.error("Error guardando en localStorage:", e);
+        console.warn("Error guardando en localStorage:", e);
     }
 
     if (currentUser) {
+        setSyncBadge('saving', 'Guardando...');
         try {
             const docRef = doc(db, "users", currentUser.uid, "workspace", "data");
             await setDoc(docRef, appData);
+            setSyncBadge('ok', 'Cloud OK');
         } catch (e) {
-            console.error("Error guardando en Firestore:", e);
+            console.warn("Error guardando en Firestore:", e);
+            setSyncBadge('error', 'Error Cloud');
         }
+    } else {
+        setSyncBadge('ok', 'Local');
     }
 }, 350);
 
@@ -281,8 +296,7 @@ window.handleEmailAuth = async function () {
         }
         closeAuthModal();
     } catch (error) {
-        console.error("Error de auth:", error);
-        showToast(`Error: ${error.message}`, "error");
+        showToast(`Error de autenticación: ${error.code || 'credenciales inválidas'}`, "error");
     }
 };
 
@@ -290,16 +304,23 @@ window.logoutUser = async function () {
     try {
         await signOut(auth);
         currentUser = null;
+        setSyncBadge('ok', 'Local');
+        loadLocalData();
+        applyTheme();
+        renderAll();
+        applyLayoutState();
         showToast("Sesión cerrada", "info");
-        location.reload();
     } catch (error) {
-        console.error("Error al salir:", error);
+        showToast("No se pudo cerrar la sesión", "error");
     }
 };
 
 window.openAuthModal = function () {
     const modal = document.getElementById('auth-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => document.getElementById('auth-email')?.focus(), 20);
+    }
 };
 
 window.closeAuthModal = function () {
@@ -333,10 +354,47 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 /* ----------------------------------------------------------
-   RELOJ, SKEW & API MADRID (ROBUSTO CON FALLBACK)
+   RELOJ, SKEW & APIS HORARIAS (CON FALLBACK)
    ---------------------------------------------------------- */
 let networkOffsetMs = 0;
 let isManualMode = false;
+
+async function fetchMadridTimeMs() {
+    const endpoints = [
+        async () => {
+            const controller = new AbortController();
+            const t = setTimeout(() => controller.abort(), 3500);
+            try {
+                const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store', signal: controller.signal });
+                if (!res.ok) throw new Error('worldtimeapi error');
+                const data = await res.json();
+                return new Date(data.datetime).getTime();
+            } finally {
+                clearTimeout(t);
+            }
+        },
+        async () => {
+            const controller = new AbortController();
+            const t = setTimeout(() => controller.abort(), 3500);
+            try {
+                const res = await fetch('https://timeapi.io/api/time/current/zone?timeZone=Europe%2FMadrid', { cache: 'no-store', signal: controller.signal });
+                if (!res.ok) throw new Error('timeapi error');
+                const data = await res.json();
+                return new Date(data.dateTime).getTime();
+            } finally {
+                clearTimeout(t);
+            }
+        }
+    ];
+
+    for (const fn of endpoints) {
+        try {
+            const ms = await fn();
+            if (!Number.isNaN(ms)) return ms;
+        } catch (_) {}
+    }
+    throw new Error('No time API available');
+}
 
 window.syncRealTimeNetwork = async function () {
     const el = document.getElementById('net-status');
@@ -346,16 +404,10 @@ window.syncRealTimeNetwork = async function () {
     }
     if (el) el.textContent = '🔄 Sincronizando...';
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { cache: 'no-store', signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error("Network response not ok");
-        const data = await res.json();
-        const serverTimeMs = new Date(data.datetime).getTime();
+        const serverTimeMs = await fetchMadridTimeMs();
         networkOffsetMs = serverTimeMs - Date.now();
         if (el) {
-            el.textContent = '🌐 Hora Real (API Madrid)';
+            el.textContent = '🌐 Hora Real (Madrid)';
             el.style.color = 'var(--accent-green)';
         }
     } catch (e) {
@@ -409,7 +461,7 @@ function updateClockDisplay() {
 setInterval(updateClockDisplay, 1000);
 
 /* ----------------------------------------------------------
-   MODO ZEN / ENFOQUE TOTAL
+   MODO ZEN & MODO COMPACTO
    ---------------------------------------------------------- */
 window.toggleZenMode = function () {
     appData.settings.zenMode = !appData.settings.zenMode;
@@ -423,6 +475,20 @@ function applyZenModeState() {
     const btnZen = document.getElementById('btn-zen-mode');
     if (btnZen) btnZen.classList.toggle('active', isZen);
     document.body.classList.toggle('zen-mode-active', isZen);
+}
+
+window.toggleDensityMode = function () {
+    appData.settings.compactMode = !appData.settings.compactMode;
+    applyDensityModeState();
+    saveData();
+    showToast(appData.settings.compactMode ? "📐 Densidad compacta activada" : "📐 Densidad normal restaurada", "info");
+};
+
+function applyDensityModeState() {
+    const isCompact = !!appData.settings.compactMode;
+    const btn = document.getElementById('btn-density-mode');
+    if (btn) btn.classList.toggle('active', isCompact);
+    document.body.classList.toggle('density-compact', isCompact);
 }
 
 /* ----------------------------------------------------------
@@ -456,7 +522,7 @@ function applyCustomThemeStyles() {
     root.setProperty('--accent-violet', ct.violet);
 
     const hexToRgb = hex => {
-        const c = hex.replace('#', '');
+        const c = (hex || '').replace('#', '');
         if (c.length === 6) {
             return `${parseInt(c.substring(0, 2), 16)}, ${parseInt(c.substring(2, 4), 16)}, ${parseInt(c.substring(4, 6), 16)}`;
         }
@@ -526,8 +592,8 @@ function renderCategoryPills() {
     const activeView = appData.settings.activeDashboardView || 'all';
 
     container.innerHTML = getAllCategories().map(cat => `
-        <button class="view-pill ${activeView === cat.key ? 'active' : ''}" 
-                data-view="${escapeHtml(cat.key)}" 
+        <button type="button" class="view-pill ${activeView === cat.key ? 'active' : ''}"
+                data-view="${escapeHtml(cat.key)}"
                 onclick="setDashboardView('${escapeHtml(cat.key)}')">
             ${escapeHtml(cat.label)}
         </button>
@@ -617,6 +683,17 @@ window.showAllCards = function () {
     showToast("Todas las tarjetas visibles", "success");
 };
 
+window.resetLayoutOnly = function () {
+    appData.settings.layout = structuredClone(defaultLayout);
+    appData.settings.hiddenCards = [];
+    appData.settings.collapsedCards = [];
+    saveData();
+    applyLayoutState();
+    setDashboardView(appData.settings.activeDashboardView);
+    renderVisibilityControls();
+    showToast("Diseño y visibilidad restaurados", "info");
+};
+
 function renderVisibilityControls() {
     const container = document.getElementById('visibility-controls-container');
     if (!container) return;
@@ -628,7 +705,7 @@ function renderVisibilityControls() {
         return `
             <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);padding:5px 8px;border-radius:4px;border:1px solid var(--card-border);">
                 <span style="font-size:0.72rem;font-family:var(--font-mono);">${escapeHtml(title)}</span>
-                <button onclick="toggleCardVisibility('${card.id}')" class="view-pill ${isHidden ? '' : 'active'}" style="font-size:0.65rem;padding:2px 8px;">
+                <button type="button" onclick="toggleCardVisibility('${card.id}')" class="view-pill ${isHidden ? '' : 'active'}" style="font-size:0.65rem;padding:2px 8px;">
                     ${isHidden ? '👁️ Oculta' : '👁️ Visible'}
                 </button>
             </div>
@@ -709,6 +786,7 @@ function setupDragAndDrop() {
     });
 
     container.addEventListener('dragover', e => {
+        if (draggedKanbanId !== null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         const col = e.target.closest('.col-left, .col-right');
@@ -721,9 +799,8 @@ function setupDragAndDrop() {
             const offset = e.clientY - box.top - box.height / 2;
             if (offset < 0 && offset > closest.offset) {
                 return { offset, element: child };
-            } else {
-                return closest;
             }
+            return closest;
         }, { offset: Number.NEGATIVE_INFINITY }).element;
 
         if (afterElement == null) {
@@ -743,7 +820,7 @@ function saveLayoutState() {
 }
 
 function applyLayoutState() {
-    const layout = appData.settings.layout || defaultData.settings.layout;
+    const layout = appData.settings.layout || defaultLayout;
     const left = document.getElementById('col-left');
     const right = document.getElementById('col-right');
     if (!left || !right) return;
@@ -766,12 +843,19 @@ function applyLayoutState() {
             if (btn) btn.textContent = '+';
         }
     });
+
+    document.body.classList.toggle('edit-mode-active', !!appData.settings.editMode);
+    document.getElementById('btn-toggle-edit-mode')?.classList.toggle('active', !!appData.settings.editMode);
+
     applyZenModeState();
+    applyDensityModeState();
 }
 
 /* ----------------------------------------------------------
-   KANBAN DE ESTUDIO
+   KANBAN DE ESTUDIO (CON DRAG & DROP ENTRE COLUMNAS)
    ---------------------------------------------------------- */
+let draggedKanbanId = null;
+
 window.addKanbanTask = function () {
     const titleInput = document.getElementById('kanban-new-title');
     const title = titleInput?.value.trim();
@@ -800,7 +884,7 @@ window.addKanbanTask = function () {
 
 window.moveKanbanTask = function (id, targetCol) {
     const task = appData.studyKanban.find(t => t.id === id);
-    if (!task) return;
+    if (!task || task.col === targetCol) return;
     task.col = targetCol;
     saveData();
     renderKanban();
@@ -821,7 +905,7 @@ window.linkKanbanToPomo = function (id) {
     const task = appData.studyKanban.find(t => t.id === id);
     if (!task) return;
     const targetEl = document.getElementById('pomodoro-target');
-    if (targetEl) targetEl.textContent = `Objetivo: [${escapeHtml(task.subject)}] ${escapeHtml(task.title)}`;
+    if (targetEl) targetEl.textContent = `Objetivo: [${task.subject}] ${task.title}`;
     showToast(`Pomodoro vinculado a "${task.title}"`, "info");
 };
 
@@ -830,6 +914,50 @@ window.deleteKanbanTask = function (id) {
     saveData();
     renderKanban();
 };
+
+function setupKanbanDragAndDrop() {
+    const board = document.querySelector('.kanban-board');
+    if (!board) return;
+
+    board.addEventListener('dragstart', e => {
+        const card = e.target.closest('.kanban-card');
+        if (!card) return;
+        draggedKanbanId = Number(card.dataset.id);
+        card.classList.add('kanban-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(draggedKanbanId));
+    });
+
+    board.addEventListener('dragend', () => {
+        document.querySelectorAll('.kanban-card.kanban-dragging').forEach(el => el.classList.remove('kanban-dragging'));
+        document.querySelectorAll('.kanban-col.kanban-drop-hover').forEach(el => el.classList.remove('kanban-drop-hover'));
+        draggedKanbanId = null;
+    });
+
+    board.addEventListener('dragover', e => {
+        if (draggedKanbanId === null) return;
+        const col = e.target.closest('.kanban-col');
+        if (!col) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.kanban-col.kanban-drop-hover').forEach(c => {
+            if (c !== col) c.classList.remove('kanban-drop-hover');
+        });
+        col.classList.add('kanban-drop-hover');
+    });
+
+    board.addEventListener('drop', e => {
+        if (draggedKanbanId === null) return;
+        const col = e.target.closest('.kanban-col');
+        if (!col) return;
+        e.preventDefault();
+        const targetCol = col.dataset.kanbanCol;
+        const idToMove = draggedKanbanId;
+        draggedKanbanId = null;
+        col.classList.remove('kanban-drop-hover');
+        if (targetCol) moveKanbanTask(idToMove, targetCol);
+    });
+}
 
 function renderKanban() {
     const cols = ['todo', 'doing', 'done'];
@@ -852,7 +980,7 @@ function renderKanban() {
             const nextCol = col === 'todo' ? 'doing' : col === 'doing' ? 'done' : null;
 
             return `
-                <div class="kanban-card">
+                <div class="kanban-card" draggable="true" data-id="${t.id}">
                     <div class="kanban-card-header">
                         <span class="kanban-subject-tag">${escapeHtml(t.subject)}</span>
                         <span>${prioIcon}</span>
@@ -861,10 +989,10 @@ function renderKanban() {
                     <div class="kanban-card-footer">
                         <span onclick="linkKanbanToPomo(${t.id})" style="cursor:pointer;" title="Vincular a Pomodoro">🍅 ${t.donePomos || 0}/${t.pomos}</span>
                         <div class="kanban-nav-btns">
-                            ${prevCol ? `<button class="kanban-nav-btn" onclick="moveKanbanTask(${t.id}, '${prevCol}')" title="Mover atrás">←</button>` : ''}
-                            <button class="kanban-nav-btn" onclick="incKanbanPomo(${t.id})" title="+1 Pomodoro">🍅+</button>
-                            ${nextCol ? `<button class="kanban-nav-btn" onclick="moveKanbanTask(${t.id}, '${nextCol}')" title="Avanzar">→</button>` : ''}
-                            <button class="kanban-nav-btn" onclick="deleteKanbanTask(${t.id})" title="Eliminar">✖</button>
+                            ${prevCol ? `<button type="button" class="kanban-nav-btn" onclick="moveKanbanTask(${t.id}, '${prevCol}')" title="Mover atrás">←</button>` : ''}
+                            <button type="button" class="kanban-nav-btn" onclick="incKanbanPomo(${t.id})" title="+1 Pomodoro">🍅+</button>
+                            ${nextCol ? `<button type="button" class="kanban-nav-btn" onclick="moveKanbanTask(${t.id}, '${nextCol}')" title="Avanzar">→</button>` : ''}
+                            <button type="button" class="kanban-nav-btn" onclick="deleteKanbanTask(${t.id})" title="Eliminar">✖</button>
                         </div>
                     </div>
                 </div>
@@ -884,7 +1012,8 @@ window.addGradeSubject = function () {
     const nameInput = document.getElementById('new-grade-subj-name');
     const name = nameInput?.value.trim();
     if (!name) return;
-    const target = parseFloat(document.getElementById('new-grade-subj-target')?.value) || 5.0;
+    const rawTarget = parseFloat(document.getElementById('new-grade-subj-target')?.value);
+    const target = Number.isNaN(rawTarget) ? 5.0 : Math.min(10, Math.max(0, rawTarget));
 
     appData.grades.push({
         id: Date.now(),
@@ -907,18 +1036,33 @@ window.deleteGradeSubject = function (subjId) {
 };
 
 window.addGradeItemPrompt = function (subjId) {
+    const subj = appData.grades.find(g => g.id === subjId);
+    if (!subj) return;
+
     const name = prompt("Nombre de la prueba / práctica / examen:");
     if (!name || !name.trim()) return;
-    const grade = parseFloat(prompt("Nota obtenida (0 a 10):", "7.0")) || 0;
-    const weight = parseFloat(prompt("Peso porcentual (%) en el módulo:", "20")) || 20;
 
-    const subj = appData.grades.find(g => g.id === subjId);
-    if (subj) {
-        if (!subj.items) subj.items = [];
-        subj.items.push({ id: Date.now(), name: name.trim(), grade, weight });
-        saveData();
-        renderGradesCalculator();
+    const rawGrade = parseFloat((prompt("Nota obtenida (0 a 10):", "7.0") || '').replace(',', '.'));
+    if (Number.isNaN(rawGrade) || rawGrade < 0 || rawGrade > 10) {
+        showToast("La nota debe estar entre 0 y 10", "error");
+        return;
     }
+
+    const rawWeight = parseFloat((prompt("Peso porcentual (%) en el módulo:", "20") || '').replace(',', '.'));
+    if (Number.isNaN(rawWeight) || rawWeight <= 0 || rawWeight > 100) {
+        showToast("El peso debe ser mayor que 0 y hasta 100%", "error");
+        return;
+    }
+
+    if (!subj.items) subj.items = [];
+    const currentSum = subj.items.reduce((acc, i) => acc + (parseFloat(i.weight) || 0), 0);
+    if (currentSum + rawWeight > 100) {
+        showToast(`Aviso: el peso total superará el 100% (${currentSum + rawWeight}%)`, "error");
+    }
+
+    subj.items.push({ id: Date.now(), name: name.trim(), grade: rawGrade, weight: rawWeight });
+    saveData();
+    renderGradesCalculator();
 };
 
 window.deleteGradeItem = function (subjId, itemId) {
@@ -956,7 +1100,7 @@ function renderGradesCalculator() {
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;">
                         <span class="grade-subj-score ${isPassing ? 'score-pass' : 'score-fail'}">${currentAvg}</span>
-                        <button class="btn-icon" onclick="deleteGradeSubject(${g.id})" title="Eliminar Módulo">✖</button>
+                        <button type="button" class="btn-icon" onclick="deleteGradeSubject(${g.id})" title="Eliminar Módulo">✖</button>
                     </div>
                 </div>
 
@@ -970,13 +1114,13 @@ function renderGradesCalculator() {
                             <span>${escapeHtml(i.name)} (${i.weight}%)</span>
                             <div style="display:flex;gap:4px;align-items:center;">
                                 <strong style="color:var(--accent-cyan);">${Number(i.grade).toFixed(1)}</strong>
-                                <button class="btn-icon" onclick="deleteGradeItem(${g.id}, ${i.id})" title="Eliminar item" style="font-size:0.65rem;">✖</button>
+                                <button type="button" class="btn-icon" onclick="deleteGradeItem(${g.id}, ${i.id})" title="Eliminar item" style="font-size:0.65rem;">✖</button>
                             </div>
                         </div>
                     `).join('')}
                 </div>
 
-                <button class="btn-toggle" onclick="addGradeItemPrompt(${g.id})" style="margin-top:2px;">✚ Añadir Nota / Examen (${totalWeight}% sumado)</button>
+                <button type="button" class="btn-toggle" onclick="addGradeItemPrompt(${g.id})" style="margin-top:2px;">✚ Añadir Nota / Examen (${totalWeight}% sumado)</button>
             </div>
         `;
     }).join('');
@@ -989,7 +1133,7 @@ let activeDeliveriesFilter = 'all';
 
 window.setDeliveriesFilter = function (filter) {
     activeDeliveriesFilter = filter;
-    ['all', 'exam', 'practice', 'pending'].forEach(f => {
+    ['all', 'exam', 'practice', 'pending', 'soon', 'overdue'].forEach(f => {
         document.getElementById(`deliv-filter-${f}`)?.classList.toggle('active', f === filter);
     });
     renderDeliveries();
@@ -1004,8 +1148,8 @@ window.addDelivery = function () {
     const type = document.getElementById('deliv-type')?.value || 'Práctica';
     const dueDate = document.getElementById('deliv-datetime')?.value;
 
-    if (!dueDate) {
-        showToast("Selecciona fecha y hora de entrega", "error");
+    if (!dueDate || Number.isNaN(new Date(dueDate).getTime())) {
+        showToast("Selecciona una fecha y hora válida", "error");
         return;
     }
 
@@ -1044,10 +1188,10 @@ function formatCountdown(targetIsoDate) {
     const target = new Date(targetIsoDate).getTime();
     const diff = target - now;
 
-    if (isNaN(target)) return { text: '--', badgeClass: 'cd-ok' };
+    if (isNaN(target)) return { text: '--', badgeClass: 'cd-ok', diff: Infinity };
     if (diff < 0) {
         const passedHrs = Math.floor(Math.abs(diff) / 3600000);
-        return { text: `⚠️ Vencido (${passedHrs}h)`, badgeClass: 'cd-urgent' };
+        return { text: `⚠️ Vencido (${passedHrs}h)`, badgeClass: 'cd-urgent', diff };
     }
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -1055,11 +1199,11 @@ function formatCountdown(targetIsoDate) {
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
     if (days === 0 && hours < 5) {
-        return { text: `🔥 ¡${hours}h ${mins}m!`, badgeClass: 'cd-urgent' };
+        return { text: `🔥 ¡${hours}h ${mins}m!`, badgeClass: 'cd-urgent', diff };
     } else if (days < 2) {
-        return { text: `⏳ ${days}d ${hours}h`, badgeClass: 'cd-warn' };
+        return { text: `⏳ ${days}d ${hours}h`, badgeClass: 'cd-warn', diff };
     }
-    return { text: `📅 ${days}d ${hours}h`, badgeClass: 'cd-ok' };
+    return { text: `📅 ${days}d ${hours}h`, badgeClass: 'cd-ok', diff };
 }
 
 function updateDeliveriesCountdown() {
@@ -1077,15 +1221,25 @@ function renderDeliveries() {
     const container = document.getElementById('deliveries-list');
     if (!container) return;
 
+    const nowMs = getClockDate().getTime();
     let items = [...(appData.deliveries || [])];
+
     if (activeDeliveriesFilter === 'exam') items = items.filter(d => d.type === 'Examen');
     else if (activeDeliveriesFilter === 'practice') items = items.filter(d => d.type === 'Práctica');
     else if (activeDeliveriesFilter === 'pending') items = items.filter(d => !d.done);
+    else if (activeDeliveriesFilter === 'soon') {
+        items = items.filter(d => {
+            const diff = new Date(d.dueDate).getTime() - nowMs;
+            return !d.done && diff >= 0 && diff <= 48 * 3600000;
+        });
+    } else if (activeDeliveriesFilter === 'overdue') {
+        items = items.filter(d => !d.done && new Date(d.dueDate).getTime() < nowMs);
+    }
 
     items.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
 
     if (!items.length) {
-        container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:12px;">No hay entregas pendientes en esta vista.</div>`;
+        container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:12px;">No hay entregas en esta vista.</div>`;
         return;
     }
 
@@ -1106,10 +1260,10 @@ function renderDeliveries() {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;">
-                    <span class="countdown-badge deadline-countdown-badge ${d.done ? 'cd-done' : cd.badgeClass}" 
-                          data-due="${escapeHtml(d.dueDate)}" 
+                    <span class="countdown-badge deadline-countdown-badge ${d.done ? 'cd-done' : cd.badgeClass}"
+                          data-due="${escapeHtml(d.dueDate)}"
                           data-done="${d.done}">${d.done ? 'Completado' : cd.text}</span>
-                    <button class="btn-icon" onclick="deleteDelivery(${d.id})" title="Eliminar">✖</button>
+                    <button type="button" class="btn-icon" onclick="deleteDelivery(${d.id})" title="Eliminar">✖</button>
                 </div>
             </div>
         `;
@@ -1117,15 +1271,21 @@ function renderDeliveries() {
 }
 
 /* ----------------------------------------------------------
-   TAREAS GENERALES
+   TAREAS GENERALES (CON ORDENACIÓN)
    ---------------------------------------------------------- */
 let activeTaskFilter = 'all';
+let activeTaskSort = 'created';
 
 window.setTaskFilter = function (filter) {
     activeTaskFilter = filter;
     ['all', 'pending', 'done'].forEach(f => {
         document.getElementById(`filter-${f}`)?.classList.toggle('active', f === filter);
     });
+    renderTasks();
+};
+
+window.setTaskSort = function (sortMode) {
+    activeTaskSort = sortMode;
     renderTasks();
 };
 
@@ -1172,9 +1332,23 @@ function renderTasks() {
     const list = document.getElementById('tasks-list');
     if (!list) return;
 
-    let items = appData.tasks || [];
+    let items = [...(appData.tasks || [])];
     if (activeTaskFilter === 'pending') items = items.filter(t => !t.done);
     else if (activeTaskFilter === 'done') items = items.filter(t => t.done);
+
+    const prioWeight = { high: 0, medium: 1, low: 2 };
+    if (activeTaskSort === 'priority') {
+        items.sort((a, b) => (prioWeight[a.priority] ?? 1) - (prioWeight[b.priority] ?? 1) || b.id - a.id);
+    } else if (activeTaskSort === 'date') {
+        items.sort((a, b) => {
+            if (!a.date && !b.date) return b.id - a.id;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return a.date.localeCompare(b.date);
+        });
+    } else {
+        items.sort((a, b) => b.id - a.id);
+    }
 
     if (!items.length) {
         list.innerHTML = `<li style="justify-content:center;color:var(--text-muted);font-size:0.72rem;">Sin tareas en esta vista</li>`;
@@ -1186,13 +1360,13 @@ function renderTasks() {
         return `
             <li class="${t.done ? 'task-done' : ''}">
                 <span onclick="toggleTask(${t.id})" style="cursor:pointer;flex:1;display:flex;align-items:center;gap:4px;">
-                    ${t.done ? '✅' : '⬜'} 
+                    ${t.done ? '✅' : '⬜'}
                     <span>${escapeHtml(t.text)}</span>
                     ${t.date ? `<span style="font-size:0.6rem;color:var(--text-dim);font-family:var(--font-mono);">${escapeHtml(t.date)}</span>` : ''}
                 </span>
                 <div style="display:flex;align-items:center;gap:4px;">
                     <span style="font-size:0.65rem;">${prioTag}</span>
-                    <button onclick="deleteTask(${t.id})" class="btn-icon" title="Eliminar">✖</button>
+                    <button type="button" onclick="deleteTask(${t.id})" class="btn-icon" title="Eliminar">✖</button>
                 </div>
             </li>
         `;
@@ -1200,30 +1374,67 @@ function renderTasks() {
 }
 
 /* ----------------------------------------------------------
-   SCRATCHPAD MULTI-PESTAÑA & STICKY NOTE
+   SCRATCHPAD MULTI-PESTAÑA, CONTADOR & STICKY NOTE
    ---------------------------------------------------------- */
+function updateNotesMetrics(text) {
+    const el = document.getElementById('scratchpad-metrics');
+    if (!el) return;
+    const str = text || '';
+    const lines = str.length ? str.split('\n').length : 0;
+    el.textContent = `${lines} ${lines === 1 ? 'línea' : 'líneas'} • ${str.length} caracteres`;
+}
+
 window.setNotesTab = function (tabKey) {
     appData.activeNotesTab = tabKey;
     ['general', 'comandos', 'clases'].forEach(t => {
         document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tabKey);
     });
     const textarea = document.getElementById('scratchpad');
-    if (textarea) {
-        textarea.value = (appData.notes && appData.notes[tabKey]) || '';
-    }
+    const content = (appData.notes && appData.notes[tabKey]) || '';
+    if (textarea) textarea.value = content;
+    updateNotesMetrics(content);
     saveData();
+};
+
+function insertAtCursor(textarea, snippet) {
+    if (!textarea) return;
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    textarea.value = textarea.value.slice(0, start) + snippet + textarea.value.slice(end);
+    const nextPos = start + snippet.length;
+    textarea.focus();
+    textarea.setSelectionRange(nextPos, nextPos);
+
+    const tabKey = appData.activeNotesTab || 'general';
+    if (!appData.notes) appData.notes = {};
+    appData.notes[tabKey] = textarea.value;
+    updateNotesMetrics(textarea.value);
+    saveData();
+}
+
+window.insertNoteTimestamp = function () {
+    const textarea = document.getElementById('scratchpad');
+    const stamp = `[${getClockDate().toLocaleString('es-ES')}] `;
+    insertAtCursor(textarea, stamp);
+};
+
+window.insertNoteCodeBlock = function () {
+    const textarea = document.getElementById('scratchpad');
+    insertAtCursor(textarea, "```\n\n```");
 };
 
 window.toolCopy = function () {
     const textarea = document.getElementById('scratchpad');
     if (!textarea) return;
-    navigator.clipboard.writeText(textarea.value).then(() => {
-        showToast("📋 Notas copiadas al portapapeles", "success");
-    }).catch(() => {
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(textarea.value)
+            .then(() => showToast("📋 Notas copiadas al portapapeles", "success"))
+            .catch(() => showToast("No se pudo copiar al portapapeles", "error"));
+    } else {
+        textarea.focus();
         textarea.select();
-        document.execCommand('copy');
-        showToast("📋 Notas copiadas", "success");
-    });
+        showToast("Texto seleccionado: usa Ctrl+C para copiar", "info");
+    }
 };
 
 window.toolDownload = function () {
@@ -1242,7 +1453,7 @@ window.toolDownload = function () {
 window.copyStickyNote = function () {
     const el = document.getElementById('sticky-note-input');
     if (!el || !el.value) return;
-    navigator.clipboard.writeText(el.value).then(() => {
+    navigator.clipboard?.writeText(el.value).then(() => {
         showToast("📌 Buffer temporal copiado", "success");
     });
 };
@@ -1258,12 +1469,10 @@ window.clearStickyNote = function () {
 function setupNotesAutoSave() {
     const scratchpad = document.getElementById('scratchpad');
     if (scratchpad) {
-        scratchpad.addEventListener('input', debounce(e => {
-            const tabKey = appData.activeNotesTab || 'general';
-            if (!appData.notes) appData.notes = {};
-            appData.notes[tabKey] = e.target.value;
-            saveData();
-        }, 400));
+        scratchpad.addEventListener('input', e => {
+            updateNotesMetrics(e.target.value);
+            debouncedSaveScratchpad(e.target.value);
+        });
     }
 
     const sticky = document.getElementById('sticky-note-input');
@@ -1276,9 +1485,60 @@ function setupNotesAutoSave() {
     }
 }
 
+const debouncedSaveScratchpad = debounce(value => {
+    const tabKey = appData.activeNotesTab || 'general';
+    if (!appData.notes) appData.notes = {};
+    appData.notes[tabKey] = value;
+    saveData();
+}, 400);
+
 /* ----------------------------------------------------------
-   MÉTRICAS & GRÁFICO HISTÓRICO DE ESTUDIO
+   MÉTRICAS, RACHA, HISTÓRICO & GRÁFICO DE ESTUDIO
    ---------------------------------------------------------- */
+function getTodayIso() {
+    return getClockDate().toISOString().slice(0, 10);
+}
+
+function daysBetweenIso(isoA, isoB) {
+    const a = new Date(`${isoA}T00:00:00Z`).getTime();
+    const b = new Date(`${isoB}T00:00:00Z`).getTime();
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+    return Math.round((b - a) / 86400000);
+}
+
+function recordStudyMinutes(mins) {
+    if (!mins || mins <= 0) return;
+    const stats = appData.studyStats;
+    const todayIso = getTodayIso();
+
+    if (stats.lastDate && stats.lastDate !== todayIso) {
+        const diffDays = daysBetweenIso(stats.lastDate, todayIso);
+        if (diffDays === 1) {
+            stats.streakDays = (stats.streakDays || 0) + 1;
+        } else if (diffDays > 1) {
+            stats.streakDays = 1;
+        }
+        stats.todayFocusMinutes = 0;
+    } else if (!stats.streakDays) {
+        stats.streakDays = 1;
+    }
+
+    stats.lastDate = todayIso;
+    stats.todayFocusMinutes = (stats.todayFocusMinutes || 0) + mins;
+    stats.totalFocusMinutes = (stats.totalFocusMinutes || 0) + mins;
+
+    if (!Array.isArray(stats.history)) stats.history = [];
+    const entry = stats.history.find(h => h.date === todayIso);
+    if (entry) {
+        entry.minutes = (entry.minutes || 0) + mins;
+    } else {
+        stats.history.push({ date: todayIso, minutes: mins });
+    }
+    stats.history = stats.history
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-30);
+}
+
 function updateStats() {
     const statToday = document.getElementById('stat-focus-today');
     if (statToday) statToday.textContent = `${appData.studyStats.todayFocusMinutes || 0}m`;
@@ -1311,10 +1571,11 @@ function renderStudyChart() {
     const history = appData.studyStats.history || [];
     const last7Days = [];
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const baseMs = getClockDate().getTime();
 
     let weekSum = 0;
     for (let i = 6; i >= 0; i--) {
-        const d = new Date(Date.now() - 86400000 * i);
+        const d = new Date(baseMs - 86400000 * i);
         const iso = d.toISOString().slice(0, 10);
         let mins = 0;
         if (i === 0) {
@@ -1347,9 +1608,7 @@ window.addManualStudyTime = function () {
     const mins = parseInt(input?.value, 10);
     if (!mins || mins <= 0) return;
 
-    appData.studyStats.todayFocusMinutes = (appData.studyStats.todayFocusMinutes || 0) + mins;
-    appData.studyStats.totalFocusMinutes = (appData.studyStats.totalFocusMinutes || 0) + mins;
-
+    recordStudyMinutes(mins);
     input.value = '';
     saveData();
     updateStats();
@@ -1359,9 +1618,13 @@ window.addManualStudyTime = function () {
 window.resetStudyStats = function () {
     if (!confirm("¿Deseas reiniciar tus métricas de estudio de hoy?")) return;
     appData.studyStats.todayFocusMinutes = 0;
+    const todayIso = getTodayIso();
+    if (Array.isArray(appData.studyStats.history)) {
+        appData.studyStats.history = appData.studyStats.history.filter(h => h.date !== todayIso);
+    }
     saveData();
     updateStats();
-    showToast("Métricas reiniciadas", "info");
+    showToast("Métricas de hoy reiniciadas", "info");
 };
 
 /* ----------------------------------------------------------
@@ -1428,8 +1691,7 @@ function handlePomodoroComplete(mode, durationMins) {
     document.title = '🔔 ¡Tiempo cumplido! DevWorkspace';
 
     if (mode === 'focus') {
-        appData.studyStats.todayFocusMinutes = (appData.studyStats.todayFocusMinutes || 0) + durationMins;
-        appData.studyStats.totalFocusMinutes = (appData.studyStats.totalFocusMinutes || 0) + durationMins;
+        recordStudyMinutes(durationMins);
         saveData();
         updateStats();
         showToast(`🎉 ¡Sesión de foco de ${durationMins}m completada!`, "success");
@@ -1447,8 +1709,8 @@ function playNotificationChime() {
         const gain = audioCtx.createGain();
 
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
 
         gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
@@ -1647,8 +1909,14 @@ window.updateAudioVolume = function (val) {
     synth.setVolume(val);
 };
 
+window.setAudioVolumePreset = function (pct) {
+    const slider = document.getElementById('audio-volume');
+    if (slider) slider.value = pct;
+    updateAudioVolume(pct);
+};
+
 /* ----------------------------------------------------------
-   SNIPPET & COMMAND LAB
+   SNIPPET & COMMAND LAB (SIN INYECCIÓN EN ATRIBUTOS INLINE)
    ---------------------------------------------------------- */
 window.addCustomSnippet = function () {
     const titleInput = document.getElementById('snip-new-title');
@@ -1682,21 +1950,32 @@ window.deleteCustomSnippet = function (id) {
     renderSnippets();
 };
 
-window.copySnippetText = function (btn, text) {
-    navigator.clipboard.writeText(text).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = '✓ Copiado';
-        btn.style.color = 'var(--accent-green)';
-        setTimeout(() => {
-            btn.textContent = orig;
-            btn.style.color = '';
-        }, 1500);
-        showToast("Comando copiado al portapapeles", "success");
-    });
-};
-
 function getAllSnippets() {
-    return [...defaultSnippets, ...(appData.snippets || [])];
+    return [...(appData.snippets || [])];
+}
+
+function setupSnippetContainerEvents() {
+    const container = document.getElementById('snippet-list-container');
+    if (!container) return;
+
+    container.addEventListener('click', e => {
+        const copyBtn = e.target.closest('.btn-copy-snippet');
+        if (!copyBtn) return;
+        const id = copyBtn.dataset.id;
+        const snip = getAllSnippets().find(s => String(s.id) === String(id));
+        if (!snip) return;
+
+        navigator.clipboard?.writeText(snip.cmd).then(() => {
+            const orig = copyBtn.textContent;
+            copyBtn.textContent = '✓';
+            copyBtn.style.color = 'var(--accent-green)';
+            setTimeout(() => {
+                copyBtn.textContent = orig;
+                copyBtn.style.color = '';
+            }, 1500);
+            showToast("Comando copiado al portapapeles", "success");
+        });
+    });
 }
 
 window.renderSnippets = function () {
@@ -1731,8 +2010,8 @@ window.renderSnippets = function () {
                 <code class="snippet-cmd-text">${escapeHtml(s.cmd)}</code>
             </div>
             <div style="display:flex;gap:3px;align-items:center;">
-                <button class="btn-icon" onclick="copySnippetText(this, \`${escapeHtml(s.cmd)}\`)" title="Copiar">📋</button>
-                ${s.isCustom ? `<button class="btn-icon" onclick="deleteCustomSnippet('${s.id}')" title="Eliminar">✖</button>` : ''}
+                <button type="button" class="btn-icon btn-copy-snippet" data-id="${escapeHtml(s.id)}" title="Copiar">📋</button>
+                ${s.isCustom ? `<button type="button" class="btn-icon" onclick="deleteCustomSnippet('${escapeHtml(s.id)}')" title="Eliminar">✖</button>` : ''}
             </div>
         </div>
     `).join('');
@@ -1741,10 +2020,9 @@ window.renderSnippets = function () {
 /* ----------------------------------------------------------
    HORARIO SEMANAL & CLASE ACTUAL
    ---------------------------------------------------------- */
-let scheduleViewTable = false;
-
 window.toggleScheduleViewMode = function () {
-    scheduleViewTable = !scheduleViewTable;
+    appData.settings.scheduleViewMode = appData.settings.scheduleViewMode === 'table' ? 'widget' : 'table';
+    saveData();
     updateScheduleWidget(getClockDate());
 };
 
@@ -1763,7 +2041,7 @@ function updateScheduleWidget(now) {
     const currentDay = now.getDay();
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
-    if (scheduleViewTable) {
+    if (appData.settings.scheduleViewMode === 'table') {
         const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
         widget.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -1775,7 +2053,7 @@ function updateScheduleWidget(now) {
                     <tr><th>Día</th><th>Horas</th><th>Asignatura</th><th>Aula</th></tr>
                 </thead>
                 <tbody>
-                    ${(appData.schedule || []).sort((a,b) => a.day - b.day || a.start.localeCompare(b.start)).map(s => `
+                    ${(appData.schedule || []).sort((a, b) => a.day - b.day || a.start.localeCompare(b.start)).map(s => `
                         <tr>
                             <td>${days[s.day - 1] || 'Día ' + s.day}</td>
                             <td>${escapeHtml(s.start)} - ${escapeHtml(s.end)}</td>
@@ -1829,7 +2107,7 @@ function updateScheduleWidget(now) {
     if (currentClass) {
         widget.innerHTML = `
             <div class="sch-status">🟢 En Clase: <strong style="color:var(--accent-cyan);">${escapeHtml(currentClass.subject)}</strong></div>
-            <div class="sch-detail">Aula: ${escapeHtml(currentClass.room || '204')} &bull; Finaliza en <strong>${currentClass.remainingMins} min</strong> (${currentClass.end})</div>
+            <div class="sch-detail">Aula: ${escapeHtml(currentClass.room || '204')} &bull; Finaliza en <strong>${currentClass.remainingMins} min</strong> (${escapeHtml(currentClass.end)})</div>
         `;
     } else if (nextClass) {
         widget.innerHTML = `
@@ -1915,7 +2193,7 @@ function renderScheduleEditor() {
     container.innerHTML = items.map(s => `
         <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);padding:4px 8px;border-radius:4px;border:1px solid var(--card-border);font-family:var(--font-mono);font-size:0.72rem;">
             <span><strong>${days[s.day - 1]}</strong>: ${escapeHtml(s.start)}-${escapeHtml(s.end)} | <span style="color:var(--accent-cyan);">${escapeHtml(s.subject)}</span> (${escapeHtml(s.room)})</span>
-            <button class="btn-icon" onclick="deleteScheduleClass(${s.id})">✖</button>
+            <button type="button" class="btn-icon" onclick="deleteScheduleClass(${s.id})">✖</button>
         </div>
     `).join('');
 }
@@ -1966,13 +2244,13 @@ window.renderBookmarks = function () {
     list.innerHTML = items.map(b => `
         <li>
             <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer">🔖 ${escapeHtml(b.name)}</a>
-            <button onclick="deleteBookmark(${b.id})" class="btn-icon" title="Eliminar">✖</button>
+            <button type="button" onclick="deleteBookmark(${b.id})" class="btn-icon" title="Eliminar">✖</button>
         </li>
     `).join('');
 };
 
 /* ----------------------------------------------------------
-   SERVIDORES & VMS
+   SERVIDORES & VMS (SIN INYECCIÓN EN ATRIBUTOS INLINE)
    ---------------------------------------------------------- */
 window.addServer = function () {
     const nameInput = document.getElementById('srv-name');
@@ -1997,19 +2275,27 @@ window.deleteServer = function (id) {
     renderServers();
 };
 
-window.copyServerIp = function (ip) {
-    navigator.clipboard.writeText(ip).then(() => {
-        showToast(`IP ${ip} copiada`, "success");
-    });
-};
+function setupServersContainerEvents() {
+    const list = document.getElementById('servers-list');
+    if (!list) return;
 
-window.copyServerSsh = function (ip, creds) {
-    const user = creds.includes('/') ? creds.split('/')[0].trim() : 'root';
-    const cmd = `ssh ${user}@${ip}`;
-    navigator.clipboard.writeText(cmd).then(() => {
-        showToast(`Comando "${cmd}" copiado`, "success");
+    list.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        const srv = (appData.servers || []).find(s => s.id === id);
+        if (!srv) return;
+
+        if (btn.dataset.action === 'copy-ip') {
+            navigator.clipboard?.writeText(srv.ip).then(() => showToast(`IP ${srv.ip} copiada`, "success"));
+        } else if (btn.dataset.action === 'copy-ssh') {
+            const rawUser = srv.creds?.includes('/') ? srv.creds.split('/')[0].trim() : (srv.creds || 'root');
+            const user = rawUser.replace(/[^a-zA-Z0-9._-]/g, '') || 'root';
+            const cmd = `ssh ${user}@${srv.ip}`;
+            navigator.clipboard?.writeText(cmd).then(() => showToast(`Comando "${cmd}" copiado`, "success"));
+        }
     });
-};
+}
 
 window.renderServers = function () {
     const list = document.getElementById('servers-list');
@@ -2034,9 +2320,9 @@ window.renderServers = function () {
                 <span style="font-size:0.62rem;color:var(--text-muted);font-family:var(--font-mono);">${escapeHtml(s.ip)} | ${escapeHtml(s.creds)}</span>
             </div>
             <div style="display:flex;gap:3px;align-items:center;">
-                <button class="btn-icon" onclick="copyServerIp('${escapeHtml(s.ip)}')" title="Copiar IP">📋</button>
-                <button class="btn-icon" onclick="copyServerSsh('${escapeHtml(s.ip)}', '${escapeHtml(s.creds)}')" title="Copiar comando SSH">⚡</button>
-                <button class="btn-icon" onclick="deleteServer(${s.id})" title="Eliminar">✖</button>
+                <button type="button" class="btn-icon" data-action="copy-ip" data-id="${s.id}" title="Copiar IP">📋</button>
+                <button type="button" class="btn-icon" data-action="copy-ssh" data-id="${s.id}" title="Copiar comando SSH">⚡</button>
+                <button type="button" class="btn-icon" onclick="deleteServer(${s.id})" title="Eliminar">✖</button>
             </div>
         </li>
     `).join('');
@@ -2072,6 +2358,7 @@ window.createCustomCard = function () {
     document.getElementById('new-card-title').value = '';
     saveData();
     renderCustomCards();
+    setDashboardView(appData.settings.activeDashboardView);
     toggleForm('form-create-card-panel');
     showToast(`Tarjeta "${title}" creada`, "success");
 };
@@ -2081,12 +2368,25 @@ window.deleteCustomCard = function (id) {
     appData.customCards = (appData.customCards || []).filter(c => c.id !== id);
     appData.settings.layout.colLeft = (appData.settings.layout.colLeft || []).filter(x => x !== id);
     appData.settings.layout.colRight = (appData.settings.layout.colRight || []).filter(x => x !== id);
+    delete appData.cardCategories[id];
     const el = document.getElementById(id);
     if (el) el.remove();
     saveData();
     renderVisibilityControls();
     showToast("Tarjeta eliminada", "info");
 };
+
+function renderCustomChecklistItems(cardData) {
+    const box = document.getElementById(`check-${cardData.id}`);
+    if (!box) return;
+    const items = cardData.content || [];
+    box.innerHTML = items.map((item, idx) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.25);padding:3px 6px;border-radius:3px;">
+            <span onclick="toggleCustomCheckItem('${cardData.id}', ${idx})" style="cursor:pointer;${item.done ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${item.done ? '✅' : '⬜'} ${escapeHtml(item.text)}</span>
+            <button type="button" class="btn-icon" onclick="deleteCustomCheckItem('${cardData.id}', ${idx})">✖</button>
+        </div>
+    `).join('');
+}
 
 function renderCustomCards() {
     (appData.customCards || []).forEach(cardData => {
@@ -2102,26 +2402,20 @@ function renderCustomCards() {
             bodyHtml = `<textarea class="notes-area" style="min-height:80px;" oninput="updateCustomCardNotes('${cardData.id}', this.value)">${escapeHtml(cardData.content || '')}</textarea>`;
         } else if (cardData.type === 'checklist') {
             bodyHtml = `
-                <div id="check-${cardData.id}" style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;">
-                    ${((cardData.content || [])).map((item, idx) => `
-                        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.25);padding:3px 6px;border-radius:3px;">
-                            <span onclick="toggleCustomCheckItem('${cardData.id}', ${idx})" style="cursor:pointer;${item.done ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${item.done ? '✅' : '⬜'} ${escapeHtml(item.text)}</span>
-                            <button class="btn-icon" onclick="deleteCustomCheckItem('${cardData.id}', ${idx})">✖</button>
-                        </div>
-                    `).join('')}
-                </div>
+                <div id="check-${cardData.id}" style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;"></div>
                 <div style="display:flex;gap:4px;margin-top:4px;">
-                    <input type="text" id="input-${cardData.id}" placeholder="Nuevo ítem..." style="flex:1;">
-                    <button onclick="addCustomCheckItem('${cardData.id}')" class="btn-green">✚</button>
+                    <input type="text" id="input-${cardData.id}" placeholder="Nuevo ítem..." style="flex:1;" onkeydown="if(event.key==='Enter') addCustomCheckItem('${cardData.id}')">
+                    <button type="button" onclick="addCustomCheckItem('${cardData.id}')" class="btn-green">✚</button>
                 </div>
             `;
         } else if (cardData.type === 'iframe') {
+            const safeUrl = /^https?:\/\//i.test(cardData.content || '') ? cardData.content : 'about:blank';
             bodyHtml = `
                 <div style="display:flex;gap:4px;margin-bottom:4px;">
                     <input type="url" id="url-${cardData.id}" value="${escapeHtml(cardData.content || '')}" placeholder="https://..." style="flex:1;">
-                    <button onclick="updateCustomCardEmbed('${cardData.id}')" class="btn-cyan">Cargar</button>
+                    <button type="button" onclick="updateCustomCardEmbed('${cardData.id}')" class="btn-cyan">Cargar</button>
                 </div>
-                <iframe src="${escapeHtml(cardData.content || 'about:blank')}" style="width:100%;height:150px;border:1px solid var(--card-border);border-radius:4px;" sandbox="allow-scripts allow-same-origin"></iframe>
+                <iframe src="${escapeHtml(safeUrl)}" style="width:100%;height:150px;border:1px solid var(--card-border);border-radius:4px;" sandbox="allow-scripts allow-same-origin"></iframe>
             `;
         }
 
@@ -2129,21 +2423,26 @@ function renderCustomCards() {
             <div class="card-header">
                 <span class="card-title-text">🛠️ ${escapeHtml(cardData.title)}</span>
                 <div class="card-actions">
-                    <button class="btn-icon" onclick="deleteCustomCard('${cardData.id}')" title="Eliminar Tarjeta">🗑️</button>
+                    <button type="button" class="btn-icon" onclick="deleteCustomCard('${cardData.id}')" title="Eliminar Tarjeta">🗑️</button>
                     <div class="edit-controls">
                         <select class="card-category-select" onchange="updateCardCategory('${cardData.id}', this.value)"></select>
-                        <button class="btn-icon" onclick="toggleCardVisibility('${cardData.id}')" title="Ocultar Tarjeta">👁️</button>
+                        <button type="button" class="btn-icon" onclick="toggleCardVisibility('${cardData.id}')" title="Ocultar Tarjeta">👁️</button>
                     </div>
-                    <button class="btn-icon btn-collapse" onclick="toggleCardCollapse('${cardData.id}')">_</button>
+                    <button type="button" class="btn-icon btn-collapse" onclick="toggleCardCollapse('${cardData.id}')">_</button>
                     <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, '${cardData.id}')">⋮⋮</span>
                 </div>
             </div>
             <div class="card-body">${bodyHtml}</div>
         `;
 
-        const targetCol = (appData.settings.layout?.colRight || []).includes(cardData.id) ? 
-            document.getElementById('col-right') : document.getElementById('col-left');
+        const targetCol = (appData.settings.layout?.colRight || []).includes(cardData.id)
+            ? document.getElementById('col-right')
+            : document.getElementById('col-left');
         if (targetCol) targetCol.appendChild(card);
+
+        if (cardData.type === 'checklist') {
+            renderCustomChecklistItems(cardData);
+        }
     });
 
     populateCategorySelectors();
@@ -2167,9 +2466,7 @@ window.addCustomCheckItem = function (cardId) {
         card.content.push({ text, done: false });
         input.value = '';
         saveData();
-        const el = document.getElementById(cardId);
-        if (el) el.remove();
-        renderCustomCards();
+        renderCustomChecklistItems(card);
     }
 };
 
@@ -2178,9 +2475,7 @@ window.toggleCustomCheckItem = function (cardId, idx) {
     if (card && card.content && card.content[idx]) {
         card.content[idx].done = !card.content[idx].done;
         saveData();
-        const el = document.getElementById(cardId);
-        if (el) el.remove();
-        renderCustomCards();
+        renderCustomChecklistItems(card);
     }
 };
 
@@ -2189,31 +2484,33 @@ window.deleteCustomCheckItem = function (cardId, idx) {
     if (card && card.content) {
         card.content.splice(idx, 1);
         saveData();
-        const el = document.getElementById(cardId);
-        if (el) el.remove();
-        renderCustomCards();
+        renderCustomChecklistItems(card);
     }
 };
 
 window.updateCustomCardEmbed = function (cardId) {
-    const url = document.getElementById(`url-${cardId}`)?.value.trim();
+    let url = document.getElementById(`url-${cardId}`)?.value.trim() || '';
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
     const card = (appData.customCards || []).find(c => c.id === cardId);
     if (card) {
         card.content = url;
         saveData();
-        const el = document.getElementById(cardId);
-        if (el) el.remove();
-        renderCustomCards();
+        const iframe = document.querySelector(`#${cardId} iframe`);
+        if (iframe) iframe.src = url || 'about:blank';
     }
 };
 
 /* ----------------------------------------------------------
-   BUSCADOR GLOBAL (CTRL+K)
+   BUSCADOR GLOBAL (CTRL+K + NAVEGACIÓN CON TECLADO)
    ---------------------------------------------------------- */
+let searchResultsCache = [];
+let selectedSearchIndex = -1;
+
 window.openGlobalSearch = function () {
     const modal = document.getElementById('global-search-modal');
     if (modal) {
         modal.style.display = 'flex';
+        selectedSearchIndex = -1;
         const input = document.getElementById('global-search-input');
         if (input) {
             input.value = '';
@@ -2226,12 +2523,42 @@ window.openGlobalSearch = function () {
 window.closeGlobalSearch = function () {
     const modal = document.getElementById('global-search-modal');
     if (modal) modal.style.display = 'none';
+    selectedSearchIndex = -1;
 };
+
+function focusCardById(cardId) {
+    if (!cardId) return;
+    if (appData.settings.zenMode) {
+        appData.settings.zenMode = false;
+        applyZenModeState();
+    }
+    const card = document.getElementById(cardId);
+    if (!card) return;
+
+    if ((appData.settings.hiddenCards || []).includes(cardId)) {
+        appData.settings.hiddenCards = appData.settings.hiddenCards.filter(id => id !== cardId);
+    }
+
+    const cat = appData.cardCategories[cardId] || card.getAttribute('data-category') || 'dev';
+    if (appData.settings.activeDashboardView !== 'all' && appData.settings.activeDashboardView !== cat) {
+        setDashboardView('all');
+    } else {
+        setDashboardView(appData.settings.activeDashboardView);
+    }
+
+    if (card.classList.contains('collapsed')) {
+        toggleCardCollapse(cardId);
+    }
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 
 window.filterGlobalSearch = function () {
     const query = document.getElementById('global-search-input')?.value.toLowerCase().trim() || '';
     const resultsContainer = document.getElementById('global-search-results');
     if (!resultsContainer) return;
+
+    selectedSearchIndex = -1;
+    searchResultsCache = [];
 
     if (!query) {
         resultsContainer.innerHTML = `<li style="text-align:center;color:var(--text-muted);font-size:0.75rem;padding:12px;">Escribe para buscar entregas, tareas, comandos, notas o enlaces...</li>`;
@@ -2242,51 +2569,86 @@ window.filterGlobalSearch = function () {
 
     (appData.tasks || []).forEach(t => {
         if (t.text.toLowerCase().includes(query)) {
-            matches.push({ type: 'Tarea', text: t.text, badge: t.done ? '✅ Hecha' : '⏳ Pendiente' });
+            matches.push({ type: 'Tarea', text: t.text, badge: t.done ? '✅ Hecha' : '⏳ Pendiente', cardId: 'card-tasks' });
         }
     });
 
     (appData.deliveries || []).forEach(d => {
         if (d.title.toLowerCase().includes(query) || d.subject.toLowerCase().includes(query)) {
-            matches.push({ type: 'Entrega', text: `${d.title} (${d.subject})`, badge: d.type });
+            matches.push({ type: 'Entrega', text: `${d.title} (${d.subject})`, badge: d.type, cardId: 'card-deliveries' });
         }
     });
 
     getAllSnippets().forEach(s => {
         if (s.title.toLowerCase().includes(query) || s.cmd.toLowerCase().includes(query)) {
-            matches.push({ type: 'Comando', text: `${s.title}: ${s.cmd}`, badge: s.cat });
+            matches.push({ type: 'Comando', text: `${s.title}: ${s.cmd}`, copyText: s.cmd, badge: s.cat, cardId: 'card-snippets' });
         }
     });
 
     (appData.bookmarks || []).forEach(b => {
         if (b.name.toLowerCase().includes(query) || b.url.toLowerCase().includes(query)) {
-            matches.push({ type: 'Enlace', text: `${b.name} (${b.url})`, badge: 'Web' });
+            matches.push({ type: 'Enlace', text: `${b.name} (${b.url})`, copyText: b.url, badge: 'Web', cardId: 'card-bookmarks' });
         }
     });
 
     (appData.studyKanban || []).forEach(k => {
         if (k.title.toLowerCase().includes(query) || k.subject.toLowerCase().includes(query)) {
-            matches.push({ type: 'Kanban', text: `${k.title} [${k.subject}]`, badge: k.col.toUpperCase() });
+            matches.push({ type: 'Kanban', text: `${k.title} [${k.subject}]`, badge: k.col.toUpperCase(), cardId: 'card-kanban' });
         }
     });
 
-    if (!matches.length) {
+    (appData.servers || []).forEach(s => {
+        if (s.name.toLowerCase().includes(query) || s.ip.toLowerCase().includes(query)) {
+            matches.push({ type: 'Servidor', text: `${s.name} (${s.ip})`, copyText: s.ip, badge: 'VM/Host', cardId: 'card-servers' });
+        }
+    });
+
+    searchResultsCache = matches.slice(0, 15);
+
+    if (!searchResultsCache.length) {
         resultsContainer.innerHTML = `<li style="text-align:center;color:var(--text-muted);font-size:0.75rem;padding:12px;">No se encontraron resultados para "${escapeHtml(query)}"</li>`;
         return;
     }
 
-    resultsContainer.innerHTML = matches.slice(0, 15).map(m => `
-        <li class="search-result-item" onclick="handleSearchResultClick('${escapeHtml(m.text)}')">
+    resultsContainer.innerHTML = searchResultsCache.map((m, idx) => `
+        <li class="search-result-item" data-index="${idx}" onclick="activateSearchResult(${idx})">
             <span><strong>[${escapeHtml(m.type)}]</strong> ${escapeHtml(m.text)}</span>
             <span class="badge-version">${escapeHtml(m.badge)}</span>
         </li>
     `).join('');
 };
 
-window.handleSearchResultClick = function (text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast("Texto copiado del buscador", "info");
+function highlightSearchItem() {
+    const items = document.querySelectorAll('#global-search-results .search-result-item');
+    items.forEach((el, idx) => {
+        el.classList.toggle('selected', idx === selectedSearchIndex);
+        if (idx === selectedSearchIndex) el.scrollIntoView({ block: 'nearest' });
     });
+}
+
+window.handleGlobalSearchKeydown = function (e) {
+    if (!searchResultsCache.length) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedSearchIndex = (selectedSearchIndex + 1) % searchResultsCache.length;
+        highlightSearchItem();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedSearchIndex = (selectedSearchIndex - 1 + searchResultsCache.length) % searchResultsCache.length;
+        highlightSearchItem();
+    } else if (e.key === 'Enter' && selectedSearchIndex >= 0) {
+        e.preventDefault();
+        activateSearchResult(selectedSearchIndex);
+    }
+};
+
+window.activateSearchResult = function (idx) {
+    const item = searchResultsCache[idx];
+    if (!item) return;
+    const toCopy = item.copyText || item.text;
+    navigator.clipboard?.writeText(toCopy).catch(() => {});
+    focusCardById(item.cardId);
+    showToast(`Ir a ${item.type} (copiado)`, "info");
     closeGlobalSearch();
 };
 
@@ -2296,7 +2658,7 @@ window.handleSearchResultClick = function (text) {
 window.exportData = function () {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 2));
     const downloadAnchor = document.createElement('a');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayIso();
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `DevWorkspace_Backup_${today}.json`);
     document.body.appendChild(downloadAnchor);
@@ -2310,10 +2672,10 @@ window.importData = function (event) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async function (e) {
+    reader.onload = function (e) {
         try {
             const parsed = JSON.parse(e.target.result);
-            if (!parsed || typeof parsed !== 'object') throw new Error("Formato no válido");
+            if (!isObj(parsed)) throw new Error("Formato no válido");
             appData = deepMerge(defaultData, parsed);
             saveData();
             applyTheme();
@@ -2321,8 +2683,9 @@ window.importData = function (event) {
             applyLayoutState();
             showToast("✅ Copia de seguridad importada con éxito", "success");
         } catch (err) {
-            console.error("Error importando JSON:", err);
             showToast("Error al importar el archivo JSON", "error");
+        } finally {
+            event.target.value = '';
         }
     };
     reader.readAsText(file);
@@ -2351,12 +2714,14 @@ window.addEventListener('DOMContentLoaded', () => {
     applyTheme();
     setupThemeListeners();
     setupDragAndDrop();
+    setupKanbanDragAndDrop();
+    setupSnippetContainerEvents();
+    setupServersContainerEvents();
     setupNotesAutoSave();
     renderAll();
     applyLayoutState();
     syncRealTimeNetwork();
 
-    // Atajos de teclado globales amigables y avanzados
     window.addEventListener('keydown', e => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
             e.preventDefault();
