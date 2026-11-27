@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace v7.0 - Studio Edition</title>
+    <title>DevWorkspace v7.1 - Studio Edition</title>
     <meta name="description" content="Workspace personal para estudiar, organizar tareas y desarrollar proyectos.">
     <meta name="theme-color" content="#060813">
     <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -24,14 +24,16 @@
             <div class="brand-box">
                 <span class="brand-logo">&gt;_</span>
                 <h1>DevWorkspace</h1>
-                <span class="badge-version">v7.0 STUDIO</span>
+                <span class="badge-version">v7.1 STUDIO</span>
             </div>
 
-            <div id="user-profile-widget" class="user-profile-widget" style="display:none;">
+            <div id="user-profile-widget" class="user-profile-widget is-hidden">
                 <span class="user-status-dot"></span>
                 <span id="user-name">Conectado</span>
                 <span id="cloud-sync-indicator" class="sync-badge">Cloud OK</span>
-                <button type="button" onclick="logoutUser()" class="btn-icon" title="Cerrar Sesión">🚪</button>
+                <span id="cloud-last-sync" class="mono-muted">Sin cambios pendientes</span>
+                <button type="button" id="btn-force-sync" onclick="forceCloudSyncNow()" class="btn-icon" title="Forzar sincronización ahora" aria-label="Forzar sincronización">🔄</button>
+                <button type="button" onclick="logoutUser()" class="btn-icon" title="Cerrar Sesión" aria-label="Cerrar Sesión">🚪</button>
             </div>
 
             <button type="button" id="btn-cloud-login" onclick="openAuthModal()" class="btn-pill-header" title="Sincronizar con Firebase">
@@ -39,7 +41,7 @@
             </button>
         </div>
 
-        <!-- NAVEGACIÓN DE WORKSPACES (EVITA APELMAZAMIENTO) -->
+        <!-- NAVEGACIÓN DE WORKSPACES -->
         <nav class="workspace-nav" aria-label="Espacios de trabajo">
             <button type="button" class="ws-tab active" data-ws="cockpit" onclick="switchWorkspace('cockpit')">
                 🏠 Cockpit
@@ -71,10 +73,10 @@
                 🧘 Zen
             </button>
 
-            <button type="button" onclick="openShortcutsModal()" class="btn-pill-header" title="Atajos de teclado (?)">
+            <button type="button" onclick="openShortcutsModal()" class="btn-pill-header" title="Atajos de teclado (?)" aria-label="Atajos de teclado">
                 ⌨️
             </button>
-            <button type="button" id="app-install-button" onclick="installApp()" class="btn-pill-header" style="display:none;">
+            <button type="button" id="app-install-button" onclick="installApp()" class="btn-pill-header is-hidden">
                 📲 Instalar
             </button>
 
@@ -92,8 +94,11 @@
     <div class="sub-toolbar">
         <div class="sub-toolbar-left">
             <span id="connection-status" class="badge-version" role="status" aria-live="polite">Comprobando conexión…</span>
+            <button type="button" id="sw-update-banner" class="btn-cyan btn-sm is-hidden" onclick="applyServiceWorkerUpdate()">
+                ⬆️ Nueva versión lista · Actualizar
+            </button>
             <span class="toolbar-label">Perfil:</span>
-            <select id="workspace-preset-select" onchange="applyWorkspacePreset(this.value)" class="compact-select">
+            <select id="workspace-preset-select" onchange="applyWorkspacePreset(this.value)" class="compact-select" aria-label="Perfil de vista">
                 <option value="default">🌐 Vista Completa</option>
                 <option value="today">📅 Solo Hoy</option>
                 <option value="exam">📝 Modo Examen</option>
@@ -101,7 +106,7 @@
                 <option value="sysadmin">🖥️ Modo Redes / Lab</option>
             </select>
 
-            <button type="button" id="weather-badge" onclick="toggleWeatherWidget()" class="btn-pill-sub" title="Clima local">
+            <button type="button" id="weather-badge" onclick="toggleWeatherWidget()" class="btn-pill-sub" title="Clima local (clic para activar/desactivar)">
                 🌤️ <span id="weather-text">Clima: OFF</span>
             </button>
 
@@ -111,7 +116,7 @@
         </div>
 
         <div class="sub-toolbar-right">
-            <select id="theme-select" class="compact-select" title="Tema visual">
+            <select id="theme-select" class="compact-select" title="Tema visual" aria-label="Tema visual">
                 <option value="cyberpunk">⚡ Cyberpunk</option>
                 <option value="dracula">🧛 Dracula</option>
                 <option value="valorant">🎯 Valorant</option>
@@ -172,17 +177,17 @@
 
                         <div id="form-add-delivery" class="collapsible-panel">
                             <div class="form-grid-2">
-                                <input type="text" id="deliv-title" placeholder="Título (ej. Práctica API REST)">
-                                <input type="text" id="deliv-subject" placeholder="Módulo (ej. Acceso a Datos)">
-                                <select id="deliv-type">
+                                <input type="text" id="deliv-title" placeholder="Título (ej. Práctica API REST)" aria-label="Título de entrega">
+                                <input type="text" id="deliv-subject" placeholder="Módulo (ej. Acceso a Datos)" aria-label="Módulo de entrega">
+                                <select id="deliv-type" aria-label="Tipo de entrega">
                                     <option value="Práctica">Práctica</option>
                                     <option value="Examen">Examen</option>
                                     <option value="Proyecto">Proyecto</option>
                                 </select>
-                                <input type="datetime-local" id="deliv-datetime">
+                                <input type="datetime-local" id="deliv-datetime" aria-label="Fecha y hora de entrega">
                             </div>
                             <div class="form-inline-end">
-                                <select id="deliv-alert-mins" title="Alerta nativa previa">
+                                <select id="deliv-alert-mins" title="Alerta nativa previa" aria-label="Alerta previa">
                                     <option value="0">Sin alerta previa</option>
                                     <option value="30">Avisar 30m antes</option>
                                     <option value="60">Avisar 1h antes</option>
@@ -213,36 +218,44 @@
                                 <button type="button" id="filter-today" class="pill-btn" onclick="setTaskFilter('today')">Hoy</button>
                                 <button type="button" id="filter-overdue" class="pill-btn" onclick="setTaskFilter('overdue')">Vencidas</button>
                             </div>
-                            <select onchange="setTaskSort(this.value)" class="compact-select">
-                                <option value="created">Recientes</option>
-                                <option value="priority">Prioridad</option>
-                                <option value="block">Bloque Día</option>
-                                <option value="date">Fecha</option>
-                            </select>
+                            <div class="filter-pills-row">
+                                <select id="task-block-filter" onchange="setTaskBlockFilter(this.value)" class="compact-select" aria-label="Filtrar por bloque horario">
+                                    <option value="all">Todos los bloques</option>
+                                    <option value="morning">🌅 Mañana</option>
+                                    <option value="afternoon">☀️ Tarde</option>
+                                    <option value="night">🌙 Noche</option>
+                                </select>
+                                <select onchange="setTaskSort(this.value)" class="compact-select" aria-label="Ordenar tareas">
+                                    <option value="created">Recientes</option>
+                                    <option value="priority">Prioridad</option>
+                                    <option value="block">Bloque Día</option>
+                                    <option value="date">Fecha</option>
+                                </select>
+                            </div>
                         </div>
 
                         <ul id="tasks-list" class="clean-list scroll-list-md"></ul>
 
                         <div class="quick-add-row">
-                            <input type="text" id="task-text" placeholder="Añadir tarea... (Enter)" onkeydown="if(event.key==='Enter') addTask()">
-                            <select id="task-block" title="Bloque horario">
+                            <input type="text" id="task-text" placeholder="Añadir tarea... (Enter)" onkeydown="if(event.key==='Enter') addTask()" aria-label="Nueva tarea">
+                            <select id="task-block" title="Bloque horario" aria-label="Bloque horario">
                                 <option value="morning">🌅 Mañana</option>
                                 <option value="afternoon" selected>☀️ Tarde</option>
                                 <option value="night">🌙 Noche</option>
                             </select>
-                            <select id="task-priority" title="Prioridad">
+                            <select id="task-priority" title="Prioridad" aria-label="Prioridad">
                                 <option value="high">🔴 Alta</option>
                                 <option value="medium" selected>🟠 Media</option>
                                 <option value="low">🔵 Baja</option>
                             </select>
-                            <input type="date" id="task-date" title="Fecha">
-                            <select id="task-repeat" title="Repetición">
+                            <input type="date" id="task-date" title="Fecha" aria-label="Fecha de tarea">
+                            <select id="task-repeat" title="Repetición" aria-label="Repetición">
                                 <option value="">Sin repetición</option>
                                 <option value="daily">Cada día</option>
                                 <option value="weekly">Cada semana</option>
                                 <option value="monthly">Cada mes</option>
                             </select>
-                            <button type="button" class="btn-green" onclick="addTask()">✚</button>
+                            <button type="button" class="btn-green" onclick="addTask()" aria-label="Añadir tarea">✚</button>
                         </div>
                     </div>
                 </section>
@@ -254,7 +267,9 @@
                 <section class="card" id="card-pomodoro">
                     <div class="card-header">
                         <span class="card-title-text">⏱️ Focus, Audio &amp; Métricas</span>
-                        <span id="pomodoro-target" class="header-badge-muted">Objetivo: Sesión libre</span>
+                        <select id="pomo-linked-task" onchange="setPomodoroLinkedTask(this.value)" class="compact-select" title="Vincular sesión Pomodoro a una tarea" aria-label="Tarea vinculada al Pomodoro">
+                            <option value="">🎯 Sesión libre</option>
+                        </select>
                     </div>
                     <div class="card-body">
                         <div class="pomo-hero">
@@ -277,14 +292,14 @@
 
                         <div class="audio-strip">
                             <button type="button" id="btn-audio-toggle" class="btn-cyan btn-sm" onclick="toggleNoiseGenerator()">▶ Audio</button>
-                            <select id="audio-sound-type" onchange="handleAudioTypeChange(this.value)" class="compact-select">
+                            <select id="audio-sound-type" onchange="handleAudioTypeChange()" class="compact-select" aria-label="Tipo de sonido ambiente">
                                 <option value="brown">🌊 Ruido Marrón</option>
                                 <option value="pink">🌸 Ruido Rosa</option>
                                 <option value="rain">🌧️ Lluvia Suave</option>
                                 <option value="binaural-alpha">🧠 Alpha 10Hz</option>
                                 <option value="binaural-theta">🌌 Theta 6Hz</option>
                             </select>
-                            <input type="range" id="audio-volume" min="5" max="100" value="40" oninput="updateAudioVolume(this.value)">
+                            <input type="range" id="audio-volume" min="5" max="100" value="40" oninput="updateAudioVolume(this.value)" aria-label="Volumen de audio">
                             <span id="audio-vol-text" class="mono-muted">40%</span>
                             <div id="audio-visualizer" class="audio-wave-visualizer">
                                 <span class="audio-bar"></span><span class="audio-bar"></span><span class="audio-bar"></span><span class="audio-bar"></span>
@@ -338,42 +353,45 @@
                                 <button type="button" id="tab-clases" class="pill-btn" onclick="setNotesTab('clases')">Clases</button>
                             </div>
                             <div class="filter-pills-row">
-                                <select onchange="insertNoteTemplate(this.value); this.value='';" class="compact-select">
+                                <button type="button" class="btn-ghost btn-sm" onclick="wrapScratchpadSelection('**', '**')" title="Negrita"><strong>B</strong></button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="wrapScratchpadSelection('*', '*')" title="Cursiva"><em>I</em></button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="wrapScratchpadSelection('`', '`')" title="Código inline">&lt;/&gt;</button>
+                                <select onchange="insertNoteTemplate(this.value); this.value='';" class="compact-select" aria-label="Insertar plantilla">
                                     <option value="">+ Plantilla...</option>
                                     <option value="clase">Apuntes Clase</option>
                                     <option value="comando">Ficha Comando</option>
                                     <option value="practica">Análisis Práctica</option>
                                     <option value="readme">README Proyecto</option>
                                 </select>
-                                <button type="button" class="btn-ghost btn-sm" onclick="insertNoteTimestamp()">🕒</button>
-                                <button type="button" class="btn-ghost btn-sm" onclick="insertNoteCodeBlock()">&lt;/&gt;</button>
-                                <button type="button" class="btn-ghost btn-sm" onclick="toolCopy()">📋</button>
-                                <button type="button" class="btn-ghost btn-sm" onclick="toolDownload()">💾 .md</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="insertNoteTimestamp()" title="Insertar marca de hora">🕒</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="insertNoteCodeBlock()" title="Bloque de código">```</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="toolCopy()" title="Copiar nota">📋</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="toolDownload()" title="Descargar Markdown">💾 .md</button>
                             </div>
                         </div>
 
                         <div id="scratchpad-find-bar" class="collapsible-panel">
                             <div class="form-inline-row">
-                                <input type="text" id="sp-find-text" placeholder="Buscar...">
-                                <input type="text" id="sp-replace-text" placeholder="Reemplazar por...">
+                                <input type="text" id="sp-find-text" placeholder="Buscar..." aria-label="Texto a buscar">
+                                <input type="text" id="sp-replace-text" placeholder="Reemplazar por..." aria-label="Texto de reemplazo">
                                 <button type="button" class="btn-cyan btn-sm" onclick="replaceInScratchpad(false)">1</button>
                                 <button type="button" class="btn-cyan btn-sm" onclick="replaceInScratchpad(true)">Todo</button>
                             </div>
                         </div>
 
-                        <textarea id="scratchpad" class="notes-area" placeholder="Escribe tus notas en Markdown..."></textarea>
-                        <div id="scratchpad-preview" class="markdown-preview-box" style="display:none;"></div>
+                        <textarea id="scratchpad" class="notes-area" placeholder="Escribe tus notas en Markdown..." aria-label="Editor de notas Markdown"></textarea>
+                        <div id="scratchpad-preview" class="markdown-preview-box is-hidden"></div>
                         <div id="scratchpad-metrics" class="notes-metrics">0 líneas • 0 caracteres</div>
 
                         <div class="sticky-strip">
                             <div class="sticky-header">
                                 <span>📌 Portapapeles rápido / Sticky</span>
                                 <div>
-                                    <button type="button" class="btn-icon" onclick="copyStickyNote()">📋</button>
-                                    <button type="button" class="btn-icon" onclick="clearStickyNote()">🗑️</button>
+                                    <button type="button" class="btn-icon" onclick="copyStickyNote()" aria-label="Copiar nota rápida">📋</button>
+                                    <button type="button" class="btn-icon" onclick="clearStickyNote()" aria-label="Limpiar nota rápida">🗑️</button>
                                 </div>
                             </div>
-                            <textarea id="sticky-note-input" class="notes-area sticky-area" placeholder="Pega aquí tokens temporales, comandos o textos rápidos..."></textarea>
+                            <textarea id="sticky-note-input" class="notes-area sticky-area" placeholder="Pega aquí tokens temporales, comandos o textos rápidos..." aria-label="Nota rápida"></textarea>
                         </div>
                     </div>
                 </section>
@@ -388,9 +406,9 @@
         <div class="studio-topbar card">
             <div class="studio-controls-left">
                 <span class="card-title-text">💻 Live Code Studio</span>
-                <input type="text" id="studio-project-title" placeholder="Nombre del proyecto web..." value="Mi Proyecto Web">
+                <input type="text" id="studio-project-title" placeholder="Nombre del proyecto web..." value="Mi Proyecto Web" aria-label="Nombre del proyecto web">
 
-                <select id="studio-template-select" onchange="loadStudioTemplate(this.value); this.value='';" class="compact-select">
+                <select id="studio-template-select" onchange="loadStudioTemplate(this.value); this.value='';" class="compact-select" aria-label="Cargar plantilla">
                     <option value="">📄 Cargar Plantilla...</option>
                     <option value="blank">HTML5 Base Limpio</option>
                     <option value="cybercard">Tarjeta Cyberpunk Neon</option>
@@ -398,7 +416,7 @@
                     <option value="domlab">Práctica JavaScript DOM</option>
                 </select>
 
-                <select id="studio-cdn-select" onchange="injectStudioCdn(this.value); this.value='';" class="compact-select">
+                <select id="studio-cdn-select" onchange="injectStudioCdn(this.value); this.value='';" class="compact-select" aria-label="Inyectar CDN">
                     <option value="">📦 Inyectar CDN...</option>
                     <option value="tailwind">Tailwind CSS (Play CDN)</option>
                     <option value="bootstrap">Bootstrap 5.3 CSS</option>
@@ -406,7 +424,7 @@
                     <option value="chartjs">Chart.js</option>
                 </select>
 
-                <select id="studio-font-select" onchange="applyFontToStudioPreview(this.value)" class="compact-select" title="Fuente Google Fonts en Preview">
+                <select id="studio-font-select" onchange="applyFontToStudioPreview(this.value)" class="compact-select" title="Fuente Google Fonts en Preview" aria-label="Fuente en vista previa">
                     <option value="">🔤 Fuente Preview (Por defecto)</option>
                 </select>
             </div>
@@ -416,13 +434,14 @@
                     <input type="checkbox" id="studio-autorun" checked> Auto-Run
                 </label>
                 <button type="button" class="btn-cyan btn-sm" onclick="runStudioPreview()">▶ Ejecutar</button>
+                <button type="button" class="btn-ghost btn-sm" onclick="formatStudioCode()" title="Formatear código activo">✨ Formatear</button>
                 <button type="button" class="btn-green btn-sm" onclick="saveStudioProject()">💾 Guardar</button>
                 <button type="button" class="btn-violet btn-sm" onclick="exportStudioSingleHtml()">⬇️ Exportar .html</button>
                 <label class="btn-ghost btn-sm file-btn-label" title="Importar archivo .html local">
                     📂 Abrir .html
-                    <input type="file" accept=".html,.htm" style="display:none;" onchange="importStudioHtmlFile(event)">
+                    <input type="file" accept=".html,.htm" class="is-hidden" onchange="importStudioHtmlFile(event)">
                 </label>
-                <button type="button" class="btn-ghost btn-sm" onclick="toggleStudioFullscreen()" title="Pantalla completa">⛶</button>
+                <button type="button" class="btn-ghost btn-sm" onclick="toggleStudioFullscreen()" title="Pantalla completa" aria-label="Pantalla completa">⛶</button>
             </div>
         </div>
 
@@ -436,19 +455,22 @@
                         <button type="button" id="ed-tab-js" class="pill-btn" onclick="switchStudioEditorTab('js')">JavaScript</button>
                         <button type="button" id="ed-tab-saved" class="pill-btn" onclick="switchStudioEditorTab('saved')">📁 Proyectos Guardados</button>
                     </div>
-                    <button type="button" class="btn-ghost btn-sm" onclick="inspectStudioDomStructure()" title="Inspeccionar etiquetas e IDs">🔎 DOM</button>
+                    <div class="filter-pills-row">
+                        <span id="studio-editor-metrics" class="mono-muted">0 líneas</span>
+                        <button type="button" class="btn-ghost btn-sm" onclick="inspectStudioDomStructure()" title="Inspeccionar etiquetas e IDs">🔎 DOM</button>
+                    </div>
                 </div>
 
                 <div id="ed-pane-html" class="editor-wrapper active">
-                    <textarea id="code-html" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tu código HTML aquí..."></textarea>
+                    <textarea id="code-html" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tu código HTML aquí..." aria-label="Editor HTML"></textarea>
                 </div>
 
                 <div id="ed-pane-css" class="editor-wrapper">
-                    <textarea id="code-css" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tus estilos CSS aquí..."></textarea>
+                    <textarea id="code-css" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tus estilos CSS aquí..." aria-label="Editor CSS"></textarea>
                 </div>
 
                 <div id="ed-pane-js" class="editor-wrapper">
-                    <textarea id="code-js" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tu JavaScript aquí..."></textarea>
+                    <textarea id="code-js" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tu JavaScript aquí..." aria-label="Editor JavaScript"></textarea>
                 </div>
 
                 <div id="ed-pane-saved" class="editor-wrapper saved-projects-pane">
@@ -464,6 +486,12 @@
                         <button type="button" id="vp-desktop" class="pill-btn active" onclick="setStudioViewport('100%')">🖥️ 100%</button>
                         <button type="button" id="vp-tablet" class="pill-btn" onclick="setStudioViewport('768px')">📟 768px</button>
                         <button type="button" id="vp-mobile" class="pill-btn" onclick="setStudioViewport('375px')">📱 375px</button>
+                        <select id="studio-console-filter" onchange="renderStudioConsole()" class="compact-select" aria-label="Filtrar consola">
+                            <option value="all">Todos</option>
+                            <option value="log">Log</option>
+                            <option value="warn">Warn</option>
+                            <option value="error">Error</option>
+                        </select>
                         <button type="button" class="btn-ghost btn-sm" onclick="clearStudioConsole()">🧹 Consola</button>
                     </div>
                 </div>
@@ -474,7 +502,7 @@
 
                 <div class="studio-console-box">
                     <div class="console-header">
-                        <span>>_ Consola JS Integrada</span>
+                        <span>&gt;_ Consola JS Integrada</span>
                         <span id="studio-console-count" class="badge-version">0 logs</span>
                     </div>
                     <div id="studio-console-output" class="console-output"></div>
@@ -578,10 +606,18 @@
                         <!-- FLASHCARDS -->
                         <div id="hub-view-flashcards">
                             <div class="form-inline-between">
-                                <select id="fc-filter-subject" onchange="renderFlashcards()" class="compact-select">
-                                    <option value="all">Todas las asignaturas</option>
-                                </select>
-                                <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-flashcard')">✚ Tarjeta</button>
+                                <div class="filter-pills-row">
+                                    <select id="fc-filter-subject" onchange="renderFlashcards()" class="compact-select" aria-label="Filtrar flashcards por asignatura">
+                                        <option value="all">Todas las asignaturas</option>
+                                    </select>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="fc-unmastered-only" onchange="renderFlashcards()"> Solo pendientes
+                                    </label>
+                                </div>
+                                <div class="filter-pills-row">
+                                    <span id="fc-deck-stats" class="mono-muted">0/0</span>
+                                    <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-flashcard')">✚ Tarjeta</button>
+                                </div>
                             </div>
 
                             <div id="form-add-flashcard" class="collapsible-panel">
@@ -589,7 +625,7 @@
                                     <input type="text" id="fc-new-subj" placeholder="Módulo">
                                     <input type="text" id="fc-new-q" placeholder="Pregunta / Concepto">
                                 </div>
-                                <div class="form-inline-row" style="margin-top:6px;">
+                                <div class="form-inline-row mt-6">
                                     <input type="text" id="fc-new-a" placeholder="Respuesta / Definición">
                                     <button type="button" class="btn-green" onclick="addFlashcard()">Guardar</button>
                                 </div>
@@ -597,16 +633,16 @@
 
                             <div id="flashcard-stage" class="flashcard-stage" onclick="flipCurrentFlashcard()"></div>
 
-                            <div class="form-inline-between" style="margin-top:8px;">
+                            <div class="form-inline-between mt-8">
                                 <button type="button" class="btn-danger btn-sm" onclick="markFlashcardStatus(false)">🔄 Repasar</button>
                                 <button type="button" class="btn-cyan btn-sm" onclick="nextFlashcard()">Siguiente ⏭️</button>
                                 <button type="button" class="btn-green btn-sm" onclick="markFlashcardStatus(true)">✅ Dominada</button>
-                                <button type="button" class="btn-icon" onclick="deleteCurrentFlashcard()" title="Eliminar">🗑️</button>
+                                <button type="button" class="btn-icon" onclick="deleteCurrentFlashcard()" title="Eliminar" aria-label="Eliminar tarjeta">🗑️</button>
                             </div>
                         </div>
 
                         <!-- BUG LOG -->
-                        <div id="hub-view-bugs" style="display:none;">
+                        <div id="hub-view-bugs" class="is-hidden">
                             <div class="form-inline-row">
                                 <input type="text" id="bug-search-input" placeholder="Buscar error o solución..." oninput="renderBugLogs()">
                                 <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-bug')">✚ Bug</button>
@@ -626,11 +662,11 @@
                         </div>
 
                         <!-- DUDAS -->
-                        <div id="hub-view-doubts" style="display:none;">
+                        <div id="hub-view-doubts" class="is-hidden">
                             <div class="form-inline-row">
-                                <input type="text" id="doubt-new-subj" placeholder="Módulo" style="max-width:110px;">
+                                <input type="text" id="doubt-new-subj" placeholder="Módulo" class="w-110">
                                 <input type="text" id="doubt-new-text" placeholder="Escribe la duda para preguntar..." onkeydown="if(event.key==='Enter') addClassDoubt()">
-                                <button type="button" class="btn-green" onclick="addClassDoubt()">✚</button>
+                                <button type="button" class="btn-green" onclick="addClassDoubt()" aria-label="Añadir duda">✚</button>
                             </div>
                             <div id="doubts-list" class="scroll-list-md"></div>
                         </div>
@@ -647,9 +683,9 @@
                         <div class="planner-box">
                             <span class="mono-muted">Calculadora de reparto de estudio hasta examen:</span>
                             <div class="form-inline-row">
-                                <input type="date" id="planner-exam-date" title="Fecha examen">
-                                <input type="number" id="planner-topics-count" value="8" min="1" max="100" title="N.º temas">
-                                <input type="number" id="planner-mins-topic" value="45" min="5" max="300" title="Min/tema">
+                                <input type="date" id="planner-exam-date" title="Fecha examen" aria-label="Fecha examen">
+                                <input type="number" id="planner-topics-count" value="8" min="1" max="100" title="N.º temas" aria-label="Número de temas">
+                                <input type="number" id="planner-mins-topic" value="45" min="5" max="300" title="Min/tema" aria-label="Minutos por tema">
                                 <button type="button" class="btn-cyan btn-sm" onclick="calculateStudyPlan()">Calcular</button>
                             </div>
                             <div id="study-planner-result" class="planner-result-box"></div>
@@ -704,13 +740,13 @@
                                 <button type="button" class="btn-violet btn-sm" onclick="tbJsonToCsv()">JSON → CSV</button>
                                 <button type="button" class="btn-violet btn-sm" onclick="tbCsvToJson()">CSV → JSON</button>
                                 <button type="button" class="btn-green btn-sm" onclick="tbFormatSql()">SQL</button>
-                                <button type="button" class="btn-ghost btn-sm" onclick="copyElementValue('tb-json-input')">📋</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="copyElementValue('tb-json-input')" aria-label="Copiar salida">📋</button>
                             </div>
                             <div id="tb-json-status" class="tb-status-msg"></div>
                         </div>
 
                         <!-- TAB 2: ENCODE/JWT/HASH -->
-                        <div id="tb-view-encode" class="tb-pane" style="display:none;">
+                        <div id="tb-view-encode" class="tb-pane is-hidden">
                             <textarea id="tb-encode-input" class="notes-area" placeholder="Texto, Base64, URL o token JWT..."></textarea>
                             <div class="filter-pills-row">
                                 <button type="button" class="btn-cyan btn-sm" onclick="tbEncodeAction('b64e')">B64 Enc</button>
@@ -724,10 +760,10 @@
                         </div>
 
                         <!-- TAB 3: REGEX & DIFF -->
-                        <div id="tb-view-regex" class="tb-pane" style="display:none;">
+                        <div id="tb-view-regex" class="tb-pane is-hidden">
                             <div class="form-inline-row">
                                 <input type="text" id="tb-regex-pattern" placeholder="Patrón Regex (ej. \b\d{1,3}(\.\d{1,3}){3}\b)">
-                                <input type="text" id="tb-regex-flags" value="g" style="max-width:55px;">
+                                <input type="text" id="tb-regex-flags" value="g" class="w-55" aria-label="Flags Regex">
                                 <button type="button" class="btn-cyan btn-sm" onclick="runRegexTester()">Probar</button>
                             </div>
                             <textarea id="tb-regex-text" class="notes-area" placeholder="Texto de prueba o Bloque A para Diff..."></textarea>
@@ -738,22 +774,23 @@
                         </div>
 
                         <!-- TAB 4: SUBREDES & BASES -->
-                        <div id="tb-view-net" class="tb-pane" style="display:none;">
+                        <div id="tb-view-net" class="tb-pane is-hidden">
                             <div class="form-inline-row">
                                 <input type="text" id="tb-ip-input" placeholder="192.168.1.50/24">
                                 <button type="button" class="btn-cyan btn-sm" onclick="calculateSubnet()">Calcular Subred</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="copyElementValue('tb-subnet-output')" aria-label="Copiar subred">📋</button>
                             </div>
                             <pre id="tb-subnet-output" class="tb-output-pre"></pre>
                             <div class="bases-grid">
-                                <div><label>DEC</label><input type="text" id="base-dec" oninput="convertNumberBase('dec', this.value)"></div>
-                                <div><label>BIN</label><input type="text" id="base-bin" oninput="convertNumberBase('bin', this.value)"></div>
-                                <div><label>HEX</label><input type="text" id="base-hex" oninput="convertNumberBase('hex', this.value)"></div>
-                                <div><label>OCT</label><input type="text" id="base-oct" oninput="convertNumberBase('oct', this.value)"></div>
+                                <div><label for="base-dec">DEC</label><input type="text" id="base-dec" oninput="convertNumberBase('dec', this.value)"></div>
+                                <div><label for="base-bin">BIN</label><input type="text" id="base-bin" oninput="convertNumberBase('bin', this.value)"></div>
+                                <div><label for="base-hex">HEX</label><input type="text" id="base-hex" oninput="convertNumberBase('hex', this.value)"></div>
+                                <div><label for="base-oct">OCT</label><input type="text" id="base-oct" oninput="convertNumberBase('oct', this.value)"></div>
                             </div>
                         </div>
 
                         <!-- TAB 5: CHMOD & CRON -->
-                        <div id="tb-view-sys" class="tb-pane" style="display:none;">
+                        <div id="tb-view-sys" class="tb-pane is-hidden">
                             <div class="chmod-matrix">
                                 <div class="chmod-group"><strong>User</strong><label><input type="checkbox" id="ch-ur" checked onchange="updateChmodCalc()"> r</label><label><input type="checkbox" id="ch-uw" checked onchange="updateChmodCalc()"> w</label><label><input type="checkbox" id="ch-ux" checked onchange="updateChmodCalc()"> x</label></div>
                                 <div class="chmod-group"><strong>Group</strong><label><input type="checkbox" id="ch-gr" checked onchange="updateChmodCalc()"> r</label><label><input type="checkbox" id="ch-gw" onchange="updateChmodCalc()"> w</label><label><input type="checkbox" id="ch-gx" checked onchange="updateChmodCalc()"> x</label></div>
@@ -764,22 +801,22 @@
                                     <button type="button" class="btn-cyan btn-sm" onclick="copyChmodCmd()">Copiar</button>
                                 </div>
                             </div>
-                            <div class="form-inline-row" style="margin-top:8px;">
-                                <input type="text" id="cron-expr-input" value="0 3 * * *" oninput="explainCronExpr()">
+                            <div class="form-inline-row mt-8">
+                                <input type="text" id="cron-expr-input" value="0 3 * * *" oninput="explainCronExpr()" aria-label="Expresión Cron">
                                 <button type="button" class="btn-ghost btn-sm" onclick="explainCronExpr()">Explicar Cron</button>
                             </div>
                             <div id="cron-explanation" class="tb-status-msg"></div>
                         </div>
 
                         <!-- TAB 6: GENERADORES -->
-                        <div id="tb-view-gen" class="tb-pane" style="display:none;">
+                        <div id="tb-view-gen" class="tb-pane is-hidden">
                             <div class="filter-pills-row">
                                 <button type="button" class="btn-cyan btn-sm" onclick="generateMockUsers(5)">JSON Usuarios</button>
                                 <button type="button" class="btn-violet btn-sm" onclick="generateUuidsAndDni()">UUID + DNI</button>
                                 <button type="button" class="btn-green btn-sm" onclick="generateSecurePassword()">Password 16</button>
                                 <button type="button" class="btn-ghost btn-sm" onclick="loadBoilerplate('dockerfile')">Dockerfile</button>
                                 <button type="button" class="btn-ghost btn-sm" onclick="loadBoilerplate('compose')">Compose</button>
-                                <button type="button" class="btn-ghost btn-sm" onclick="copyElementValue('tb-gen-output')">📋</button>
+                                <button type="button" class="btn-ghost btn-sm" onclick="copyElementValue('tb-gen-output')" aria-label="Copiar generado">📋</button>
                             </div>
                             <textarea id="tb-gen-output" class="notes-area" placeholder="Salida generada..."></textarea>
                         </div>
@@ -793,7 +830,10 @@
                 <section class="card sensitive-blur" id="card-servers">
                     <div class="card-header">
                         <span class="card-title-text">🖥️ Servidores, VMs &amp; Homelab</span>
-                        <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-servers')">✚ Host / VM</button>
+                        <div class="card-actions">
+                            <button type="button" class="btn-ghost btn-sm" onclick="exportServersJson()" title="Copiar inventario JSON">📤 JSON</button>
+                            <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-servers')">✚ Host / VM</button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <input type="text" id="srv-search-filter" placeholder="Filtrar host, IP, puerto o ruta..." oninput="renderServers()">
@@ -803,7 +843,7 @@
                                 <input type="text" id="srv-ip" placeholder="IP / Dominio">
                                 <input type="text" id="srv-port" placeholder="Puerto SSH/Web (ej. 22)">
                                 <input type="text" id="srv-creds" placeholder="Usuario (ej. root)">
-                                <input type="text" id="srv-logs" placeholder="Ruta logs/config (ej. /var/log/nginx)" style="grid-column:1/-1;">
+                                <input type="text" id="srv-logs" placeholder="Ruta logs/config (ej. /var/log/nginx)" class="full-span">
                             </div>
                             <div class="form-inline-end">
                                 <button type="button" class="btn-green" onclick="addServer()">Guardar Host</button>
@@ -830,9 +870,9 @@
                     </div>
                     <div class="card-body">
                         <div class="form-grid-3">
-                            <input type="text" id="cli-var-user" value="root" oninput="renderSnippets()" title="{{USER}}">
-                            <input type="text" id="cli-var-ip" value="192.168.1.10" oninput="renderSnippets()" title="{{IP}}">
-                            <input type="text" id="cli-var-port" value="22" oninput="renderSnippets()" title="{{PORT}}">
+                            <input type="text" id="cli-var-user" value="root" oninput="renderSnippets()" title="{{USER}}" aria-label="Variable USER">
+                            <input type="text" id="cli-var-ip" value="192.168.1.10" oninput="renderSnippets()" title="{{IP}}" aria-label="Variable IP">
+                            <input type="text" id="cli-var-port" value="22" oninput="renderSnippets()" title="{{PORT}}" aria-label="Variable PORT">
                         </div>
                         <input type="text" id="snippet-search" placeholder="Buscar comando Linux, Docker, Git, SQL..." oninput="renderSnippets()">
 
@@ -841,7 +881,7 @@
                                 <input type="text" id="snip-new-title" placeholder="Descripción">
                                 <input type="text" id="snip-new-cat" placeholder="Categoría (Docker, Linux, Git...)">
                             </div>
-                            <div class="form-inline-row" style="margin-top:6px;">
+                            <div class="form-inline-row mt-6">
                                 <input type="text" id="snip-new-cmd" placeholder="Comando (admite {{USER}}, {{IP}}, {{PORT}})">
                                 <button type="button" class="btn-green" onclick="addCustomSnippet()">Guardar</button>
                             </div>
@@ -910,7 +950,7 @@
                                 </label>
                             </div>
                         </div>
-                        <textarea id="gf-preview-sample" class="notes-area" style="min-height:85px;">DevWorkspace v7.0 — 0123456789 {} [] () => const x = "Hola Mundo";</textarea>
+                        <textarea id="gf-preview-sample" class="notes-area min-h-85">DevWorkspace v7.1 — 0123456789 {} [] () =&gt; const x = "Hola Mundo";</textarea>
                         <div class="filter-pills-row">
                             <button type="button" class="btn-cyan btn-sm" onclick="applyLoadedFontToUi('sans')">Aplicar a Interfaz (UI)</button>
                             <button type="button" class="btn-violet btn-sm" onclick="applyLoadedFontToUi('mono')">Aplicar a Código / Terminal</button>
@@ -920,7 +960,7 @@
 
                     <div>
                         <span class="mono-muted">⭐ Mis Fuentes Guardadas:</span>
-                        <div id="gf-favorites-list" class="filter-pills-row" style="margin-top:6px;"></div>
+                        <div id="gf-favorites-list" class="filter-pills-row mt-6"></div>
                     </div>
                 </div>
             </section>
@@ -933,8 +973,8 @@
                 <div class="card-body">
                     <div class="form-grid-2">
                         <div>
-                            <label class="mono-muted">Escala Global de Interfaz:</label>
-                            <select id="ui-scale-select" onchange="updateAppearanceSettings()" style="width:100%;margin-top:4px;">
+                            <label class="mono-muted" for="ui-scale-select">Escala Global de Interfaz:</label>
+                            <select id="ui-scale-select" onchange="updateAppearanceSettings()" class="w-full mt-4">
                                 <option value="0.9">90% (Compacta)</option>
                                 <option value="1" selected>100% (Estándar)</option>
                                 <option value="1.08">108% (Amplia)</option>
@@ -942,22 +982,27 @@
                             </select>
                         </div>
                         <div>
-                            <label class="mono-muted">Nombre de Tema Personalizado:</label>
-                            <input type="text" id="custom-theme-name" value="Mi Tema" style="width:100%;margin-top:4px;">
+                            <label class="mono-muted" for="custom-theme-name">Nombre de Tema Personalizado:</label>
+                            <input type="text" id="custom-theme-name" value="Mi Tema" class="w-full mt-4">
                         </div>
                     </div>
 
                     <div class="color-pickers-grid">
-                        <label>Fondo Principal <input type="color" id="cp-bg" value="#060813"></label>
-                        <label>Fondo Tarjeta <input type="color" id="cp-card" value="#0d131f"></label>
-                        <label>Bordes <input type="color" id="cp-border" value="#1e293b"></label>
-                        <label>Texto Principal <input type="color" id="cp-text" value="#f1f5f9"></label>
-                        <label>Acento Primario <input type="color" id="cp-cyan" value="#38bdf8"></label>
-                        <label>Acento Secundario <input type="color" id="cp-violet" value="#a855f7"></label>
+                        <label>Fondo Principal <input type="color" id="cp-bg" value="#060813" oninput="previewCustomThemeColors()"></label>
+                        <label>Fondo Tarjeta <input type="color" id="cp-card" value="#0d131f" oninput="previewCustomThemeColors()"></label>
+                        <label>Bordes <input type="color" id="cp-border" value="#1e293b" oninput="previewCustomThemeColors()"></label>
+                        <label>Texto Principal <input type="color" id="cp-text" value="#f1f5f9" oninput="previewCustomThemeColors()"></label>
+                        <label>Acento Primario <input type="color" id="cp-cyan" value="#38bdf8" oninput="previewCustomThemeColors()"></label>
+                        <label>Acento Secundario <input type="color" id="cp-violet" value="#a855f7" oninput="previewCustomThemeColors()"></label>
                     </div>
 
                     <div class="filter-pills-row">
                         <button type="button" class="btn-cyan" onclick="activateCustomTheme()">✨ Activar Tema Personalizado</button>
+                        <button type="button" class="btn-violet btn-sm" onclick="exportCustomThemeJson()">💾 Exportar Tema</button>
+                        <label class="btn-ghost btn-sm file-btn-label">
+                            📂 Importar Tema
+                            <input type="file" accept=".json" class="is-hidden" onchange="importCustomThemeJson(event)">
+                        </label>
                         <button type="button" class="btn-ghost" onclick="resetAppearanceDefaults()">Restaurar Tipografía Base</button>
                     </div>
                 </div>
@@ -969,11 +1014,11 @@
          MODALES GLOBALES
          ========================================================== -->
     <!-- BUSCADOR GLOBAL (CTRL+K) -->
-    <div id="global-search-modal" class="modal-overlay">
+    <div id="global-search-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="global-search-title" onclick="if(event.target===this) closeGlobalSearch()">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>🔍 Buscador Global (Ctrl + K)</h2>
-                <button type="button" class="btn-icon" onclick="closeGlobalSearch()">✖</button>
+                <h2 id="global-search-title">🔍 Buscador Global (Ctrl + K)</h2>
+                <button type="button" class="btn-icon" onclick="closeGlobalSearch()" aria-label="Cerrar buscador">✖</button>
             </div>
             <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar tareas, notas, entregas, flashcards, proyectos..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)" aria-label="Buscar en todo el espacio de trabajo">
             <ul id="global-search-results" class="global-search-results" aria-live="polite"></ul>
@@ -981,40 +1026,47 @@
     </div>
 
     <!-- EDITOR DE HORARIO -->
-    <div id="schedule-modal" class="modal-overlay">
+    <div id="schedule-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title" onclick="if(event.target===this) closeScheduleModal()">
         <div class="modal-content schedule-modal-content">
             <div class="modal-header">
-                <h2>📅 Configurar Horario Semanal</h2>
-                <button type="button" class="btn-icon" onclick="closeScheduleModal()">✖</button>
+                <h2 id="schedule-modal-title">📅 Configurar Horario Semanal</h2>
+                <button type="button" class="btn-icon" onclick="closeScheduleModal()" aria-label="Cerrar horario">✖</button>
             </div>
             <div class="schedule-add-bar">
-                <select id="sch-add-day">
+                <select id="sch-add-day" aria-label="Día de la semana">
                     <option value="1">Lunes</option>
                     <option value="2">Martes</option>
                     <option value="3">Miércoles</option>
                     <option value="4">Jueves</option>
                     <option value="5">Viernes</option>
                 </select>
-                <input type="time" id="sch-add-start" value="08:30">
-                <input type="time" id="sch-add-end" value="09:25">
+                <input type="time" id="sch-add-start" value="08:30" aria-label="Hora de inicio">
+                <input type="time" id="sch-add-end" value="09:25" aria-label="Hora de fin">
                 <input type="text" id="sch-add-subject" placeholder="Asignatura">
-                <input type="text" id="sch-add-room" placeholder="Aula" style="max-width:90px;">
-                <button type="button" class="btn-green" onclick="addScheduleClass()">✚</button>
+                <input type="text" id="sch-add-room" placeholder="Aula" class="w-90">
+                <button type="button" class="btn-green" onclick="addScheduleClass()" aria-label="Añadir clase">✚</button>
             </div>
             <div id="schedule-list-editor" class="scroll-list-md"></div>
             <div class="modal-footer-actions">
-                <button type="button" class="btn-danger btn-sm" onclick="clearSchedule()">Vaciar Horario</button>
+                <div class="filter-pills-row">
+                    <button type="button" class="btn-danger btn-sm" onclick="clearSchedule()">Vaciar Horario</button>
+                    <button type="button" class="btn-ghost btn-sm" onclick="exportScheduleJson()">💾 Exportar</button>
+                    <label class="btn-ghost btn-sm file-btn-label">
+                        📂 Importar
+                        <input type="file" accept=".json" class="is-hidden" onchange="importScheduleJson(event)">
+                    </label>
+                </div>
                 <button type="button" class="btn-cyan" onclick="closeScheduleModal()">Listo</button>
             </div>
         </div>
     </div>
 
     <!-- AUTENTICACIÓN FIREBASE -->
-    <div id="auth-modal" class="modal-overlay">
+    <div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title" onclick="if(event.target===this) closeAuthModal()">
         <div class="modal-content auth-modal-content">
             <div class="modal-header">
                 <h2 id="auth-title">DevWorkspace Cloud</h2>
-                <button type="button" class="btn-icon" onclick="closeAuthModal()">✖</button>
+                <button type="button" class="btn-icon" onclick="closeAuthModal()" aria-label="Cerrar autenticación">✖</button>
             </div>
             <p id="auth-subtitle" class="mono-muted">Inicia sesión para sincronizar tus proyectos, notas y tareas en Firebase.</p>
             <div class="auth-input-group">
@@ -1023,17 +1075,18 @@
             </div>
             <button type="button" id="auth-main-btn" class="btn-cyan btn-full" onclick="handleEmailAuth()">🔑 Iniciar Sesión</button>
             <button type="button" class="btn-link-action" onclick="toggleAuthMode()">¿No tienes cuenta? Regístrate aquí</button>
+            <button type="button" class="btn-link-action" onclick="sendPasswordReset()">¿Olvidaste tu contraseña? Enviar enlace</button>
             <div class="auth-divider"><span>O</span></div>
             <button type="button" class="btn-ghost btn-full" onclick="continueAsGuest()">⚡ Seguir en Modo Local</button>
         </div>
     </div>
 
     <!-- SNAPSHOTS -->
-    <div id="snapshots-modal" class="modal-overlay">
+    <div id="snapshots-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="snapshots-modal-title" onclick="if(event.target===this) closeSnapshotsModal()">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>📸 Snapshots &amp; Copias Locales</h2>
-                <button type="button" class="btn-icon" onclick="closeSnapshotsModal()">✖</button>
+                <h2 id="snapshots-modal-title">📸 Snapshots &amp; Copias Locales</h2>
+                <button type="button" class="btn-icon" onclick="closeSnapshotsModal()" aria-label="Cerrar snapshots">✖</button>
             </div>
             <div id="snapshots-list-container" class="scroll-list-md"></div>
             <div class="modal-footer-actions">
@@ -1043,14 +1096,44 @@
         </div>
     </div>
 
-    <!-- RESUMEN DIARIO -->
-    <div id="daily-summary-modal" class="modal-overlay">
+    <!-- HISTORIAL DE NOTAS -->
+    <div id="note-history-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="note-history-title" onclick="if(event.target===this) closeNoteHistoryModal()">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>📊 Resumen de Jornada</h2>
-                <button type="button" class="btn-icon" onclick="closeDailySummaryModal()">✖</button>
+                <h2 id="note-history-title">🕒 Historial de Versiones de Notas</h2>
+                <button type="button" class="btn-icon" onclick="closeNoteHistoryModal()" aria-label="Cerrar historial">✖</button>
             </div>
-            <textarea id="daily-summary-output" class="notes-area" style="min-height:180px;"></textarea>
+            <div id="note-history-list" class="scroll-list-md"></div>
+            <div class="modal-footer-actions">
+                <button type="button" class="btn-green btn-sm" onclick="saveNoteRevisionManual()">✚ Guardar Versión Actual</button>
+                <button type="button" class="btn-cyan" onclick="closeNoteHistoryModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE EDICIÓN RÁPIDA -->
+    <div id="edit-item-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-item-title" onclick="if(event.target===this) closeEditItemModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="edit-item-title">✏️ Editar Elemento</h2>
+                <button type="button" class="btn-icon" onclick="closeEditItemModal()" aria-label="Cerrar edición">✖</button>
+            </div>
+            <div id="edit-item-fields" class="auth-input-group"></div>
+            <div class="modal-footer-actions">
+                <button type="button" class="btn-ghost" onclick="closeEditItemModal()">Cancelar</button>
+                <button type="button" class="btn-green" onclick="saveEditItemModal()">💾 Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RESUMEN DIARIO -->
+    <div id="daily-summary-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="daily-summary-title" onclick="if(event.target===this) closeDailySummaryModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="daily-summary-title">📊 Resumen de Jornada</h2>
+                <button type="button" class="btn-icon" onclick="closeDailySummaryModal()" aria-label="Cerrar resumen">✖</button>
+            </div>
+            <textarea id="daily-summary-output" class="notes-area min-h-180"></textarea>
             <div class="modal-footer-actions">
                 <button type="button" class="btn-cyan" onclick="copyElementValue('daily-summary-output')">📋 Copiar Markdown</button>
                 <button type="button" class="btn-ghost" onclick="closeDailySummaryModal()">Cerrar</button>
@@ -1059,11 +1142,11 @@
     </div>
 
     <!-- ATAJOS DE TECLADO -->
-    <div id="shortcuts-modal" class="modal-overlay">
+    <div id="shortcuts-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title" onclick="if(event.target===this) closeShortcutsModal()">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>⌨️ Atajos de Teclado</h2>
-                <button type="button" class="btn-icon" onclick="closeShortcutsModal()">✖</button>
+                <h2 id="shortcuts-modal-title">⌨️ Atajos de Teclado</h2>
+                <button type="button" class="btn-icon" onclick="closeShortcutsModal()" aria-label="Cerrar atajos">✖</button>
             </div>
             <div class="shortcuts-list-grid">
                 <div><kbd>Ctrl + K</kbd> Buscador Global</div>
@@ -1071,6 +1154,7 @@
                 <div><kbd>Ctrl + P</kbd> Iniciar/Parar Pomodoro</div>
                 <div><kbd>Alt + 1..5</kbd> Cambiar Workspace</div>
                 <div><kbd>Alt + Z</kbd> Modo Zen</div>
+                <div><kbd>Esc</kbd> Cerrar Modal Activo</div>
                 <div><kbd>?</kbd> Ver Atajos</div>
             </div>
         </div>
@@ -1087,11 +1171,11 @@
             <a href="#" onclick="resetWorkspacePrompt(); return false;" class="footer-link-danger">🧹 Vaciar</a>
             <a href="#" onclick="exportData(); return false;" class="footer-link-cyan">💾 Exportar JSON</a>
             <a href="#" onclick="document.getElementById('import-file').click(); return false;" class="footer-link-violet">📂 Importar JSON</a>
-            <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importData(event)">
+            <input type="file" id="import-file" accept=".json" class="is-hidden" onchange="importData(event)">
         </div>
         <div class="footer-right">
             <span id="storage-quota-badge" class="badge-version">Storage: 0 KB</span>
-            <span>DevWorkspace v7.0 Studio Edition</span>
+            <span>DevWorkspace v7.1 Studio Edition</span>
         </div>
     </footer>
 

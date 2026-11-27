@@ -1,4 +1,4 @@
-const CACHE_NAME = 'devworkspace-v7-shell-v6';
+const CACHE_NAME = 'devworkspace-v7-shell-v7';
 const APP_SHELL = [
     './',
     './index.html',
@@ -28,6 +28,12 @@ self.addEventListener('activate', event => {
     );
 });
 
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+});
+
 self.addEventListener('fetch', event => {
     const request = event.request;
     const url = new URL(request.url);
@@ -37,7 +43,7 @@ self.addEventListener('fetch', event => {
         event.respondWith(
             fetch(request)
                 .then(response => {
-                    if (response.ok) {
+                    if (response && response.ok) {
                         const copy = response.clone();
                         caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
                     }
@@ -49,13 +55,16 @@ self.addEventListener('fetch', event => {
     }
 
     event.respondWith(
-        caches.match(request).then(cached => cached || fetch(request).then(response => {
-            if (response.ok) {
-                const copy = response.clone();
-                caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-            }
-            return response;
-        }))
+        caches.match(request).then(cached => {
+            if (cached) return cached;
+            return fetch(request).then(response => {
+                if (response && response.ok && response.type === 'basic') {
+                    const copy = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+                }
+                return response;
+            });
+        })
     );
 });
 

@@ -3,10 +3,12 @@ export function mergeState(target, source) {
     const output = Array.isArray(target) ? [...target] : { ...target };
     for (const key of Object.keys(source)) {
         if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-            output[key] = mergeState(target[key] || {}, source[key]);
-        } else {
-            output[key] = source[key];
+        const srcVal = source[key];
+        const tgtVal = target[key];
+        if (srcVal && typeof srcVal === 'object' && !Array.isArray(srcVal)) {
+            output[key] = mergeState(tgtVal && typeof tgtVal === 'object' && !Array.isArray(tgtVal) ? tgtVal : {}, srcVal);
+        } else if (srcVal !== undefined) {
+            output[key] = Array.isArray(srcVal) ? [...srcVal] : srcVal;
         }
     }
     return output;
@@ -122,4 +124,48 @@ export function getNextRepeatDate(dateValue, repeat) {
     }
 
     return date.toISOString().slice(0, 10);
+}
+
+export function normalizeExternalUrl(rawUrl) {
+    const trimmed = String(rawUrl ?? '').trim();
+    if (!trimmed) return '';
+    if (/^(javascript|data|vbscript|file):/i.test(trimmed)) return '';
+
+    const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+        ? trimmed
+        : `https://${trimmed}`;
+
+    try {
+        const parsed = new URL(withScheme);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            return parsed.href;
+        }
+        return '';
+    } catch (_) {
+        return '';
+    }
+}
+
+export function parseBaseValue(base, rawValue) {
+    const clean = String(rawValue ?? '').trim();
+    if (!clean) return { valid: true, value: null };
+
+    const patterns = {
+        dec: { radix: 10, regex: /^[+-]?\d+$/ },
+        bin: { radix: 2, regex: /^[+-]?[01]+$/ },
+        hex: { radix: 16, regex: /^[+-]?[0-9a-fA-F]+$/ },
+        oct: { radix: 8, regex: /^[+-]?[0-7]+$/ }
+    };
+
+    const spec = patterns[base];
+    if (!spec || !spec.regex.test(clean)) {
+        return { valid: false, value: null };
+    }
+
+    const parsed = parseInt(clean, spec.radix);
+    if (!Number.isSafeInteger(parsed)) {
+        return { valid: false, value: null };
+    }
+
+    return { valid: true, value: parsed };
 }
