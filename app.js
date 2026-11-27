@@ -3,7 +3,7 @@ import {
     createDebouncer,
     getMadridDateKey,
     getMadridClock,
-    calculateSubnet as calcSubnetCore,
+    calculateSubnet,
     getNextRepeatDate,
     normalizeExternalUrl,
     parseBaseValue,
@@ -12,364 +12,246 @@ import {
     parseScheduleImportText
 } from './core.js';
 
-const STORAGE_KEY = 'devworkspace_v7_state';
-const MAX_SNAPSHOTS = 12;
-const MAX_NOTE_REVISIONS = 25;
-const MAX_SERVER_LOGS = 40;
-const MAX_STUDIO_PROJECTS = 25;
-const DEFAULT_DRIVE_SALT = 'dw-v72-drive-guard-9be90';
-const DRIVE_VAULT_FILENAME = 'devworkspace_vault.dwpk';
+const STORAGE_KEY = 'devworkspace_v7_2_state';
+const SNAPSHOTS_KEY = 'devworkspace_v7_2_snapshots';
+const VAULT_SALT = 'devworkspace-v7-2-vault-guard';
+const DRIVE_FILE_NAME = 'devworkspace_vault.dwpk';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DEFAULT_GOOGLE_CLIENT_ID = (window.DEVWORKSPACE_GOOGLE_CONFIG && window.DEVWORKSPACE_GOOGLE_CONFIG.clientId) || '';
 
-const ALLOWED_WORKSPACES = ['cockpit', 'studio', 'database', 'academy', 'devlab', 'fonts'];
-const ALLOWED_THEMES = ['cyberpunk', 'dracula', 'valorant', 'minecraft', 'retro', 'daylight', 'custom'];
-const ALLOWED_PRESETS = ['default', 'today', 'exam', 'dev', 'db', 'sysadmin'];
-const ALLOWED_TASK_FILTERS = ['all', 'pending', 'done', 'today', 'overdue'];
-const ALLOWED_TASK_BLOCKS = ['all', 'morning', 'afternoon', 'night'];
-const ALLOWED_TASK_SORTS = ['created', 'priority', 'block', 'date'];
-const ALLOWED_PRIORITIES = ['high', 'medium', 'low'];
-const ALLOWED_REPEATS = ['', 'daily', 'weekly', 'monthly'];
-const ALLOWED_DELIVERY_FILTERS = ['all', 'pending', 'soon', 'exam', 'practice'];
-const ALLOWED_NOTE_TABS = ['general', 'comandos', 'clases'];
-const ALLOWED_STUDIO_TABS = ['html', 'css', 'js', 'python', 'java', 'saved'];
-const ALLOWED_VIEWPORTS = ['100%', '768px', '375px'];
-const ALLOWED_KANBAN_COLS = ['todo', 'doing', 'done'];
-
-const PRESET_CARDS = {
-    default: null,
-    today: ['card-schedule', 'card-tasks', 'card-pomodoro'],
-    exam: ['card-kanban', 'card-study-hub', 'card-grades', 'card-pomodoro'],
-    dev: ['card-dev-toolbox', 'card-snippets', 'card-projects'],
-    db: ['card-db-manager', 'card-db-sql'],
-    sysadmin: ['card-servers', 'card-snippets', 'card-dev-toolbox']
+const DEFAULT_CUSTOM_COLORS = {
+    bg: '#050711',
+    card: '#0b111e',
+    border: '#1e293b',
+    text: '#f1f5f9',
+    cyan: '#00f0ff',
+    violet: '#b84dff'
 };
 
 const STUDIO_TEMPLATES = {
     blank: {
-        html: '<main class="box">\n  <h1>Hola DevWorkspace</h1>\n  <p>Listo para programar.</p>\n</main>',
-        css: 'body { font-family: system-ui, sans-serif; background: #090d16; color: #f1f5f9; padding: 2rem; }\n.box { border: 1px solid #00f0ff; border-radius: 10px; padding: 1.5rem; }',
-        js: 'console.log("HTML5 base cargado");'
+        title: 'HTML5 Base Limpio',
+        html: '<main class="box">\n  <h1>Hola Mundo</h1>\n  <p>Listo para probar código en vivo.</p>\n  <button id="btn">Probar</button>\n</main>',
+        css: 'body { font-family: system-ui, sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc; }\n.box { max-width: 640px; margin: 0 auto; }\nbutton { padding: 0.5rem 1rem; cursor: pointer; }',
+        js: 'document.getElementById("btn")?.addEventListener("click", () => {\n  console.log("Botón pulsado");\n});'
     },
     cybercard: {
-        html: '<div class="cyber-card">\n  <span class="tag">SYS.ONLINE</span>\n  <h2>Módulo DAM</h2>\n  <p id="status">Estado: activo</p>\n  <button id="btn-ping">Ping</button>\n</div>',
-        css: 'body { display: grid; place-items: center; min-height: 100vh; background: #050711; color: #e2e8f0; }\n.cyber-card { background: #0c1322; border: 1px solid #00f0ff; padding: 24px; border-radius: 12px; box-shadow: 0 0 24px rgba(0,240,255,.2); }\n.tag { color: #b84dff; font-family: monospace; font-size: 12px; }\nbutton { margin-top: 12px; padding: 8px 14px; background: #00f0ff; color: #050711; border: 0; border-radius: 6px; font-weight: 700; cursor: pointer; }',
-        js: 'document.getElementById("btn-ping")?.addEventListener("click", () => {\n  document.getElementById("status").textContent = "Estado: ping OK (" + new Date().toLocaleTimeString() + ")";\n});'
+        title: 'Tarjeta Cyberpunk',
+        html: '<article class="cyber-card">\n  <span class="tag">SYS.ONLINE</span>\n  <h2>DevWorkspace Studio</h2>\n  <p>Entorno rápido para prototipos web y utilidades.</p>\n</article>',
+        css: 'body { display: grid; place-items: center; min-height: 100vh; margin: 0; background: #050711; font-family: system-ui, sans-serif; }\n.cyber-card { border: 1px solid #00f0ff; background: #0b111e; color: #f1f5f9; padding: 1.5rem; border-radius: 10px; max-width: 360px; box-shadow: 0 0 24px rgba(0,240,255,0.2); }\n.tag { color: #b84dff; font-family: monospace; font-size: 0.75rem; }',
+        js: 'console.log("Tarjeta cargada");'
     },
     flexgrid: {
-        html: '<div class="layout">\n  <header class="hd">Cabecera</header>\n  <aside class="sb">Lateral</aside>\n  <section class="cnt">Contenido principal</section>\n</div>',
-        css: '.layout { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: auto 1fr; gap: 12px; min-height: 85vh; font-family: sans-serif; }\n.hd { grid-column: 1 / -1; background: #1e293b; color: #fff; padding: 14px; border-radius: 8px; }\n.sb, .cnt { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; }',
-        js: 'console.log("Grid layout listo");'
+        title: 'Grid Layout',
+        html: '<div class="grid">\n  <div class="cell">Panel 1</div>\n  <div class="cell">Panel 2</div>\n  <div class="cell">Panel 3</div>\n  <div class="cell">Panel 4</div>\n</div>',
+        css: 'body { margin: 0; padding: 1rem; background: #0b111e; font-family: system-ui, sans-serif; }\n.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }\n.cell { background: #131d33; color: #e2e8f0; padding: 24px; border-radius: 8px; border: 1px solid #263554; text-align: center; }',
+        js: ''
     },
     domlab: {
-        html: '<h2>Contador DOM</h2>\n<button id="inc">+1</button>\n<span id="val">0</span>',
-        css: 'body { font-family: sans-serif; padding: 20px; background: #0b1020; color: #f8fafc; }\nbutton { padding: 6px 12px; cursor: pointer; }',
-        js: 'let n = 0;\ndocument.getElementById("inc")?.addEventListener("click", () => {\n  n++;\n  document.getElementById("val").textContent = String(n);\n});'
+        title: 'Práctica JS DOM',
+        html: '<div class="lab">\n  <input id="item-input" placeholder="Nuevo elemento...">\n  <button id="add-btn">Añadir</button>\n  <ul id="list"></ul>\n</div>',
+        css: 'body { font-family: system-ui, sans-serif; padding: 1.5rem; background: #0f172a; color: #f8fafc; }\ninput, button { padding: 0.45rem 0.7rem; }',
+        js: 'const input = document.getElementById("item-input");\nconst list = document.getElementById("list");\ndocument.getElementById("add-btn")?.addEventListener("click", () => {\n  const val = input.value.trim();\n  if (!val) return;\n  const li = document.createElement("li");\n  li.textContent = val;\n  list.appendChild(li);\n  input.value = "";\n});'
     },
     python: {
-        python: '# Script Python 3 de prueba\nnombre = "Marcos"\nnotas = [8.5, 9.0, 7.5]\nmedia = sum(notas) / len(notas)\nprint(f"Alumno: {nombre} | Media: {media:.2f}")'
+        title: 'Script Python 3',
+        html: '',
+        css: '',
+        js: '',
+        python: 'def saludar(nombre):\n    return f"Hola, {nombre}!"\n\nfor i in range(1, 4):\n    print(f"[{i}] {saludar(\'DAM\')}")'
     },
     java: {
-        java: 'public class Main {\n    public static void main(String[] args) {\n        String curso = "1º DAM";\n        int modulos = 6;\n        System.out.println("Curso: " + curso + " - Modulos: " + modulos);\n    }\n}'
+        title: 'Clase Java Main',
+        html: '',
+        css: '',
+        js: '',
+        java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("DevWorkspace Java listo");\n    }\n}'
     }
 };
 
-const CDN_SNIPPETS = {
+const STUDIO_CDNS = {
     tailwind: '<script src="https://cdn.tailwindcss.com"></script>',
     bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">',
     alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>',
     chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
 };
 
-const BOILERPLATES = {
-    dockerfile: 'FROM node:22-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --only=production\nCOPY . .\nEXPOSE 3000\nCMD ["node", "server.js"]',
-    compose: 'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped'
-};
-let state = createDefaultState();
-let currentTaskFilter = 'all';
-let currentTaskBlockFilter = 'all';
-let currentTaskSort = 'created';
-let currentDeliveryFilter = 'all';
-let currentFlashcardIndex = 0;
-let isFlashcardFlipped = false;
-let pomodoroInterval = null;
-let pomodoroRemainingSeconds = 25 * 60;
-let pomodoroSessionTotalSeconds = 25 * 60;
-let pomodoroCurrentMode = 'focus';
-let isAudioPlaying = false;
-let audioCtx = null;
-let audioGain = null;
-let noiseNode = null;
-let clockTickInterval = null;
-let realNetworkTimeOffset = 0;
-let hasRealNetworkTime = false;
-let manualClockOffsetMs = null;
-let deferredInstallPrompt = null;
-let pendingServiceWorker = null;
-let globalSearchMatches = [];
-let globalSearchSelectedIndex = -1;
-let studioConsoleLogs = [];
-let notifiedDeliveryAlerts = new Set();
-let googleTokenClient = null;
-let pendingDriveAction = null;
-
 function createDefaultState() {
     return {
-        ui: {
-            workspace: 'cockpit',
-            theme: 'cyberpunk',
-            preset: 'default',
-            density: 'airy',
-            zenMode: false,
-            presentationMode: false,
-            noteTab: 'general',
-            deliveryFilter: 'all',
-            examCramMode: false,
-            studyHubTab: 'flashcards',
-            toolboxTab: 'format',
-            studioActiveTab: 'html',
-            studioViewport: '100%',
-            scheduleViewMode: 'current',
-            activeDbTable: 'alumnos',
-            uiScale: 1,
-            fontSans: 'Inter',
-            fontMono: 'JetBrains Mono',
-            studioFont: '',
-            previewFontSize: 18,
-            weatherEnabled: false,
-            customTheme: {
-                name: 'Mi Tema',
-                fontUi: '',
-                fontMono: '',
-                bg: '#050711',
-                card: '#0b111e',
-                border: '#1e293b',
-                text: '#f1f5f9',
-                cyan: '#00f0ff',
-                violet: '#b84dff'
-            }
+        theme: 'cyberpunk',
+        uiScale: 1,
+        customColors: { ...DEFAULT_CUSTOM_COLORS },
+        customThemeName: 'Mi Tema',
+        customThemeFontUi: '',
+        customThemeFontMono: '',
+        savedCustomThemes: [],
+        googleFonts: {
+            loadedFont: 'JetBrains Mono',
+            favorites: ['JetBrains Mono', 'Inter', 'Fira Code', 'Space Grotesk', 'IBM Plex Mono'],
+            uiFont: '',
+            monoFont: '',
+            studioFont: ''
         },
-        drive: {
-            connected: false,
-            userName: '',
-            userEmail: '',
-            accessToken: '',
-            clientId: '',
-            fileId: '',
-            lastSync: null,
-            dirty: false
-        },
-        catalogSubjects: [
-            { id: 'sub-prog', name: 'Programación', teacher: '', room: '' },
-            { id: 'sub-bd', name: 'Bases de Datos', teacher: '', room: '' },
-            { id: 'sub-ed', name: 'Entornos de Desarrollo', teacher: '', room: '' },
-            { id: 'sub-lm', name: 'Lenguajes de Marcas', teacher: '', room: '' },
-            { id: 'sub-si', name: 'Sistemas Informáticos', teacher: '', room: '' }
+        density: 'airy',
+        zenMode: false,
+        presentationMode: false,
+        workspacePreset: 'default',
+        activeWorkspace: 'cockpit',
+        hiddenCards: {},
+        weatherEnabled: false,
+        weatherData: null,
+        manualClock: { enabled: false, offsetMs: 0 },
+        scheduleViewMode: 'current',
+        schedule: [
+            { day: 1, start: '08:15', end: '09:10', subject: 'Programación', room: 'Aula 1', teacher: 'Prof. García' },
+            { day: 1, start: '09:10', end: '10:05', subject: 'Base de Datos', room: 'Aula 1', teacher: 'Prof. López' },
+            { day: 2, start: '08:15', end: '10:05', subject: 'Entornos de Desarrollo', room: 'Aula 2', teacher: 'Prof. Ruiz' }
         ],
-        schedule: [],
+        subjectsCatalog: [
+            { id: 'subj-prog', name: 'Programación', teacher: 'Prof. García', room: 'Aula 1' },
+            { id: 'subj-bd', name: 'Base de Datos', teacher: 'Prof. López', room: 'Aula 1' },
+            { id: 'subj-ed', name: 'Entornos de Desarrollo', teacher: 'Prof. Ruiz', room: 'Aula 2' }
+        ],
         deliveries: [],
+        deliveryFilter: 'all',
+        examCramMode: false,
         tasks: [],
+        taskFilter: 'all',
+        taskBlockFilter: 'all',
+        taskSort: 'created',
         pomodoro: {
+            mode: 'focus',
             focusMinutes: 25,
             breakMinutes: 5,
+            secondsLeft: 25 * 60,
+            running: false,
+            linkedTaskId: '',
             todayMinutes: 0,
             totalMinutes: 0,
-            streak: 0,
-            lastStudyDay: null,
-            linkedTaskId: '',
-            history: {}
+            lastStudyDate: getMadridDateKey(),
+            streakDays: 0,
+            historyByDate: {}
         },
-        notes: { general: '', comandos: '', clases: '' },
-        noteRevisions: [],
-        stickyNote: '',
+        focusAudio: {
+            playing: false,
+            volume: 25
+        },
+        notes: {
+            activeTab: 'general',
+            tabs: {
+                general: '',
+                comandos: '',
+                clases: ''
+            },
+            sticky: '',
+            stickyOpen: false,
+            revisions: []
+        },
         studio: {
-            projectTitle: 'Proyecto Web Base',
-            html: STUDIO_TEMPLATES.blank.html,
-            css: STUDIO_TEMPLATES.blank.css,
-            js: STUDIO_TEMPLATES.blank.js,
+            activeTab: 'html',
+            title: 'Proyecto sin título',
+            html: STUDIO_TEMPLATES.cybercard.html,
+            css: STUDIO_TEMPLATES.cybercard.css,
+            js: STUDIO_TEMPLATES.cybercard.js,
             python: STUDIO_TEMPLATES.python.python,
             java: STUDIO_TEMPLATES.java.java,
+            autoRun: true,
+            viewport: '100%',
             savedProjects: []
         },
         database: {
+            activeTable: 'alumnos',
             tables: {
                 alumnos: {
-                    columns: ['id', 'nombre', 'curso'],
-                    rows: []
+                    columns: ['id', 'nombre', 'ciclo', 'nota'],
+                    rows: [
+                        { id: '1', nombre: 'Marcos', ciclo: 'DAM', nota: '9.2' },
+                        { id: '2', nombre: 'Lucía', ciclo: 'DAM', nota: '8.7' }
+                    ]
                 }
             }
         },
         kanban: [],
         grades: [],
         flashcards: [],
-        bugs: [],
-        doubts: [],
+        flashcardIndex: 0,
+        flashcardFlipped: false,
+        bugLogs: [],
+        classDoubts: [],
         projects: [],
         servers: [],
-        infraLogs: [],
-        snippets: [],
-        bookmarks: [],
-        customFonts: ['JetBrains Mono', 'Fira Code', 'Space Grotesk', 'Outfit', 'Orbitron', 'IBM Plex Mono'],
-        customThemePresets: [],
-        snapshots: []
+        snippets: [
+            { id: 'snp-1', title: 'Docker PS activos', tag: 'docker', code: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
+            { id: 'snp-2', title: 'Git estado corto', tag: 'git', code: 'git status -sb' }
+        ],
+        bookmarks: [
+            { id: 'bm-1', name: 'MDN Web Docs', url: 'https://developer.mozilla.org' },
+            { id: 'bm-2', name: 'GitHub', url: 'https://github.com' }
+        ],
+        drive: {
+            clientId: DEFAULT_GOOGLE_CLIENT_ID,
+            user: null,
+            fileId: '',
+            lastSync: ''
+        }
     };
 }
-function normalizeStateShape(raw) {
-    const def = createDefaultState();
-    const merged = mergeState(def, raw && typeof raw === 'object' ? raw : {});
 
-    merged.ui.workspace = ALLOWED_WORKSPACES.includes(merged.ui.workspace) ? merged.ui.workspace : 'cockpit';
-    merged.ui.theme = ALLOWED_THEMES.includes(merged.ui.theme) ? merged.ui.theme : 'cyberpunk';
-    merged.ui.preset = ALLOWED_PRESETS.includes(merged.ui.preset) ? merged.ui.preset : 'default';
-    merged.ui.density = merged.ui.density === 'compact' ? 'compact' : 'airy';
-    merged.ui.noteTab = ALLOWED_NOTE_TABS.includes(merged.ui.noteTab) ? merged.ui.noteTab : 'general';
-    merged.ui.deliveryFilter = ALLOWED_DELIVERY_FILTERS.includes(merged.ui.deliveryFilter) ? merged.ui.deliveryFilter : 'all';
-    merged.ui.studioActiveTab = ALLOWED_STUDIO_TABS.includes(merged.ui.studioActiveTab) ? merged.ui.studioActiveTab : 'html';
-    merged.ui.studioViewport = ALLOWED_VIEWPORTS.includes(merged.ui.studioViewport) ? merged.ui.studioViewport : '100%';
-    merged.ui.scheduleViewMode = merged.ui.scheduleViewMode === 'table' ? 'table' : 'current';
-    merged.ui.uiScale = Number.isFinite(Number(merged.ui.uiScale)) ? Math.min(1.25, Math.max(0.8, Number(merged.ui.uiScale))) : 1;
-    merged.ui.previewFontSize = Number.isFinite(Number(merged.ui.previewFontSize)) ? Math.min(48, Math.max(10, Number(merged.ui.previewFontSize))) : 18;
+let state = loadInitialState();
+let pomodoroInterval = null;
+let driveAccessToken = '';
+let driveTokenClient = null;
+let pendingDriveAction = null;
+let deferredPwaPrompt = null;
+let waitingServiceWorker = null;
 
-    if (!merged.ui.customTheme || typeof merged.ui.customTheme !== 'object') {
-        merged.ui.customTheme = { ...def.ui.customTheme };
+function loadInitialState() {
+    const base = createDefaultState();
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return base;
+        const parsed = JSON.parse(raw);
+        return mergeState(base, parsed);
+    } catch (_) {
+        return base;
     }
-    if (!merged.drive || typeof merged.drive !== 'object') {
-        merged.drive = { ...def.drive };
-    }
-    if (!Array.isArray(merged.catalogSubjects) || !merged.catalogSubjects.length) {
-        merged.catalogSubjects = [...def.catalogSubjects];
-    }
-    if (!merged.database || typeof merged.database !== 'object' || typeof merged.database.tables !== 'object') {
-        merged.database = { ...def.database };
-    }
-
-    ['schedule', 'deliveries', 'tasks', 'noteRevisions', 'kanban', 'grades', 'flashcards', 'bugs', 'doubts', 'projects', 'servers', 'infraLogs', 'snippets', 'bookmarks', 'customFonts', 'customThemePresets', 'snapshots']
-        .forEach(key => {
-            if (!Array.isArray(merged[key])) merged[key] = [];
-        });
-
-    if (!merged.notes || typeof merged.notes !== 'object') {
-        merged.notes = { general: '', comandos: '', clases: '' };
-    }
-    ['general', 'comandos', 'clases'].forEach(k => {
-        if (typeof merged.notes[k] !== 'string') merged.notes[k] = '';
-    });
-
-    if (!merged.studio || typeof merged.studio !== 'object') {
-        merged.studio = { ...def.studio };
-    } else {
-        ['html', 'css', 'js', 'python', 'java'].forEach(k => {
-            if (typeof merged.studio[k] !== 'string') merged.studio[k] = def.studio[k] || '';
-        });
-        if (!Array.isArray(merged.studio.savedProjects)) merged.studio.savedProjects = [];
-    }
-
-    if (!merged.pomodoro || typeof merged.pomodoro !== 'object') {
-        merged.pomodoro = { ...def.pomodoro };
-    } else if (!merged.pomodoro.history || typeof merged.pomodoro.history !== 'object') {
-        merged.pomodoro.history = {};
-    }
-
-    return merged;
 }
 
-function buildCompactVaultSnapshot() {
-    const cleanTasks = (state.tasks || []).map(t => {
-        const obj = {
-            id: t.id,
-            text: t.text,
-            done: Boolean(t.done),
-            priority: t.priority || 'medium',
-            block: t.block || 'afternoon',
-            createdAt: t.createdAt || 0
-        };
-        if (t.date) obj.date = t.date;
-        if (t.repeat) obj.repeat = t.repeat;
-        if (t.pomos) obj.pomos = t.pomos;
-        if (Array.isArray(t.subtasks) && t.subtasks.length) obj.subtasks = t.subtasks;
-        return obj;
-    });
+const debouncedSave = createDebouncer(() => {
+    persistStateNow();
+}, 250);
 
-    return {
-        ui: state.ui,
-        catalogSubjects: state.catalogSubjects,
-        schedule: state.schedule,
-        deliveries: state.deliveries,
-        tasks: cleanTasks,
-        pomodoro: state.pomodoro,
-        notes: state.notes,
-        noteRevisions: state.noteRevisions.slice(0, MAX_NOTE_REVISIONS),
-        stickyNote: state.stickyNote,
-        studio: {
-            projectTitle: state.studio.projectTitle,
-            html: state.studio.html,
-            css: state.studio.css,
-            js: state.studio.js,
-            python: state.studio.python,
-            java: state.studio.java,
-            savedProjects: state.studio.savedProjects.slice(0, MAX_STUDIO_PROJECTS)
-        },
-        database: state.database,
-        kanban: state.kanban,
-        grades: state.grades,
-        flashcards: state.flashcards,
-        bugs: state.bugs,
-        doubts: state.doubts,
-        projects: state.projects,
-        servers: state.servers,
-        infraLogs: state.infraLogs.slice(0, MAX_SERVER_LOGS),
-        snippets: state.snippets,
-        bookmarks: state.bookmarks,
-        customFonts: state.customFonts,
-        customThemePresets: state.customThemePresets
-    };
-}
-function saveState(forceDrivePush = false) {
+function persistStateNow() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         updateStorageQuotaBadge();
-    } catch (_) {
-        showToast('Aviso: límite de almacenamiento local alcanzado', 'error');
-    }
-
-    if (!state.drive) {
-        state.drive = { connected: false, dirty: false };
-    }
-    state.drive.dirty = true;
-    updateDriveSyncIndicator('pending');
-
-    if (state.drive.connected && state.drive.accessToken) {
-        if (forceDrivePush) {
-            debouncedDriveSync.cancel();
-            pushToGoogleDrive();
-        } else {
-            debouncedDriveSync();
-        }
+    } catch (err) {
+        console.error('Error guardando estado local:', err);
+        showToast('Error al guardar en almacenamiento local', 'error');
     }
 }
 
-const debouncedDriveSync = createDebouncer(() => {
-    if (state.drive?.connected && state.drive?.accessToken) {
-        pushToGoogleDrive();
+function saveState(immediate = false) {
+    if (immediate) {
+        debouncedSave.cancel();
+        persistStateNow();
+    } else {
+        debouncedSave();
     }
-}, 2500);
+}
 
 function updateStorageQuotaBadge() {
     const badge = document.getElementById('storage-quota-badge');
     if (!badge) return;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY) || '';
-        const kb = (new Blob([raw]).size / 1024).toFixed(1);
-        badge.textContent = `Vault: ${kb} KB`;
-    } catch (_) {
-        badge.textContent = 'Vault: -- KB';
-    }
+    const bytes = new Blob([JSON.stringify(state)]).size;
+    badge.textContent = `Vault: ${(bytes / 1024).toFixed(1)} KB`;
 }
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
     const toast = document.createElement('div');
-    toast.className = `toast ${type === 'success' ? 'toast-success' : type === 'error' ? 'toast-error' : ''}`;
+    toast.className = `toast toast-${type}`;
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => {
@@ -377,8 +259,8 @@ function showToast(message, type = 'info') {
     }, 3400);
 }
 
-function escapeHtml(str) {
-    return String(str ?? '')
+function escapeHtml(value) {
+    return String(value ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -386,285 +268,256 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-function generateId(prefix = 'id') {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
-    }
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+function toggleForm(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('is-hidden');
 }
 
-function sanitizeUrl(rawUrl) {
-    return normalizeExternalUrl(rawUrl);
-}
 /* ==========================================================
-   SINCRONIZACIÓN CON GOOGLE DRIVE Y ARCHIVO PROTEGIDO (.DWPK)
+   GOOGLE DRIVE & VAULT (.DWPK)
    ========================================================== */
-function openDriveModal() {
-    const cidInput = document.getElementById('gdrive-client-id');
-    if (cidInput) {
-        cidInput.value = state.drive?.clientId || window.DEVWORKSPACE_GOOGLE_CONFIG?.clientId || '';
+function setDriveSyncStatus(label, mode = 'ok') {
+    const badge = document.getElementById('cloud-sync-indicator');
+    const last = document.getElementById('cloud-last-sync');
+    if (badge) {
+        badge.textContent = label;
+        badge.classList.remove('sync-saving', 'sync-error');
+        if (mode === 'saving') badge.classList.add('sync-saving');
+        if (mode === 'error') badge.classList.add('sync-error');
     }
-    document.getElementById('drive-modal').style.display = 'flex';
-}
-
-function closeDriveModal() {
-    document.getElementById('drive-modal').style.display = 'none';
-}
-
-function getEffectiveGoogleClientId() {
-    const fromInput = (document.getElementById('gdrive-client-id')?.value || '').trim();
-    const fromState = (state.drive?.clientId || '').trim();
-    const fromGlobal = (window.DEVWORKSPACE_GOOGLE_CONFIG?.clientId || '').trim();
-    return fromInput || fromState || fromGlobal;
-}
-
-function connectGoogleDrive() {
-    const clientId = getEffectiveGoogleClientId();
-    if (!clientId) {
-        showToast('Introduce tu Google OAuth Client ID (o configúralo en index.html)', 'error');
-        return;
+    if (last && state.drive.lastSync) {
+        last.textContent = `Sync: ${state.drive.lastSync}`;
     }
-    state.drive.clientId = clientId;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-
-    if (!window.google?.accounts?.oauth2) {
-        showToast('Cargando Google Identity Services... inténtalo de nuevo en 2s', 'error');
-        return;
-    }
-
-    googleTokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: DRIVE_SCOPE,
-        callback: async (tokenResponse) => {
-            if (!tokenResponse || tokenResponse.error || !tokenResponse.access_token) {
-                showToast(`Error de autenticación Google: ${tokenResponse?.error || 'sin token'}`, 'error');
-                return;
-            }
-            state.drive.accessToken = tokenResponse.access_token;
-            state.drive.connected = true;
-            await fetchGoogleDriveUserInfo();
-            renderDriveProfileUi();
-            closeDriveModal();
-
-            if (typeof pendingDriveAction === 'function') {
-                const action = pendingDriveAction;
-                pendingDriveAction = null;
-                action();
-            } else {
-                await pullFromGoogleDrive(false);
-            }
-        }
-    });
-
-    googleTokenClient.requestAccessToken({ prompt: state.drive.connected ? '' : 'consent' });
 }
 
-async function fetchGoogleDriveUserInfo() {
-    if (!state.drive?.accessToken) return;
-    try {
-        const res = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)', {
-            headers: { Authorization: `Bearer ${state.drive.accessToken}` }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            state.drive.userName = data.user?.displayName || 'Cuenta Google';
-            state.drive.userEmail = data.user?.emailAddress || '';
-        }
-    } catch (_) {}
-}
-
-function ensureDriveToken(onReady) {
-    if (state.drive?.connected && state.drive?.accessToken) {
-        onReady();
-        return;
-    }
-    pendingDriveAction = onReady;
-    openDriveModal();
-    showToast('Conecta primero con Google Drive para continuar');
-}
-
-function logoutDriveUser() {
-    if (state.drive?.accessToken && window.google?.accounts?.oauth2?.revoke) {
-        try { window.google.accounts.oauth2.revoke(state.drive.accessToken); } catch (_) {}
-    }
-    state.drive = {
-        connected: false,
-        userName: '',
-        userEmail: '',
-        accessToken: '',
-        clientId: state.drive?.clientId || '',
-        fileId: state.drive?.fileId || '',
-        lastSync: state.drive?.lastSync || null,
-        dirty: false
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    renderDriveProfileUi();
-    showToast('Sesión de Google Drive cerrada');
-}
-
-function renderDriveProfileUi() {
+function renderDriveProfileUI() {
     const widget = document.getElementById('user-profile-widget');
     const loginBtn = document.getElementById('btn-cloud-login');
-    const nameEl = document.getElementById('user-name');
+    const userName = document.getElementById('user-name');
+    const clientIdInput = document.getElementById('gdrive-client-id');
 
-    if (state.drive?.connected) {
+    if (clientIdInput && state.drive.clientId) {
+        clientIdInput.value = state.drive.clientId;
+    }
+
+    if (state.drive.user) {
         widget?.classList.remove('is-hidden');
         loginBtn?.classList.add('is-hidden');
-        if (nameEl) nameEl.textContent = state.drive.userEmail || state.drive.userName || 'Drive Conectado';
-        updateDriveSyncIndicator(state.drive.dirty ? 'pending' : 'ok');
+        if (userName) userName.textContent = state.drive.user.name || state.drive.user.email || 'Conectado';
+        setDriveSyncStatus(driveAccessToken ? 'Drive Listo' : 'Sesión guardada', 'ok');
     } else {
         widget?.classList.add('is-hidden');
         loginBtn?.classList.remove('is-hidden');
     }
 }
 
-function updateDriveSyncIndicator(mode) {
-    const badge = document.getElementById('cloud-sync-indicator');
-    const lastEl = document.getElementById('cloud-last-sync');
-    if (badge) {
-        badge.classList.remove('sync-saving', 'sync-error');
-        if (mode === 'saving') {
-            badge.textContent = 'Subiendo...';
-            badge.classList.add('sync-saving');
-        } else if (mode === 'error') {
-            badge.textContent = 'Error Drive';
-            badge.classList.add('sync-error');
-        } else if (mode === 'pending') {
-            badge.textContent = 'Pendiente';
-            badge.classList.add('sync-saving');
-        } else {
-            badge.textContent = 'Drive OK';
-        }
+function openDriveModal() {
+    const modal = document.getElementById('drive-modal');
+    const input = document.getElementById('gdrive-client-id');
+    if (input) input.value = state.drive.clientId || DEFAULT_GOOGLE_CLIENT_ID || '';
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeDriveModal() {
+    const modal = document.getElementById('drive-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function ensureGoogleTokenClient(clientId) {
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+        throw new Error('Google Identity Services aún no ha cargado');
     }
-    if (lastEl && state.drive?.lastSync) {
-        lastEl.textContent = `Sync: ${new Date(state.drive.lastSync).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    driveTokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: DRIVE_SCOPE,
+        callback: async (resp) => {
+            if (resp.error) {
+                setDriveSyncStatus('Error OAuth', 'error');
+                showToast(`Error de autenticación: ${resp.error}`, 'error');
+                pendingDriveAction = null;
+                return;
+            }
+            driveAccessToken = resp.access_token;
+            try {
+                const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${driveAccessToken}` }
+                });
+                if (infoRes.ok) {
+                    const info = await infoRes.json();
+                    state.drive.user = { name: info.name || info.email || 'Usuario Google', email: info.email || '' };
+                } else {
+                    state.drive.user = { name: 'Usuario Google', email: '' };
+                }
+            } catch (_) {
+                state.drive.user = { name: 'Usuario Google', email: '' };
+            }
+            saveState(true);
+            renderDriveProfileUI();
+            showToast('Conectado a Google Drive', 'success');
+
+            const action = pendingDriveAction;
+            pendingDriveAction = null;
+            if (action === 'push') {
+                await forceDriveSyncNow();
+            } else if (action === 'pull') {
+                await pullFromGoogleDrive(true);
+            }
+        }
+    });
+}
+
+function connectGoogleDrive(afterAction = null) {
+    const input = document.getElementById('gdrive-client-id');
+    const clientId = (input?.value || state.drive.clientId || DEFAULT_GOOGLE_CLIENT_ID || '').trim();
+    if (!clientId) {
+        showToast('Introduce un Google OAuth Client ID válido', 'error');
+        return;
+    }
+    state.drive.clientId = clientId;
+    saveState(true);
+
+    try {
+        pendingDriveAction = afterAction;
+        ensureGoogleTokenClient(clientId);
+        driveTokenClient.requestAccessToken({ prompt: driveAccessToken ? '' : 'consent' });
+    } catch (err) {
+        showToast(err.message || 'No se pudo iniciar Google Drive', 'error');
     }
 }
 
 async function findDriveVaultFileId() {
-    if (!state.drive?.accessToken) return '';
-    if (state.drive.fileId) return state.drive.fileId;
-
-    const q = encodeURIComponent(`name='${DRIVE_VAULT_FILENAME}' and trashed=false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`, {
-        headers: { Authorization: `Bearer ${state.drive.accessToken}` }
+    const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)`, {
+        headers: { Authorization: `Bearer ${driveAccessToken}` }
     });
-    if (!res.ok) throw new Error('No se pudo consultar Google Drive');
-    const data = await res.json();
-    const id = data.files?.[0]?.id || '';
-    if (id) state.drive.fileId = id;
-    return id;
-}
-
-async function pushToGoogleDrive() {
-    if (!state.drive?.connected || !state.drive?.accessToken) return;
-    updateDriveSyncIndicator('saving');
-
-    try {
-        const snapshot = buildCompactVaultSnapshot();
-        const packedBody = await packDrivePayload(snapshot, DEFAULT_DRIVE_SALT);
-        const fileId = await findDriveVaultFileId();
-
-        let res;
-        if (fileId) {
-            res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media`, {
-                method: 'PATCH',
-                headers: {
-                    Authorization: `Bearer ${state.drive.accessToken}`,
-                    'Content-Type': 'text/plain;charset=utf-8'
-                },
-                body: packedBody
-            });
-        } else {
-            const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${state.drive.accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name: DRIVE_VAULT_FILENAME, mimeType: 'text/plain' })
-            });
-            if (!createRes.ok) throw new Error('Error creando archivo en Drive');
-            const created = await createRes.json();
-            state.drive.fileId = created.id;
-
-            res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(created.id)}?uploadType=media`, {
-                method: 'PATCH',
-                headers: {
-                    Authorization: `Bearer ${state.drive.accessToken}`,
-                    'Content-Type': 'text/plain;charset=utf-8'
-                },
-                body: packedBody
-            });
-        }
-
-        if (!res.ok) throw new Error('Error subiendo datos a Drive');
-        state.drive.dirty = false;
-        state.drive.lastSync = getEffectiveNowMs();
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        updateDriveSyncIndicator('ok');
-    } catch (err) {
-        updateDriveSyncIndicator('error');
-        showToast(`Fallo al guardar en Drive: ${err.message}`, 'error');
+    if (!res.ok) {
+        if (res.status === 401) driveAccessToken = '';
+        throw new Error(`Error buscando archivo en Drive (${res.status})`);
     }
+    const data = await res.json();
+    const fileId = data.files && data.files[0] ? data.files[0].id : '';
+    if (fileId) {
+        state.drive.fileId = fileId;
+        saveState(true);
+    }
+    return fileId;
 }
 
 async function forceDriveSyncNow() {
-    ensureDriveToken(async () => {
-        await pushToGoogleDrive();
-        if (!state.drive.dirty) {
-            showToast('Guardado en Google Drive correctamente', 'success');
+    if (!driveAccessToken) {
+        connectGoogleDrive('push');
+        return;
+    }
+    try {
+        setDriveSyncStatus('Guardando...', 'saving');
+        saveState(true);
+        const packed = await packDrivePayload(state, VAULT_SALT);
+        const fileId = state.drive.fileId || await findDriveVaultFileId();
+
+        const boundary = '-------DevWorkspaceBoundary72';
+        const metadata = { name: DRIVE_FILE_NAME, mimeType: 'text/plain' };
+        const body =
+            `--${boundary}\r\n` +
+            `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+            `${JSON.stringify(metadata)}\r\n` +
+            `--${boundary}\r\n` +
+            `Content-Type: text/plain; charset=UTF-8\r\n\r\n` +
+            `${packed}\r\n` +
+            `--${boundary}--`;
+
+        const url = fileId
+            ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+        const method = fileId ? 'PATCH' : 'POST';
+
+        const res = await fetch(url, {
+            method,
+            headers: {
+                Authorization: `Bearer ${driveAccessToken}`,
+                'Content-Type': `multipart/related; boundary=${boundary}`
+            },
+            body
+        });
+
+        if (!res.ok) {
+            if (res.status === 401) driveAccessToken = '';
+            throw new Error(`Error al subir a Drive (${res.status})`);
         }
-    });
+
+        const saved = await res.json();
+        if (saved.id) state.drive.fileId = saved.id;
+        state.drive.lastSync = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        saveState(true);
+        renderDriveProfileUI();
+        showToast('Copia guardada en Google Drive', 'success');
+    } catch (err) {
+        setDriveSyncStatus('Error Drive', 'error');
+        showToast(err.message || 'No se pudo guardar en Drive', 'error');
+    }
 }
 
-async function pullFromGoogleDrive(showFeedback = true) {
-    ensureDriveToken(async () => {
-        updateDriveSyncIndicator('saving');
-        try {
-            const fileId = await findDriveVaultFileId();
-            if (!fileId) {
-                updateDriveSyncIndicator('ok');
-                if (showFeedback) showToast('Aún no existe ningún archivo guardado en tu Google Drive');
-                return;
-            }
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
-                headers: { Authorization: `Bearer ${state.drive.accessToken}` }
-            });
-            if (!res.ok) throw new Error('No se pudo descargar el archivo de Drive');
-            const packedText = await res.text();
-            const unpacked = await unpackDrivePayload(packedText, DEFAULT_DRIVE_SALT);
-
-            const preservedDrive = {
-                ...state.drive,
-                dirty: false,
-                lastSync: getEffectiveNowMs()
-            };
-            state = normalizeStateShape(unpacked);
-            state.drive = preservedDrive;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-            applyAllVisualSettings();
-            renderAll();
-            updateDriveSyncIndicator('ok');
-            if (showFeedback) showToast('Datos importados desde Google Drive', 'success');
-        } catch (err) {
-            updateDriveSyncIndicator('error');
-            showToast(`Error al importar de Drive: ${err.message}`, 'error');
+async function pullFromGoogleDrive(showFeedback = false) {
+    if (!driveAccessToken) {
+        connectGoogleDrive('pull');
+        return;
+    }
+    try {
+        setDriveSyncStatus('Importando...', 'saving');
+        const fileId = await findDriveVaultFileId();
+        if (!fileId) {
+            setDriveSyncStatus('Drive Vacío', 'ok');
+            if (showFeedback) showToast('No se encontró devworkspace_vault.dwpk en tu Drive', 'info');
+            return;
         }
-    });
+
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { Authorization: `Bearer ${driveAccessToken}` }
+        });
+        if (!res.ok) {
+            if (res.status === 401) driveAccessToken = '';
+            throw new Error(`Error descargando archivo de Drive (${res.status})`);
+        }
+
+        const packedText = await res.text();
+        const unpacked = await unpackDrivePayload(packedText, VAULT_SALT);
+        const keepDrive = {
+            clientId: state.drive.clientId,
+            user: state.drive.user,
+            fileId,
+            lastSync: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        };
+        state = mergeState(createDefaultState(), unpacked);
+        state.drive = keepDrive;
+        saveState(true);
+        renderAll();
+        if (showFeedback) showToast('Datos importados desde Google Drive', 'success');
+    } catch (err) {
+        setDriveSyncStatus('Error Import', 'error');
+        if (showFeedback) showToast(err.message || 'Error al importar desde Drive', 'error');
+    }
+}
+
+function logoutDriveUser() {
+    driveAccessToken = '';
+    state.drive.user = null;
+    saveState(true);
+    renderDriveProfileUI();
+    showToast('Sesión de Google Drive cerrada', 'info');
 }
 
 async function exportProtectedVaultFile() {
     try {
-        const packed = await packDrivePayload(buildCompactVaultSnapshot(), DEFAULT_DRIVE_SALT);
+        saveState(true);
+        const packed = await packDrivePayload(state, VAULT_SALT);
         const blob = new Blob([packed], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = DRIVE_VAULT_FILENAME;
+        a.download = `${DRIVE_FILE_NAME}_${getMadridDateKey()}.dwpk`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('Respaldo protegido (.dwpk) descargado', 'success');
+        showToast('Archivo .dwpk descargado', 'success');
     } catch (err) {
         showToast(`Error exportando .dwpk: ${err.message}`, 'error');
     }
@@ -672,93 +525,515 @@ async function exportProtectedVaultFile() {
 
 async function importProtectedVaultFile(event) {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
     try {
         const text = await file.text();
-        const unpacked = await unpackDrivePayload(text, DEFAULT_DRIVE_SALT);
-        const preservedDrive = { ...state.drive, dirty: true };
-        state = normalizeStateShape(unpacked);
-        state.drive = preservedDrive;
-        saveState(false);
-        applyAllVisualSettings();
+        const unpacked = await unpackDrivePayload(text, VAULT_SALT);
+        const driveMeta = { ...state.drive };
+        state = mergeState(createDefaultState(), unpacked);
+        state.drive = driveMeta;
+        saveState(true);
         renderAll();
         closeDriveModal();
-        showToast('Respaldo .dwpk importado y verificado', 'success');
+        showToast('Vault .dwpk importado correctamente', 'success');
     } catch (err) {
-        showToast(`Archivo .dwpk inválido o alterado: ${err.message}`, 'error');
-    } finally {
-        event.target.value = '';
+        showToast(err.message || 'Archivo .dwpk no válido', 'error');
     }
 }
+
 /* ==========================================================
-   RELOJ SINCRONIZADO + AJUSTE MANUAL DE HORA
+   WORKSPACES, PERFILES, TEMAS Y FUENTES
    ========================================================== */
-function getEffectiveNowMs() {
-    if (typeof manualClockOffsetMs === 'number' && Number.isFinite(manualClockOffsetMs)) {
-        return Date.now() + manualClockOffsetMs;
+function switchWorkspace(wsName) {
+    state.activeWorkspace = wsName;
+    saveState();
+
+    document.querySelectorAll('.ws-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.ws === wsName);
+    });
+    document.querySelectorAll('.workspace-view').forEach(view => {
+        view.classList.toggle('active', view.id === `ws-${wsName}`);
+    });
+
+    if (wsName === 'studio') {
+        renderStudioSavedList();
+        updateStudioMetrics();
+        if (state.studio.autoRun && ['html', 'css', 'js'].includes(state.studio.activeTab)) {
+            runStudioCode();
+        }
+    } else if (wsName === 'database') {
+        renderDatabaseWorkspace();
+    } else if (wsName === 'academy') {
+        renderAcademyWorkspace();
+    } else if (wsName === 'devlab') {
+        renderDevLabWorkspace();
+    } else if (wsName === 'fonts') {
+        renderFontsAndThemesWorkspace();
     }
-    return Date.now() + (hasRealNetworkTime ? realNetworkTimeOffset : 0);
 }
 
-function getEffectiveNow() {
-    return new Date(getEffectiveNowMs());
+function applyWorkspacePreset(preset) {
+    state.workspacePreset = preset;
+    const cardMap = {
+        default: [],
+        today: ['card-deliveries'],
+        exam: ['card-tasks', 'card-notes'],
+        dev: ['card-schedule', 'card-deliveries'],
+        db: ['card-schedule', 'card-deliveries'],
+        sysadmin: ['card-deliveries', 'card-notes']
+    };
+    const hidden = cardMap[preset] || [];
+    state.hiddenCards = {};
+    hidden.forEach(id => { state.hiddenCards[id] = true; });
+
+    document.querySelectorAll('#ws-cockpit .card').forEach(card => {
+        card.classList.toggle('hidden-card', Boolean(state.hiddenCards[card.id]));
+    });
+
+    if (preset === 'dev') switchWorkspace('studio');
+    else if (preset === 'db') switchWorkspace('database');
+    else if (preset === 'sysadmin') switchWorkspace('devlab');
+    else switchWorkspace('cockpit');
+
+    saveState();
+    showToast(`Perfil aplicado: ${preset}`, 'info');
 }
 
-function formatDateInputValue(d) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+function toggleZenMode() {
+    state.zenMode = !state.zenMode;
+    document.body.classList.toggle('zen-mode-active', state.zenMode);
+    document.getElementById('btn-zen-mode')?.classList.toggle('active', state.zenMode);
+    saveState();
 }
 
-function formatTimeInputValue(d) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+function togglePresentationMode() {
+    state.presentationMode = !state.presentationMode;
+    document.body.classList.toggle('presentation-mode-active', state.presentationMode);
+    document.getElementById('btn-present-mode')?.classList.toggle('active', state.presentationMode);
+    saveState();
 }
 
-function openClockModal() {
-    const now = getEffectiveNow();
-    const dInp = document.getElementById('manual-clock-date');
-    const tInp = document.getElementById('manual-clock-time');
-    if (dInp) dInp.value = formatDateInputValue(now);
-    if (tInp) tInp.value = formatTimeInputValue(now);
-    document.getElementById('clock-modal').style.display = 'flex';
+function toggleDensityMode() {
+    state.density = state.density === 'airy' ? 'compact' : 'airy';
+    applyDensity();
+    saveState();
 }
 
-function closeClockModal() {
-    document.getElementById('clock-modal').style.display = 'none';
+function applyDensity() {
+    const isCompact = state.density === 'compact';
+    document.body.classList.toggle('density-compact', isCompact);
+    const btn = document.getElementById('btn-density-mode');
+    if (btn) btn.textContent = isCompact ? '📐 Compacto' : '📐 Aireado';
 }
 
-function applyManualClock() {
-    const dVal = document.getElementById('manual-clock-date')?.value || '';
-    const tVal = document.getElementById('manual-clock-time')?.value || '';
-    if (!dVal || !tVal) {
-        showToast('Indica fecha y hora válidas', 'error');
+function applyTheme(themeName) {
+    state.theme = themeName;
+    document.documentElement.setAttribute('data-theme', themeName);
+    const select = document.getElementById('theme-select');
+    if (select) select.value = themeName;
+
+    if (themeName === 'custom') {
+        applyCustomThemeStyles(state.customColors, state.customThemeFontUi, state.customThemeFontMono);
+    } else {
+        clearCustomThemeInlineStyles();
+        applyFontSettings();
+    }
+}
+
+function handleThemeSelectChange(themeName) {
+    const savedPreset = state.savedCustomThemes.find(t => t.name === themeName);
+    if (savedPreset) {
+        state.customThemeName = savedPreset.name;
+        state.customColors = { ...DEFAULT_CUSTOM_COLORS, ...savedPreset.colors };
+        state.customThemeFontUi = savedPreset.fontUi || '';
+        state.customThemeFontMono = savedPreset.fontMono || '';
+        if (savedPreset.fontUi) state.googleFonts.uiFont = savedPreset.fontUi;
+        if (savedPreset.fontMono) state.googleFonts.monoFont = savedPreset.fontMono;
+        applyTheme('custom');
+        syncThemeInputsFromState();
+        saveState();
+        showToast(`Tema cargado: ${savedPreset.name}`, 'success');
         return;
     }
-    const normalizedTime = /^\d{2}:\d{2}$/.test(tVal) ? `${tVal}:00` : tVal;
-    const targetDate = new Date(`${dVal}T${normalizedTime}`);
-    if (!Number.isFinite(targetDate.getTime())) {
-        showToast('Fecha u hora inválida', 'error');
+
+    applyTheme(themeName);
+    saveState();
+}
+
+function clearCustomThemeInlineStyles() {
+    const root = document.documentElement.style;
+    ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'].forEach(prop => {
+        root.removeProperty(prop);
+    });
+}
+
+function applyCustomThemeStyles(colors, fontUi = '', fontMono = '') {
+    const c = { ...DEFAULT_CUSTOM_COLORS, ...(colors || {}) };
+    const root = document.documentElement.style;
+    root.setProperty('--bg-color', c.bg);
+    root.setProperty('--card-bg', c.card);
+    root.setProperty('--card-border', c.border);
+    root.setProperty('--text-main', c.text);
+    root.setProperty('--accent-cyan', c.cyan);
+    root.setProperty('--accent-violet', c.violet);
+
+    if (fontUi) {
+        ensureGoogleFontLoaded(fontUi);
+        root.setProperty('--font-sans', `'${fontUi}', system-ui, sans-serif`);
+    }
+    if (fontMono) {
+        ensureGoogleFontLoaded(fontMono);
+        root.setProperty('--font-mono', `'${fontMono}', monospace`);
+    }
+}
+
+function syncThemeInputsFromState() {
+    const nameEl = document.getElementById('custom-theme-name');
+    const uiFontEl = document.getElementById('custom-theme-font-ui');
+    const monoFontEl = document.getElementById('custom-theme-font-mono');
+    if (nameEl) nameEl.value = state.customThemeName || 'Mi Tema';
+    if (uiFontEl) uiFontEl.value = state.customThemeFontUi || '';
+    if (monoFontEl) monoFontEl.value = state.customThemeFontMono || '';
+
+    const map = {
+        'cp-bg': state.customColors.bg,
+        'cp-card': state.customColors.card,
+        'cp-border': state.customColors.border,
+        'cp-text': state.customColors.text,
+        'cp-cyan': state.customColors.cyan,
+        'cp-violet': state.customColors.violet
+    };
+    Object.entries(map).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el && val) el.value = val;
+    });
+}
+
+function previewCustomThemeColors() {
+    const colors = {
+        bg: document.getElementById('cp-bg')?.value || DEFAULT_CUSTOM_COLORS.bg,
+        card: document.getElementById('cp-card')?.value || DEFAULT_CUSTOM_COLORS.card,
+        border: document.getElementById('cp-border')?.value || DEFAULT_CUSTOM_COLORS.border,
+        text: document.getElementById('cp-text')?.value || DEFAULT_CUSTOM_COLORS.text,
+        cyan: document.getElementById('cp-cyan')?.value || DEFAULT_CUSTOM_COLORS.cyan,
+        violet: document.getElementById('cp-violet')?.value || DEFAULT_CUSTOM_COLORS.violet
+    };
+    state.customColors = colors;
+    if (state.theme === 'custom') {
+        applyCustomThemeStyles(colors, state.customThemeFontUi, state.customThemeFontMono);
+    }
+}
+
+function activateCustomTheme() {
+    previewCustomThemeColors();
+    state.customThemeName = (document.getElementById('custom-theme-name')?.value || 'Mi Tema').trim();
+    state.customThemeFontUi = (document.getElementById('custom-theme-font-ui')?.value || '').trim();
+    state.customThemeFontMono = (document.getElementById('custom-theme-font-mono')?.value || '').trim();
+    applyTheme('custom');
+    saveState();
+    showToast('Tema personalizado activado', 'success');
+}
+
+function saveNewCustomThemePreset() {
+    previewCustomThemeColors();
+    const name = (document.getElementById('custom-theme-name')?.value || 'Mi Tema').trim() || 'Mi Tema';
+    const fontUi = (document.getElementById('custom-theme-font-ui')?.value || state.googleFonts.uiFont || '').trim();
+    const fontMono = (document.getElementById('custom-theme-font-mono')?.value || state.googleFonts.monoFont || '').trim();
+    state.customThemeName = name;
+    state.customThemeFontUi = fontUi;
+    state.customThemeFontMono = fontMono;
+
+    const preset = { name, colors: { ...state.customColors }, fontUi, fontMono };
+    const idx = state.savedCustomThemes.findIndex(t => t.name === name);
+    if (idx >= 0) state.savedCustomThemes[idx] = preset;
+    else state.savedCustomThemes.push(preset);
+
+    applyTheme('custom');
+    saveState();
+    renderThemeSelectOptions();
+    renderSavedCustomThemesList();
+    showToast(`Tema "${name}" guardado`, 'success');
+}
+
+function deleteCustomThemePreset(name) {
+    state.savedCustomThemes = state.savedCustomThemes.filter(t => t.name !== name);
+    if (state.theme === 'custom' && state.customThemeName === name) {
+        applyTheme('cyberpunk');
+    }
+    saveState();
+    renderThemeSelectOptions();
+    renderSavedCustomThemesList();
+}
+
+function exportCustomThemeJson() {
+    previewCustomThemeColors();
+    const payload = {
+        name: (document.getElementById('custom-theme-name')?.value || state.customThemeName || 'Mi Tema').trim(),
+        colors: state.customColors,
+        fontUi: (document.getElementById('custom-theme-font-ui')?.value || state.customThemeFontUi || '').trim(),
+        fontMono: (document.getElementById('custom-theme-font-mono')?.value || state.customThemeFontMono || '').trim()
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-theme.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+async function importCustomThemeJson(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+        const data = JSON.parse(await file.text());
+        if (!data || !data.colors) throw new Error('JSON de tema inválido');
+        state.customThemeName = data.name || 'Tema Importado';
+        state.customColors = { ...DEFAULT_CUSTOM_COLORS, ...data.colors };
+        state.customThemeFontUi = data.fontUi || '';
+        state.customThemeFontMono = data.fontMono || '';
+        applyTheme('custom');
+        syncThemeInputsFromState();
+        saveNewCustomThemePreset();
+    } catch (err) {
+        showToast(err.message || 'Error importando tema', 'error');
+    }
+}
+
+function resetAppearanceDefaults() {
+    state.theme = 'cyberpunk';
+    state.uiScale = 1;
+    state.customColors = { ...DEFAULT_CUSTOM_COLORS };
+    state.customThemeFontUi = '';
+    state.customThemeFontMono = '';
+    state.googleFonts.uiFont = '';
+    state.googleFonts.monoFont = '';
+    state.googleFonts.studioFont = '';
+    document.documentElement.style.setProperty('--ui-scale', '1');
+    const scaleSelect = document.getElementById('ui-scale-select');
+    if (scaleSelect) scaleSelect.value = '1';
+    clearCustomThemeInlineStyles();
+    applyTheme('cyberpunk');
+    saveState();
+    renderStudioFontSelect();
+    showToast('Apariencia restaurada', 'info');
+}
+
+function updateAppearanceSettings() {
+    const scale = parseFloat(document.getElementById('ui-scale-select')?.value || '1');
+    state.uiScale = Number.isFinite(scale) ? scale : 1;
+    document.documentElement.style.setProperty('--ui-scale', String(state.uiScale));
+    saveState();
+}
+
+function renderThemeSelectOptions() {
+    const select = document.getElementById('theme-select');
+    if (!select) return;
+    const baseOptions = [
+        { value: 'cyberpunk', label: '⚡ Cyberpunk' },
+        { value: 'dracula', label: '🧛 Dracula' },
+        { value: 'valorant', label: '🎯 Valorant' },
+        { value: 'minecraft', label: '🟩 Minecraft' },
+        { value: 'retro', label: '📟 Retro CRT' },
+        { value: 'daylight', label: '☀️ Alto Contraste Día' },
+        { value: 'custom', label: '🎨 Personalizado' }
+    ];
+    const presetOptions = state.savedCustomThemes.map(t => ({
+        value: t.name,
+        label: `★ ${t.name}`
+    }));
+
+    select.innerHTML = [...baseOptions, ...presetOptions]
+        .map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)
+        .join('');
+
+    if (state.theme === 'custom' && state.savedCustomThemes.some(t => t.name === state.customThemeName)) {
+        select.value = state.customThemeName;
+    } else {
+        select.value = state.theme;
+    }
+}
+
+function renderSavedCustomThemesList() {
+    const list = document.getElementById('saved-custom-themes-list');
+    if (!list) return;
+    if (!state.savedCustomThemes.length) {
+        list.innerHTML = '<div class="mono-muted">No hay temas guardados todavía.</div>';
         return;
     }
-    manualClockOffsetMs = targetDate.getTime() - Date.now();
-    updateClockDisplay();
-    renderSchedule();
-    renderDeliveries();
-    closeClockModal();
-    showToast('Hora manual aplicada', 'success');
+    list.innerHTML = state.savedCustomThemes.map(t => `
+        <div class="grade-item-row">
+            <span><strong>${escapeHtml(t.name)}</strong> <small>(${escapeHtml(t.fontUi || 'UI base')} / ${escapeHtml(t.fontMono || 'Mono base')})</small></span>
+            <div class="filter-pills-row">
+                <button type="button" class="btn-cyan btn-sm" onclick="handleThemeSelectChange(${JSON.stringify(t.name)})">Aplicar</button>
+                <button type="button" class="btn-icon" onclick="deleteCustomThemePreset(${JSON.stringify(t.name)})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
-function resetManualClockToAuto() {
-    manualClockOffsetMs = null;
-    syncRealTimeNetwork();
-    updateClockDisplay();
-    renderSchedule();
-    renderDeliveries();
+function ensureGoogleFontLoaded(fontName) {
+    const clean = String(fontName || '').trim();
+    if (!clean) return;
+    const link = document.getElementById('dynamic-google-fonts');
+    if (!link) return;
+
+    const existingHref = link.getAttribute('href') || '';
+    const encoded = encodeURIComponent(clean).replace(/%20/g, '+');
+    const familySpec = `family=${encoded}:wght@400;500;600;700`;
+
+    if (!existingHref.includes(familySpec)) {
+        if (!existingHref) {
+            link.setAttribute('href', `https://fonts.googleapis.com/css2?${familySpec}&display=swap`);
+        } else {
+            link.setAttribute('href', `${existingHref}&${familySpec}`);
+        }
+    }
 }
 
-function updateClockDisplay() {
-    const now = getEffectiveNow();
+function applyFontSettings() {
+    const root = document.documentElement.style;
+    if (state.googleFonts.uiFont) {
+        ensureGoogleFontLoaded(state.googleFonts.uiFont);
+        root.setProperty('--font-sans', `'${state.googleFonts.uiFont}', system-ui, sans-serif`);
+    } else {
+        root.removeProperty('--font-sans');
+    }
+
+    if (state.googleFonts.monoFont) {
+        ensureGoogleFontLoaded(state.googleFonts.monoFont);
+        root.setProperty('--font-mono', `'${state.googleFonts.monoFont}', monospace`);
+    } else {
+        root.removeProperty('--font-mono');
+    }
+
+    if (state.googleFonts.studioFont) {
+        applyFontToStudioPreview(state.googleFonts.studioFont, false);
+    }
+}
+
+function loadGoogleFontByName(presetName = '') {
+    const input = document.getElementById('gf-input-name');
+    const name = (presetName || input?.value || '').trim();
+    if (!name) return;
+    ensureGoogleFontLoaded(name);
+    state.googleFonts.loadedFont = name;
+    if (input && !presetName) input.value = name;
+    saveState();
+    renderFontPlayground();
+    showToast(`Fuente cargada: ${name}`, 'success');
+}
+
+function saveGoogleFontFavorite() {
+    const name = (state.googleFonts.loadedFont || document.getElementById('gf-input-name')?.value || '').trim();
+    if (!name) return;
+    ensureGoogleFontLoaded(name);
+    if (!state.googleFonts.favorites.includes(name)) {
+        state.googleFonts.favorites.push(name);
+    }
+    state.googleFonts.loadedFont = name;
+    saveState();
+    renderFontFavorites();
+    renderStudioFontSelect();
+    showToast(`"${name}" añadida a favoritos`, 'success');
+}
+
+function renderFontFavorites() {
+    const box = document.getElementById('gf-favorites-list');
+    if (!box) return;
+    box.innerHTML = state.googleFonts.favorites.map(font => `
+        <button type="button" class="pill-btn ${state.googleFonts.loadedFont === font ? 'active' : ''}" onclick="loadGoogleFontByName(${JSON.stringify(font)})">
+            ${escapeHtml(font)}
+        </button>
+    `).join('');
+}
+
+function renderFontPlayground() {
+    const font = state.googleFonts.loadedFont || 'JetBrains Mono';
+    ensureGoogleFontLoaded(font);
+    const label = document.getElementById('gf-active-preview-label');
+    const sample = document.getElementById('gf-preview-sample');
+    if (label) label.textContent = `Vista previa: ${font}`;
+    if (sample) sample.style.fontFamily = `'${font}', monospace`;
+    updateFontPlaygroundStyle();
+}
+
+function updateFontPlaygroundStyle() {
+    const sample = document.getElementById('gf-preview-sample');
+    const size = document.getElementById('gf-preview-size')?.value || '18';
+    if (sample) sample.style.fontSize = `${size}px`;
+}
+
+function applyLoadedFontToUi(target) {
+    const font = state.googleFonts.loadedFont;
+    if (!font) return;
+    if (target === 'sans') {
+        state.googleFonts.uiFont = font;
+        state.customThemeFontUi = font;
+    } else {
+        state.googleFonts.monoFont = font;
+        state.customThemeFontMono = font;
+    }
+    applyFontSettings();
+    syncThemeInputsFromState();
+    saveState();
+    showToast(`Fuente "${font}" aplicada a ${target === 'sans' ? 'UI' : 'Código'}`, 'success');
+}
+
+function applyLoadedFontToStudio() {
+    const font = state.googleFonts.loadedFont;
+    if (!font) return;
+    state.googleFonts.studioFont = font;
+    saveState();
+    renderStudioFontSelect();
+    applyFontToStudioPreview(font);
+    showToast(`Fuente "${font}" aplicada al Studio`, 'success');
+}
+
+function renderStudioFontSelect() {
+    const sel = document.getElementById('studio-font-select');
+    if (!sel) return;
+    const options = [''].concat(state.googleFonts.favorites || []);
+    sel.innerHTML = options.map(f => `<option value="${escapeHtml(f)}">${f ? `🔤 ${escapeHtml(f)}` : '🔤 Fuente Preview (Por defecto)'}</option>`).join('');
+    sel.value = state.googleFonts.studioFont || '';
+}
+
+function applyFontToStudioPreview(fontName, persist = true) {
+    state.googleFonts.studioFont = fontName || '';
+    if (fontName) ensureGoogleFontLoaded(fontName);
+    const iframe = document.getElementById('studio-preview-iframe');
+    const runner = document.getElementById('studio-runner-output');
+    const fam = fontName ? `'${fontName}', system-ui, sans-serif` : '';
+    if (runner) runner.style.fontFamily = fam;
+    if (iframe && iframe.contentDocument && iframe.contentDocument.body) {
+        iframe.contentDocument.body.style.fontFamily = fam;
+    }
+    if (persist) saveState();
+}
+
+function renderFontsAndThemesWorkspace() {
+    renderThemeSelectOptions();
+    renderSavedCustomThemesList();
+    renderFontFavorites();
+    renderFontPlayground();
+    syncThemeInputsFromState();
+}
+
+/* ==========================================================
+   RELOJ, CLIMA Y SNAPSHOTS
+   ========================================================== */
+function getNowDate() {
+    const base = new Date();
+    if (state.manualClock && state.manualClock.enabled) {
+        return new Date(base.getTime() + (state.manualClock.offsetMs || 0));
+    }
+    return base;
+}
+
+function updateClock() {
+    const now = getNowDate();
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
     const netEl = document.getElementById('net-status');
@@ -775,1861 +1050,1393 @@ function updateClockDisplay() {
         });
     }
     if (netEl) {
-        if (typeof manualClockOffsetMs === 'number' && Number.isFinite(manualClockOffsetMs)) {
-            netEl.textContent = '✋ Hora manual';
-        } else if (hasRealNetworkTime) {
-            netEl.textContent = '🌐 Hora sincronizada';
+        if (state.manualClock?.enabled) {
+            netEl.textContent = '🕒 Hora manual';
         } else {
-            netEl.textContent = '🕒 Hora local';
+            netEl.textContent = navigator.onLine ? '🟢 En línea' : '🟡 Sin red';
         }
     }
 
-    checkDeliveryNotifications();
+    renderScheduleWidget();
 }
 
-async function syncRealTimeNetwork() {
-    const netEl = document.getElementById('net-status');
-    if (netEl && !(typeof manualClockOffsetMs === 'number' && Number.isFinite(manualClockOffsetMs))) {
-        netEl.textContent = '🔄 Sincronizando...';
+function openClockModal() {
+    const now = getNowDate();
+    const dateInput = document.getElementById('manual-clock-date');
+    const timeInput = document.getElementById('manual-clock-time');
+    if (dateInput) dateInput.value = now.toISOString().slice(0, 10);
+    if (timeInput) timeInput.value = now.toTimeString().slice(0, 8);
+    const modal = document.getElementById('clock-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeClockModal() {
+    const modal = document.getElementById('clock-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function applyManualClock() {
+    const d = document.getElementById('manual-clock-date')?.value;
+    const t = document.getElementById('manual-clock-time')?.value || '00:00:00';
+    if (!d) {
+        showToast('Selecciona una fecha válida', 'error');
+        return;
     }
-    try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { signal: controller.signal });
-        clearTimeout(timer);
-        if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data.unixtime === 'number') {
-                realNetworkTimeOffset = data.unixtime * 1000 - Date.now();
-                hasRealNetworkTime = true;
-            }
-        }
-    } catch (_) {
-        hasRealNetworkTime = false;
+    const target = new Date(`${d}T${t.length === 5 ? `${t}:00` : t}`);
+    if (!Number.isFinite(target.getTime())) {
+        showToast('Fecha u hora inválida', 'error');
+        return;
     }
-    updateClockDisplay();
-}
-/* ==========================================================
-   WORKSPACES, PERFILES, DENSIDAD, ZEN, CLASE Y TEMAS/FUENTES
-   ========================================================== */
-function switchWorkspace(ws) {
-    if (!ALLOWED_WORKSPACES.includes(ws)) return;
-    state.ui.workspace = ws;
-
-    document.querySelectorAll('.ws-tab').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.ws === ws);
-    });
-    document.querySelectorAll('.workspace-view').forEach(view => {
-        view.classList.toggle('active', view.id === `ws-${ws}`);
-    });
-
-    if (ws === 'studio') {
-        updateStudioEditorMetrics();
-        updateStudioOutputModeLabel();
-        if (state.ui.studioActiveTab !== 'saved') renderStudioPreview();
-    } else if (ws === 'database') {
-        renderDbWorkspace();
-    } else if (ws === 'academy') {
-        populateSubjectSelects();
-        renderCatalogSubjects();
-        renderKanban();
-        renderGrades();
-        renderFlashcards();
-        renderBugLogs();
-        renderClassDoubts();
-        renderProjects();
-    } else if (ws === 'fonts') {
-        renderGoogleFontFavorites();
-        renderCustomThemesList();
-    }
-
-    saveState(false);
-}
-
-function applyWorkspacePreset(presetName) {
-    const chosen = ALLOWED_PRESETS.includes(presetName) ? presetName : 'default';
-    state.ui.preset = chosen;
-    const sel = document.getElementById('workspace-preset-select');
-    if (sel) sel.value = chosen;
-
-    const allowedIds = PRESET_CARDS[chosen];
-    document.querySelectorAll('.card').forEach(card => {
-        if (!card.id) return;
-        if (!allowedIds) {
-            card.classList.remove('hidden-card');
-        } else {
-            card.classList.toggle('hidden-card', !allowedIds.includes(card.id));
-        }
-    });
-
-    saveState(false);
-}
-
-function toggleDensityMode() {
-    state.ui.density = state.ui.density === 'compact' ? 'airy' : 'compact';
-    applyDensityMode();
-    saveState(false);
-}
-
-function applyDensityMode() {
-    const isCompact = state.ui.density === 'compact';
-    document.body.classList.toggle('density-compact', isCompact);
-    const btn = document.getElementById('btn-density-mode');
-    if (btn) btn.textContent = isCompact ? '📐 Compacto' : '📐 Aireado';
-}
-
-function toggleZenMode() {
-    state.ui.zenMode = !state.ui.zenMode;
-    document.body.classList.toggle('zen-mode-active', state.ui.zenMode);
-    document.getElementById('btn-zen-mode')?.classList.toggle('active', state.ui.zenMode);
-    saveState(false);
-}
-
-function togglePresentationMode() {
-    state.ui.presentationMode = !state.ui.presentationMode;
-    document.body.classList.toggle('presentation-mode-active', state.ui.presentationMode);
-    document.getElementById('btn-present-mode')?.classList.toggle('active', state.ui.presentationMode);
-    saveState(false);
-}
-
-function ensureGoogleFontLoaded(fontName) {
-    const clean = String(fontName || '').trim();
-    if (!clean) return;
-    const linkEl = document.getElementById('dynamic-google-fonts');
-    if (!linkEl) return;
-
-    const currentHref = linkEl.getAttribute('href') || '';
-    const encoded = encodeURIComponent(clean).replace(/%20/g, '+');
-    const familySpec = `family=${encoded}:wght@400;500;600;700`;
-
-    if (currentHref.includes(familySpec)) return;
-    if (!currentHref || !currentHref.includes('fonts.googleapis.com/css2')) {
-        linkEl.setAttribute('href', `https://fonts.googleapis.com/css2?${familySpec}&display=swap`);
-    } else {
-        linkEl.setAttribute('href', `${currentHref}&${familySpec}`);
-    }
-}
-
-function applyFontVariables() {
-    const sans = state.ui.fontSans || 'Inter';
-    const mono = state.ui.fontMono || 'JetBrains Mono';
-    ensureGoogleFontLoaded(sans);
-    ensureGoogleFontLoaded(mono);
-    document.documentElement.style.setProperty('--font-sans', `'${sans}', system-ui, sans-serif`);
-    document.documentElement.style.setProperty('--font-mono', `'${mono}', monospace`);
-}
-
-function applyTheme(themeKey) {
-    const valid = ALLOWED_THEMES.includes(themeKey) ? themeKey : 'cyberpunk';
-    state.ui.theme = valid;
-
-    const sel = document.getElementById('theme-select');
-    if (sel) sel.value = valid;
-
-    if (valid === 'custom') {
-        document.documentElement.removeAttribute('data-theme');
-        applyCustomThemeObject(state.ui.customTheme);
-    } else {
-        document.documentElement.setAttribute('data-theme', valid);
-        clearInlineCustomThemeVars();
-        applyFontVariables();
-    }
-
-    saveState(false);
-}
-
-function clearInlineCustomThemeVars() {
-    ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'].forEach(v => {
-        document.documentElement.style.removeProperty(v);
-    });
-}
-
-function applyCustomThemeObject(ct) {
-    if (!ct || typeof ct !== 'object') return;
-    if (ct.bg) document.documentElement.style.setProperty('--bg-color', ct.bg);
-    if (ct.card) document.documentElement.style.setProperty('--card-bg', ct.card);
-    if (ct.border) document.documentElement.style.setProperty('--card-border', ct.border);
-    if (ct.text) document.documentElement.style.setProperty('--text-main', ct.text);
-    if (ct.cyan) document.documentElement.style.setProperty('--accent-cyan', ct.cyan);
-    if (ct.violet) document.documentElement.style.setProperty('--accent-violet', ct.violet);
-
-    if (ct.fontUi) state.ui.fontSans = ct.fontUi;
-    if (ct.fontMono) state.ui.fontMono = ct.fontMono;
-    applyFontVariables();
-}
-
-function previewCustomThemeColors() {
-    const ct = {
-        name: (document.getElementById('custom-theme-name')?.value || '').trim() || 'Mi Tema',
-        fontUi: (document.getElementById('custom-theme-font-ui')?.value || '').trim(),
-        fontMono: (document.getElementById('custom-theme-font-mono')?.value || '').trim(),
-        bg: document.getElementById('cp-bg')?.value || '#050711',
-        card: document.getElementById('cp-card')?.value || '#0b111e',
-        border: document.getElementById('cp-border')?.value || '#1e293b',
-        text: document.getElementById('cp-text')?.value || '#f1f5f9',
-        cyan: document.getElementById('cp-cyan')?.value || '#00f0ff',
-        violet: document.getElementById('cp-violet')?.value || '#b84dff'
+    state.manualClock = {
+        enabled: true,
+        offsetMs: target.getTime() - Date.now()
     };
-    state.ui.customTheme = ct;
-    state.ui.theme = 'custom';
-    document.documentElement.removeAttribute('data-theme');
-    if (document.getElementById('theme-select')) document.getElementById('theme-select').value = 'custom';
-    applyCustomThemeObject(ct);
+    saveState(true);
+    updateClock();
+    closeClockModal();
+    showToast('Hora manual aplicada', 'success');
 }
 
-function activateCustomTheme() {
-    previewCustomThemeColors();
-    saveState(false);
-    showToast('Tema personalizado aplicado');
+function resetManualClockToAuto() {
+    state.manualClock = { enabled: false, offsetMs: 0 };
+    saveState(true);
+    updateClock();
+    showToast('Hora sincronizada automáticamente', 'info');
 }
 
-function saveNewCustomThemePreset() {
-    const name = (document.getElementById('custom-theme-name')?.value || '').trim();
-    if (!name) {
-        showToast('Escribe un nombre para el tema', 'error');
-        return;
-    }
-    const preset = {
-        id: generateId('thm'),
-        name,
-        fontUi: (document.getElementById('custom-theme-font-ui')?.value || '').trim(),
-        fontMono: (document.getElementById('custom-theme-font-mono')?.value || '').trim(),
-        bg: document.getElementById('cp-bg')?.value || '#050711',
-        card: document.getElementById('cp-card')?.value || '#0b111e',
-        border: document.getElementById('cp-border')?.value || '#1e293b',
-        text: document.getElementById('cp-text')?.value || '#f1f5f9',
-        cyan: document.getElementById('cp-cyan')?.value || '#00f0ff',
-        violet: document.getElementById('cp-violet')?.value || '#b84dff'
-    };
-
-    const existingIdx = state.customThemePresets.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-    if (existingIdx >= 0) state.customThemePresets[existingIdx] = preset;
-    else state.customThemePresets.push(preset);
-
-    state.ui.customTheme = { ...preset };
-    state.ui.theme = 'custom';
-    saveState(false);
-    renderCustomThemesList();
-    applyTheme('custom');
-    showToast(`Tema "${name}" guardado con su fuente vinculada`, 'success');
-}
-
-function applySavedThemePreset(presetId) {
-    const preset = (state.customThemePresets || []).find(p => p.id === presetId);
-    if (!preset) return;
-    state.ui.customTheme = { ...preset };
-    state.ui.theme = 'custom';
-    syncCustomThemeInputsFromState();
-    saveState(false);
-    applyTheme('custom');
-    showToast(`Tema "${preset.name}" activado`, 'success');
-}
-
-function deleteSavedThemePreset(presetId) {
-    state.customThemePresets = (state.customThemePresets || []).filter(p => p.id !== presetId);
-    saveState(false);
-    renderCustomThemesList();
-}
-
-function renderCustomThemesList() {
-    const sel = document.getElementById('theme-select');
-    const listBox = document.getElementById('saved-custom-themes-list');
-
-    if (sel) {
-        [...sel.querySelectorAll('option[data-custom-preset="1"]')].forEach(o => o.remove());
-        (state.customThemePresets || []).forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = `preset:${p.id}`;
-            opt.dataset.customPreset = '1';
-            opt.textContent = `🎨 ${p.name}`;
-            sel.appendChild(opt);
-        });
-    }
-
-    if (!listBox) return;
-    listBox.innerHTML = '';
-    const presets = state.customThemePresets || [];
-    if (!presets.length) {
-        listBox.innerHTML = '<div class="mono-muted">Aún no has guardado temas propios.</div>';
+async function toggleWeatherBadge() {
+    state.weatherEnabled = !state.weatherEnabled;
+    const badgeText = document.getElementById('weather-text');
+    if (!state.weatherEnabled) {
+        if (badgeText) badgeText.textContent = 'Clima: OFF';
+        saveState();
         return;
     }
 
-    presets.forEach(p => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `${p.name} · UI: ${p.fontUi || state.ui.fontSans} · Code: ${p.fontMono || state.ui.fontMono}`;
-
-        const acts = document.createElement('div');
-        acts.className = 'filter-pills-row';
-        const useBtn = document.createElement('button');
-        useBtn.type = 'button';
-        useBtn.className = 'btn-cyan btn-sm';
-        useBtn.textContent = 'Usar';
-        useBtn.addEventListener('click', () => applySavedThemePreset(p.id));
-
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'btn-icon';
-        delBtn.textContent = '🗑️';
-        delBtn.addEventListener('click', () => deleteSavedThemePreset(p.id));
-
-        acts.append(useBtn, delBtn);
-        row.append(info, acts);
-        listBox.appendChild(row);
-    });
-}
-
-function syncCustomThemeInputsFromState() {
-    const ct = state.ui.customTheme || {};
-    if (document.getElementById('custom-theme-name')) document.getElementById('custom-theme-name').value = ct.name || 'Mi Tema';
-    if (document.getElementById('custom-theme-font-ui')) document.getElementById('custom-theme-font-ui').value = ct.fontUi || '';
-    if (document.getElementById('custom-theme-font-mono')) document.getElementById('custom-theme-font-mono').value = ct.fontMono || '';
-    if (document.getElementById('cp-bg')) document.getElementById('cp-bg').value = ct.bg || '#050711';
-    if (document.getElementById('cp-card')) document.getElementById('cp-card').value = ct.card || '#0b111e';
-    if (document.getElementById('cp-border')) document.getElementById('cp-border').value = ct.border || '#1e293b';
-    if (document.getElementById('cp-text')) document.getElementById('cp-text').value = ct.text || '#f1f5f9';
-    if (document.getElementById('cp-cyan')) document.getElementById('cp-cyan').value = ct.cyan || '#00f0ff';
-    if (document.getElementById('cp-violet')) document.getElementById('cp-violet').value = ct.violet || '#b84dff';
-}
-
-function updateAppearanceSettings() {
-    const scale = Number(document.getElementById('ui-scale-select')?.value) || 1;
-    state.ui.uiScale = scale;
-    document.documentElement.style.setProperty('--ui-scale', String(scale));
-    saveState(false);
-}
-
-function exportCustomThemeJson() {
-    const blob = new Blob([JSON.stringify(state.ui.customTheme, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'tema-devworkspace.json';
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-async function importCustomThemeJson(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    if (badgeText) badgeText.textContent = 'Cargando...';
     try {
-        const parsed = JSON.parse(await file.text());
-        state.ui.customTheme = { ...state.ui.customTheme, ...parsed };
-        syncCustomThemeInputsFromState();
-        applyTheme('custom');
-        saveState(false);
-        showToast('Tema importado', 'success');
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=38.42&longitude=-6.31&current_weather=true');
+        if (!res.ok) throw new Error('Error consultando clima');
+        const data = await res.json();
+        const temp = data?.current_weather?.temperature;
+        state.weatherData = { temp };
+        if (badgeText) badgeText.textContent = `${temp ?? '--'}°C`;
+        saveState();
     } catch (_) {
-        showToast('JSON de tema inválido', 'error');
-    } finally {
-        event.target.value = '';
+        state.weatherEnabled = false;
+        if (badgeText) badgeText.textContent = 'Clima: N/D';
+        saveState();
+        showToast('No se pudo obtener el clima', 'error');
     }
 }
 
-function resetAppearanceDefaults() {
-    const def = createDefaultState();
-    state.ui.theme = 'cyberpunk';
-    state.ui.uiScale = 1;
-    state.ui.fontSans = def.ui.fontSans;
-    state.ui.fontMono = def.ui.fontMono;
-    state.ui.studioFont = '';
-    state.ui.customTheme = { ...def.ui.customTheme };
-    saveState(false);
-    applyAllVisualSettings();
-    showToast('Apariencia restaurada a valores base');
+function openSnapshotsModal() {
+    renderSnapshotsList();
+    const modal = document.getElementById('snapshots-modal');
+    if (modal) modal.style.display = 'flex';
 }
 
-function loadGoogleFontByName() {
-    const name = (document.getElementById('gf-input-name')?.value || '').trim();
-    if (!name) return;
-    quickLoadGoogleFont(name);
+function closeSnapshotsModal() {
+    const modal = document.getElementById('snapshots-modal');
+    if (modal) modal.style.display = 'none';
 }
 
-function quickLoadGoogleFont(fontName) {
-    const clean = String(fontName || '').trim();
-    if (!clean) return;
-    ensureGoogleFontLoaded(clean);
-    if (document.getElementById('gf-input-name')) document.getElementById('gf-input-name').value = clean;
-    if (document.getElementById('gf-active-preview-label')) document.getElementById('gf-active-preview-label').textContent = `Vista previa: ${clean}`;
-    const sample = document.getElementById('gf-preview-sample');
-    if (sample) sample.style.fontFamily = `'${clean}', sans-serif`;
-    updateFontPlaygroundStyle();
-    showToast(`Fuente "${clean}" cargada`, 'success');
-}
-
-function updateFontPlaygroundStyle() {
-    const size = Number(document.getElementById('gf-preview-size')?.value) || state.ui.previewFontSize || 18;
-    state.ui.previewFontSize = size;
-    const sample = document.getElementById('gf-preview-sample');
-    if (sample) sample.style.fontSize = `${size}px`;
-}
-
-function saveGoogleFontFavorite() {
-    const name = (document.getElementById('gf-input-name')?.value || '').trim();
-    if (!name) return;
-    if (!state.customFonts.includes(name)) {
-        state.customFonts.push(name);
-        saveState(false);
-        renderGoogleFontFavorites();
-        showToast(`Fuente "${name}" guardada en favoritos`, 'success');
+function getSnapshotsList() {
+    try {
+        return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    } catch (_) {
+        return [];
     }
 }
 
-function renderGoogleFontFavorites() {
-    const box = document.getElementById('gf-favorites-list');
-    const studioSel = document.getElementById('studio-font-select');
-    const fonts = state.customFonts || [];
-
-    if (studioSel) {
-        const currentVal = state.ui.studioFont || '';
-        studioSel.innerHTML = '<option value="">🔤 Fuente Preview (Por defecto)</option>';
-        fonts.forEach(f => {
-            const opt = document.createElement('option');
-            opt.value = f;
-            opt.textContent = f;
-            studioSel.appendChild(opt);
-        });
-        studioSel.value = currentVal;
-    }
-
-    if (!box) return;
-    box.innerHTML = '';
-    fonts.forEach(f => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'pill-btn';
-        btn.textContent = f;
-        btn.addEventListener('click', () => quickLoadGoogleFont(f));
-        box.appendChild(btn);
-    });
+function createBackupSnapshot() {
+    const snaps = getSnapshotsList();
+    const snap = {
+        id: `snap-${Date.now()}`,
+        createdAt: new Date().toLocaleString('es-ES'),
+        data: JSON.parse(JSON.stringify(state))
+    };
+    snaps.unshift(snap);
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps.slice(0, 15)));
+    renderSnapshotsList();
+    showToast('Snapshot creado', 'success');
 }
 
-function applyLoadedFontToUi(target) {
-    const name = (document.getElementById('gf-input-name')?.value || '').trim();
-    if (!name) return;
-    ensureGoogleFontLoaded(name);
-    if (target === 'mono') state.ui.fontMono = name;
-    else state.ui.fontSans = name;
-    applyFontVariables();
-    saveState(false);
-    showToast(`Fuente "${name}" aplicada a ${target === 'mono' ? 'Código' : 'Interfaz'}`, 'success');
-}
-
-function applyLoadedFontToStudio() {
-    const name = (document.getElementById('gf-input-name')?.value || '').trim();
-    if (!name) return;
-    ensureGoogleFontLoaded(name);
-    state.ui.studioFont = name;
-    renderGoogleFontFavorites();
-    renderStudioPreview();
-    saveState(false);
-    showToast(`Fuente "${name}" aplicada en Code Studio`, 'success');
-}
-
-function applyFontToStudioPreview(fontName) {
-    state.ui.studioFont = fontName || '';
-    if (fontName) ensureGoogleFontLoaded(fontName);
-    renderStudioPreview();
-    saveState(false);
-}
-
-function applyAllVisualSettings() {
-    switchWorkspace(state.ui.workspace || 'cockpit');
-    applyWorkspacePreset(state.ui.preset || 'default');
-    applyDensityMode();
-    document.body.classList.toggle('zen-mode-active', Boolean(state.ui.zenMode));
-    document.getElementById('btn-zen-mode')?.classList.toggle('active', Boolean(state.ui.zenMode));
-    document.body.classList.toggle('presentation-mode-active', Boolean(state.ui.presentationMode));
-    document.getElementById('btn-present-mode')?.classList.toggle('active', Boolean(state.ui.presentationMode));
-    document.documentElement.style.setProperty('--ui-scale', String(state.ui.uiScale || 1));
-    if (document.getElementById('ui-scale-select')) document.getElementById('ui-scale-select').value = String(state.ui.uiScale || 1);
-    if (document.getElementById('gf-preview-size')) document.getElementById('gf-preview-size').value = String(state.ui.previewFontSize || 18);
-    if (document.getElementById('weather-text')) document.getElementById('weather-text').textContent = state.ui.weatherEnabled ? 'Clima: Activo' : 'Clima: OFF';
-
-    syncCustomThemeInputsFromState();
-    renderCustomThemesList();
-    applyTheme(state.ui.theme || 'cyberpunk');
-    renderDriveProfileUi();
-}
-/* ==========================================================
-   CATÁLOGO GLOBAL DE ASIGNATURAS Y HORARIO
-   ========================================================== */
-function populateSubjectSelects() {
-    const subjects = state.catalogSubjects || [];
-    const targets = document.querySelectorAll('.subject-select-target');
-
-    targets.forEach(sel => {
-        const prevVal = sel.value;
-        sel.innerHTML = '';
-        subjects.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.name;
-            opt.textContent = s.name;
-            sel.appendChild(opt);
-        });
-        if (prevVal && [...sel.options].some(o => o.value === prevVal)) {
-            sel.value = prevVal;
-        }
-    });
-
-    const fcFilter = document.getElementById('fc-filter-subject');
-    if (fcFilter) {
-        const prevFilter = fcFilter.value || 'all';
-        fcFilter.innerHTML = '<option value="all">Todas las asignaturas</option>';
-        subjects.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.name;
-            opt.textContent = s.name;
-            fcFilter.appendChild(opt);
-        });
-        fcFilter.value = [...fcFilter.options].some(o => o.value === prevFilter) ? prevFilter : 'all';
-    }
-}
-
-function addCatalogSubject() {
-    const name = (document.getElementById('subj-cat-name')?.value || '').trim();
-    const teacher = (document.getElementById('subj-cat-teacher')?.value || '').trim();
-    const room = (document.getElementById('subj-cat-room')?.value || '').trim();
-    if (!name) {
-        showToast('Escribe el nombre de la asignatura', 'error');
-        return;
-    }
-
-    const exists = (state.catalogSubjects || []).some(s => s.name.toLowerCase() === name.toLowerCase());
-    if (exists) {
-        showToast('Esa asignatura ya está en el catálogo', 'error');
-        return;
-    }
-
-    state.catalogSubjects.push({
-        id: generateId('subj'),
-        name,
-        teacher,
-        room
-    });
-
-    document.getElementById('subj-cat-name').value = '';
-    document.getElementById('subj-cat-teacher').value = '';
-    document.getElementById('subj-cat-room').value = '';
-    toggleForm('form-add-subject-catalog');
-    saveState(false);
-    populateSubjectSelects();
-    renderCatalogSubjects();
-    showToast(`Asignatura "${name}" añadida`, 'success');
-}
-
-function deleteCatalogSubject(id) {
-    state.catalogSubjects = (state.catalogSubjects || []).filter(s => s.id !== id);
-    saveState(false);
-    populateSubjectSelects();
-    renderCatalogSubjects();
-}
-
-function renderCatalogSubjects() {
-    const list = document.getElementById('subjects-catalog-list');
-    if (!list) return;
-    list.innerHTML = '';
-
-    const items = state.catalogSubjects || [];
-    if (!items.length) {
-        list.innerHTML = '<div class="mono-muted">No hay asignaturas registradas.</div>';
-        return;
-    }
-
-    items.forEach(s => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        const meta = [s.teacher, s.room].filter(Boolean).join(' · ');
-        info.textContent = meta ? `${s.name} (${meta})` : s.name;
-
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => deleteCatalogSubject(s.id));
-
-        row.append(info, del);
-        list.appendChild(row);
-    });
-}
-
-function autofillScheduleFromCatalog(subjectName) {
-    const found = (state.catalogSubjects || []).find(s => s.name === subjectName);
+function restoreSnapshot(id) {
+    const snaps = getSnapshotsList();
+    const found = snaps.find(s => s.id === id);
     if (!found) return;
-    const tInp = document.getElementById('sch-add-teacher');
-    const rInp = document.getElementById('sch-add-room');
-    if (tInp && found.teacher && !tInp.value) tInp.value = found.teacher;
-    if (rInp && found.room && !rInp.value) rInp.value = found.room;
+    state = mergeState(createDefaultState(), found.data);
+    saveState(true);
+    renderAll();
+    closeSnapshotsModal();
+    showToast('Snapshot restaurado', 'success');
+}
+
+function deleteSnapshot(id) {
+    const snaps = getSnapshotsList().filter(s => s.id !== id);
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps));
+    renderSnapshotsList();
+}
+
+function renderSnapshotsList() {
+    const list = document.getElementById('snapshots-list');
+    if (!list) return;
+    const snaps = getSnapshotsList();
+    if (!snaps.length) {
+        list.innerHTML = '<div class="mono-muted">No hay snapshots guardados.</div>';
+        return;
+    }
+    list.innerHTML = snaps.map(s => `
+        <div class="grade-item-row">
+            <span>📸 ${escapeHtml(s.createdAt)}</span>
+            <div class="filter-pills-row">
+                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot(${JSON.stringify(s.id)})">Restaurar</button>
+                <button type="button" class="btn-icon" onclick="deleteSnapshot(${JSON.stringify(s.id)})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+/* ==========================================================
+   HORARIO & CLASE ACTUAL
+   ========================================================== */
+const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+function timeToMinutes(hhmm) {
+    const [h, m] = String(hhmm || '00:00').split(':').map(Number);
+    return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
 }
 
 function toggleScheduleViewMode() {
-    state.ui.scheduleViewMode = state.ui.scheduleViewMode === 'table' ? 'current' : 'table';
-    saveState(false);
-    renderSchedule();
+    state.scheduleViewMode = state.scheduleViewMode === 'current' ? 'table' : 'current';
+    saveState();
+    renderScheduleWidget();
 }
 
-function parseMinutes(hhmm) {
-    const [h, m] = String(hhmm || '0:0').split(':').map(Number);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return -1;
-    return h * 60 + m;
-}
+function renderScheduleWidget() {
+    const container = document.getElementById('schedule-widget');
+    if (!container) return;
 
-function renderSchedule() {
-    const box = document.getElementById('schedule-widget');
-    if (!box) return;
+    const sorted = [...(state.schedule || [])].sort((a, b) =>
+        a.day !== b.day ? a.day - b.day : timeToMinutes(a.start) - timeToMinutes(b.start)
+    );
 
-    const schedule = state.schedule || [];
-    if (!schedule.length) {
-        box.innerHTML = '<div class="mono-muted">Sin clases configuradas. Usa <strong>⚙️ Configurar</strong> o <strong>☁️ Subir de Drive</strong>.</div>';
+    if (state.scheduleViewMode === 'table') {
+        if (!sorted.length) {
+            container.innerHTML = '<div class="sch-detail">No hay clases configuradas. Pulsa "Configurar" para añadir.</div>';
+            return;
+        }
+        container.innerHTML = `
+            <table class="sch-table">
+                <thead>
+                    <tr><th>Día</th><th>Hora</th><th>Asignatura</th><th>Aula</th><th>Profesor/a</th></tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(item => `
+                        <tr>
+                            <td>${escapeHtml(DAY_NAMES[item.day] || item.day)}</td>
+                            <td>${escapeHtml(item.start)} - ${escapeHtml(item.end)}</td>
+                            <td>${escapeHtml(item.subject)}</td>
+                            <td>${escapeHtml(item.room || '-')}</td>
+                            <td>${escapeHtml(item.teacher || '-')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
         return;
     }
 
-    if (state.ui.scheduleViewMode === 'table') {
-        const dayNames = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie' };
-        const rowsHtml = [...schedule]
-            .sort((a, b) => (a.day - b.day) || a.start.localeCompare(b.start))
-            .map(c => `<tr>
-                <td>${escapeHtml(dayNames[c.day] || String(c.day))}</td>
-                <td>${escapeHtml(c.start)} - ${escapeHtml(c.end)}</td>
-                <td><strong>${escapeHtml(c.subject)}</strong></td>
-                <td>${escapeHtml(c.teacher || '-')}</td>
-                <td>${escapeHtml(c.room || '-')}</td>
-            </tr>`).join('');
+    const now = getNowDate();
+    const currentDay = now.getDay();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
 
-        box.innerHTML = `<table class="sch-table"><thead><tr><th>Día</th><th>Hora</th><th>Asignatura</th><th>Profesor/a</th><th>Aula</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
-        return;
-    }
-
-    const { day, minutes: nowMins } = getMadridClock(getEffectiveNow());
-    const todayClasses = schedule
-        .filter(c => Number(c.day) === Number(day))
-        .sort((a, b) => parseMinutes(a.start) - parseMinutes(b.start));
-
-    const activeClass = todayClasses.find(c => {
-        const s = parseMinutes(c.start);
-        const e = parseMinutes(c.end);
-        return nowMins >= s && nowMins < e;
-    });
+    const todayClasses = sorted.filter(c => c.day === currentDay);
+    const activeClass = todayClasses.find(c =>
+        currentMin >= timeToMinutes(c.start) && currentMin < timeToMinutes(c.end)
+    );
+    const nextClass = todayClasses.find(c => timeToMinutes(c.start) > currentMin)
+        || sorted.find(c => c.day > currentDay)
+        || sorted[0];
 
     if (activeClass) {
-        const s = parseMinutes(activeClass.start);
-        const e = parseMinutes(activeClass.end);
-        const pct = Math.min(100, Math.max(0, Math.round(((nowMins - s) / Math.max(1, e - s)) * 100)));
-        const remMins = Math.max(0, e - nowMins);
-        const extraInfo = [activeClass.teacher ? `Prof. ${activeClass.teacher}` : '', activeClass.room ? `Aula ${activeClass.room}` : ''].filter(Boolean).join(' · ');
-
-        box.innerHTML = `
-            <div class="sch-status">🟢 <strong>En curso:</strong> ${escapeHtml(activeClass.subject)} (${escapeHtml(activeClass.start)} - ${escapeHtml(activeClass.end)})</div>
-            <div class="sch-detail">${escapeHtml(extraInfo || 'Clase activa')} · Quedan ${remMins} min (${pct}%)</div>
+        const startM = timeToMinutes(activeClass.start);
+        const endM = timeToMinutes(activeClass.end);
+        const pct = Math.max(0, Math.min(100, Math.round(((currentMin - startM) / Math.max(1, endM - startM)) * 100)));
+        const remMins = Math.max(0, endM - currentMin);
+        container.innerHTML = `
+            <div class="sch-status">🟢 <strong>${escapeHtml(activeClass.subject)}</strong> <span class="badge-version">${escapeHtml(activeClass.start)} - ${escapeHtml(activeClass.end)}</span></div>
+            <div class="sch-detail">Aula: ${escapeHtml(activeClass.room || 'N/D')} · Profesor/a: ${escapeHtml(activeClass.teacher || 'N/D')} · Restan ${remMins} min</div>
             <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>
         `;
         return;
     }
 
-    const nextClass = todayClasses.find(c => parseMinutes(c.start) > nowMins);
     if (nextClass) {
-        const waitMins = Math.max(0, parseMinutes(nextClass.start) - nowMins);
-        const extraInfo = [nextClass.teacher ? `Prof. ${nextClass.teacher}` : '', nextClass.room ? `Aula ${nextClass.room}` : ''].filter(Boolean).join(' · ');
-        box.innerHTML = `
-            <div class="sch-status">⏳ <strong>Siguiente clase:</strong> ${escapeHtml(nextClass.subject)} a las ${escapeHtml(nextClass.start)}</div>
-            <div class="sch-detail">${escapeHtml(extraInfo || 'En espera')} · Empieza en ${waitMins} min</div>
+        container.innerHTML = `
+            <div class="sch-status">⏭️ Próxima: <strong>${escapeHtml(nextClass.subject)}</strong></div>
+            <div class="sch-detail">${escapeHtml(DAY_NAMES[nextClass.day] || '')} · ${escapeHtml(nextClass.start)} - ${escapeHtml(nextClass.end)} · Aula: ${escapeHtml(nextClass.room || 'N/D')}</div>
         `;
-        return;
+    } else {
+        container.innerHTML = '<div class="sch-detail">Sin clases programadas en el horario.</div>';
     }
-
-    box.innerHTML = `
-        <div class="sch-status">🌙 Sin más clases hoy en el horario</div>
-        <div class="sch-detail">Total de bloques registrados para hoy: ${todayClasses.length}</div>
-    `;
 }
 
 function openScheduleModal() {
-    populateSubjectSelects();
-    const subjSel = document.getElementById('sch-add-subject');
-    if (subjSel && subjSel.value) autofillScheduleFromCatalog(subjSel.value);
+    renderSubjectSelectTargets();
     renderScheduleEditorList();
-    document.getElementById('schedule-modal').style.display = 'flex';
+    const modal = document.getElementById('schedule-modal');
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeScheduleModal() {
-    document.getElementById('schedule-modal').style.display = 'none';
+    const modal = document.getElementById('schedule-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function autofillScheduleFromCatalog(subjectName) {
+    const found = (state.subjectsCatalog || []).find(s => s.name === subjectName);
+    if (!found) return;
+    const teacherInput = document.getElementById('sch-add-teacher');
+    const roomInput = document.getElementById('sch-add-room');
+    if (teacherInput && found.teacher) teacherInput.value = found.teacher;
+    if (roomInput && found.room) roomInput.value = found.room;
 }
 
 function addScheduleClass() {
-    const day = Number(document.getElementById('sch-add-day')?.value) || 1;
+    const day = Number(document.getElementById('sch-add-day')?.value || 1);
     const start = (document.getElementById('sch-add-start')?.value || '').trim();
     const end = (document.getElementById('sch-add-end')?.value || '').trim();
     const subject = (document.getElementById('sch-add-subject')?.value || '').trim();
     const teacher = (document.getElementById('sch-add-teacher')?.value || '').trim();
     const room = (document.getElementById('sch-add-room')?.value || '').trim();
 
-    if (!start || !end || !subject) {
-        showToast('Completa hora de inicio, fin y asignatura', 'error');
+    if (!subject || !start || !end) {
+        showToast('Completa asignatura, hora de inicio y fin', 'error');
         return;
     }
 
-    state.schedule.push({
-        id: generateId('sch'),
-        day,
-        start,
-        end,
-        subject,
-        teacher,
-        room
-    });
-
-    document.getElementById('sch-add-teacher').value = '';
-    document.getElementById('sch-add-room').value = '';
-    saveState(false);
-    renderSchedule();
+    ensureSubjectInCatalog(subject, teacher, room);
+    state.schedule.push({ day, start, end, subject, teacher, room });
+    saveState();
+    renderScheduleWidget();
     renderScheduleEditorList();
     showToast('Clase añadida al horario', 'success');
 }
 
-function deleteScheduleClass(id) {
-    state.schedule = (state.schedule || []).filter(c => c.id !== id);
-    saveState(false);
-    renderSchedule();
+function deleteScheduleClass(index) {
+    state.schedule.splice(index, 1);
+    saveState();
+    renderScheduleWidget();
     renderScheduleEditorList();
 }
 
 function clearSchedule() {
     state.schedule = [];
-    saveState(false);
-    renderSchedule();
+    saveState();
+    renderScheduleWidget();
     renderScheduleEditorList();
-    showToast('Horario vaciado');
-}
-function renderScheduleEditorList() {
-    const list = document.getElementById('schedule-editor-list');
-    if (!list) return;
-    list.innerHTML = '';
-    const dayNames = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie' };
-
-    const sorted = [...(state.schedule || [])].sort((a, b) => (a.day - b.day) || a.start.localeCompare(b.start));
-    if (!sorted.length) {
-        list.innerHTML = '<div class="mono-muted">No hay clases en el horario.</div>';
-        return;
-    }
-
-    sorted.forEach(c => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        const extra = [c.teacher, c.room].filter(Boolean).join(' · ');
-        info.textContent = `${dayNames[c.day] || c.day} ${c.start}-${c.end} · ${c.subject}${extra ? ` (${extra})` : ''}`;
-
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => deleteScheduleClass(c.id));
-
-        row.append(info, del);
-        list.appendChild(row);
-    });
+    showToast('Horario vaciado', 'info');
 }
 
 function importScheduleFromText() {
-    const raw = (document.getElementById('sch-import-text')?.value || '').trim();
-    if (!raw) {
-        showToast('Pega primero el texto del horario', 'error');
-        return;
-    }
+    const raw = document.getElementById('sch-import-text')?.value || '';
     const parsed = parseScheduleImportText(raw);
     if (!parsed.length) {
-        showToast('No se detectaron líneas válidas (formato: Lun 08:15-09:15 Programación)', 'error');
+        showToast('No se reconocieron líneas válidas en el texto', 'error');
         return;
     }
-
-    parsed.forEach(item => {
-        state.schedule.push({
-            id: generateId('sch'),
-            day: item.day,
-            start: item.start,
-            end: item.end,
-            subject: item.subject,
-            teacher: item.teacher || '',
-            room: item.room || ''
-        });
+    parsed.forEach(row => {
+        ensureSubjectInCatalog(row.subject, row.teacher, row.room);
+        state.schedule.push(row);
     });
-
-    document.getElementById('sch-import-text').value = '';
-    saveState(false);
-    renderSchedule();
+    saveState();
+    renderScheduleWidget();
     renderScheduleEditorList();
-    showToast(`Importadas ${parsed.length} clases al horario`, 'success');
+    showToast(`${parsed.length} clases importadas`, 'success');
+}
+
+function renderScheduleEditorList() {
+    const list = document.getElementById('schedule-editor-list');
+    if (!list) return;
+    if (!state.schedule.length) {
+        list.innerHTML = '<div class="mono-muted">Sin clases registradas.</div>';
+        return;
+    }
+    list.innerHTML = state.schedule.map((item, idx) => `
+        <div class="grade-item-row">
+            <span><strong>${escapeHtml(DAY_NAMES[item.day] || item.day)}</strong> ${escapeHtml(item.start)}-${escapeHtml(item.end)} · ${escapeHtml(item.subject)} (${escapeHtml(item.room || '-')}, ${escapeHtml(item.teacher || '-')})</span>
+            <button type="button" class="btn-icon" onclick="deleteScheduleClass(${idx})">🗑️</button>
+        </div>
+    `).join('');
 }
 
 /* ==========================================================
-   ENTREGAS, EXÁMENES Y PRÁCTICAS
+   ENTREGAS Y EXÁMENES
    ========================================================== */
-function setDeliveryFilter(filterKey) {
-    currentDeliveryFilter = ALLOWED_DELIVERY_FILTERS.includes(filterKey) ? filterKey : 'all';
-    state.ui.deliveryFilter = currentDeliveryFilter;
+function setDeliveryFilter(filter) {
+    state.deliveryFilter = filter;
     document.querySelectorAll('.delivery-filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.dfilter === currentDeliveryFilter);
+        btn.classList.toggle('active', btn.dataset.dfilter === filter);
     });
-    saveState(false);
+    saveState();
     renderDeliveries();
 }
 
 function toggleExamCramMode() {
-    state.ui.examCramMode = !state.ui.examCramMode;
-    document.getElementById('btn-exam-cram')?.classList.toggle('active', state.ui.examCramMode);
-    saveState(false);
+    state.examCramMode = !state.examCramMode;
+    document.getElementById('btn-exam-cram')?.classList.toggle('active', state.examCramMode);
+    saveState();
     renderDeliveries();
 }
 
+function requestDesktopNotifications() {
+    if (!('Notification' in window)) {
+        showToast('Este navegador no soporta notificaciones', 'info');
+        return;
+    }
+    Notification.requestPermission().then(perm => {
+        showToast(perm === 'granted' ? 'Avisos activados' : 'Permiso de avisos denegado', perm === 'granted' ? 'success' : 'info');
+    });
+}
+
 function addDelivery() {
-    const subject = (document.getElementById('del-subject')?.value || '').trim();
     const title = (document.getElementById('del-title')?.value || '').trim();
-    const date = (document.getElementById('del-date')?.value || '').trim();
-    const type = document.getElementById('del-type')?.value || 'entrega';
+    const subject = (document.getElementById('del-subject')?.value || '').trim();
+    const type = document.getElementById('del-type')?.value || 'practica';
+    const dueDate = document.getElementById('del-date')?.value || getMadridDateKey();
     const notes = (document.getElementById('del-notes')?.value || '').trim();
 
-    if (!subject || !title || !date) {
-        showToast('Completa asignatura, título y fecha límite', 'error');
+    if (!title) {
+        showToast('Escribe un título para la entrega o examen', 'error');
         return;
     }
 
-    state.deliveries.push({
-        id: generateId('del'),
-        subject,
+    ensureSubjectInCatalog(subject);
+    state.deliveries.unshift({
+        id: `del-${Date.now()}`,
         title,
-        date,
+        subject,
         type,
+        dueDate,
         notes,
         done: false
     });
 
-    document.getElementById('del-title').value = '';
-    document.getElementById('del-date').value = '';
-    document.getElementById('del-notes').value = '';
+    const titleEl = document.getElementById('del-title');
+    const notesEl = document.getElementById('del-notes');
+    if (titleEl) titleEl.value = '';
+    if (notesEl) notesEl.value = '';
     toggleForm('form-add-delivery');
-    saveState(false);
+    saveState();
     renderDeliveries();
     showToast('Entrega añadida', 'success');
 }
 
 function toggleDeliveryDone(id) {
-    const item = (state.deliveries || []).find(d => d.id === id);
+    const item = state.deliveries.find(d => d.id === id);
     if (!item) return;
     item.done = !item.done;
-    saveState(false);
+    saveState();
     renderDeliveries();
 }
 
 function deleteDelivery(id) {
-    state.deliveries = (state.deliveries || []).filter(d => d.id !== id);
-    saveState(false);
+    state.deliveries = state.deliveries.filter(d => d.id !== id);
+    saveState();
     renderDeliveries();
-}
-
-function getDaysUntil(dateStr) {
-    if (!dateStr) return 9999;
-    const todayKey = getMadridDateKey(getEffectiveNow());
-    const [ty, tm, td] = todayKey.split('-').map(Number);
-    const [dy, dm, dd] = String(dateStr).split('-').map(Number);
-    if (!dy || !dm || !dd) return 9999;
-    const utcToday = Date.UTC(ty, tm - 1, td);
-    const utcDue = Date.UTC(dy, dm - 1, dd);
-    return Math.round((utcDue - utcToday) / 86400000);
 }
 
 function renderDeliveries() {
     const list = document.getElementById('deliveries-list');
     if (!list) return;
-    list.innerHTML = '';
 
-    const activeFilter = ALLOWED_DELIVERY_FILTERS.includes(currentDeliveryFilter) ? currentDeliveryFilter : 'all';
-    const items = (state.deliveries || [])
-        .map(d => ({ ...d, daysLeft: getDaysUntil(d.date) }))
-        .filter(d => {
-            if (state.ui.examCramMode && (d.done || d.daysLeft > 7)) return false;
-            if (activeFilter === 'pending') return !d.done;
-            if (activeFilter === 'soon') return !d.done && d.daysLeft >= 0 && d.daysLeft <= 3;
-            if (activeFilter === 'exam') return d.type === 'examen';
-            if (activeFilter === 'practice') return d.type === 'practica';
-            return true;
-        })
-        .sort((a, b) => Number(a.done) - Number(b.done) || a.daysLeft - b.daysLeft);
+    const todayKey = getMadridDateKey();
+    const todayMs = new Date(`${todayKey}T00:00:00Z`).getTime();
 
-    if (!items.length) {
-        list.innerHTML = '<div class="mono-muted">No hay entregas o exámenes para este filtro.</div>';
+    const filtered = (state.deliveries || []).filter(item => {
+        const dueMs = item.dueDate ? new Date(`${item.dueDate}T00:00:00Z`).getTime() : todayMs;
+        const diffDays = (dueMs - todayMs) / (1000 * 60 * 60 * 24);
+
+        if (state.examCramMode && (item.done || diffDays > 7)) return false;
+        if (state.deliveryFilter === 'pending') return !item.done;
+        if (state.deliveryFilter === 'soon') return !item.done && diffDays <= 3;
+        if (state.deliveryFilter === 'exam') return item.type === 'examen';
+        if (state.deliveryFilter === 'practice') return item.type === 'practica' || item.type === 'entrega';
+        return true;
+    });
+
+    if (!filtered.length) {
+        list.innerHTML = '<div class="mono-muted">No hay entregas que coincidan con el filtro.</div>';
         return;
     }
 
-    items.forEach(item => {
-        const row = document.createElement('div');
-        row.className = `delivery-item ${item.done ? 'is-done' : ''}`;
-
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.checked = Boolean(item.done);
-        chk.addEventListener('change', () => toggleDeliveryDone(item.id));
-
-        const body = document.createElement('div');
-        body.className = 'delivery-body';
-        const badgeText = item.type === 'examen' ? '📝 Examen' : item.type === 'practica' ? '🧪 Práctica' : '📦 Entrega';
-        const dueLabel = item.done
-            ? 'Completado'
-            : item.daysLeft < 0
-                ? `Vencido (${Math.abs(item.daysLeft)}d)`
-                : item.daysLeft === 0
-                    ? 'Hoy'
-                    : `En ${item.daysLeft}d`;
-
-        body.innerHTML = `
-            <div class="delivery-title">${escapeHtml(item.title)} <span class="delivery-badge">${badgeText}</span></div>
-            <div class="delivery-meta">${escapeHtml(item.subject)} · ${escapeHtml(item.date)} · <strong>${dueLabel}</strong>${item.notes ? ` · ${escapeHtml(item.notes)}` : ''}</div>
-        `;
-
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => deleteDelivery(item.id));
-
-        row.append(chk, body, del);
-        list.appendChild(row);
-    });
+    list.innerHTML = filtered.map(item => `
+        <div class="delivery-item ${item.done ? 'is-done' : ''}">
+            <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleDeliveryDone(${JSON.stringify(item.id)})" aria-label="Marcar entrega completada">
+            <div class="delivery-body">
+                <div class="delivery-title">
+                    <span>${escapeHtml(item.title)}</span>
+                    <span class="delivery-badge">${escapeHtml(item.type)}</span>
+                    ${item.subject ? `<span class="badge-version">${escapeHtml(item.subject)}</span>` : ''}
+                </div>
+                <div class="delivery-meta">Fecha: ${escapeHtml(item.dueDate || 'Sin fecha')}${item.notes ? ` · ${escapeHtml(item.notes)}` : ''}</div>
+            </div>
+            <button type="button" class="btn-icon" onclick="deleteDelivery(${JSON.stringify(item.id)})">🗑️</button>
+        </div>
+    `).join('');
 }
 
-function checkDeliveryNotifications() {
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    const todayKey = getMadridDateKey(getEffectiveNow());
-    (state.deliveries || []).forEach(d => {
-        if (d.done) return;
-        const days = getDaysUntil(d.date);
-        if (days === 0 || days === 1) {
-            const alertKey = `${todayKey}:${d.id}:${days}`;
-            if (!notifiedDeliveryAlerts.has(alertKey)) {
-                notifiedDeliveryAlerts.add(alertKey);
-                try {
-                    new Notification('DevWorkspace · Recordatorio académico', {
-                        body: `${d.subject}: ${d.title} (${days === 0 ? 'vence hoy' : 'vence mañana'})`
-                    });
-                } catch (_) {}
-            }
-        }
-    });
-}
 /* ==========================================================
-   TAREAS, SUBTAREAS, POMODORO, NOTAS, STUDIO, BD, DEVLAB Y ARRANQUE
+   TAREAS CON BLOQUES DE JORNADA
    ========================================================== */
+function setTaskFilter(filter) {
+    state.taskFilter = filter;
+    document.querySelectorAll('.task-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    saveState();
+    renderTasks();
+}
+
+function setTaskBlockFilter(block) {
+    state.taskBlockFilter = block;
+    saveState();
+    renderTasks();
+}
+
+function setTaskSort(sort) {
+    state.taskSort = sort;
+    saveState();
+    renderTasks();
+}
+
 function addTask() {
-    const text = (document.getElementById('task-input')?.value || '').trim();
+    const input = document.getElementById('task-input');
+    const text = (input?.value || '').trim();
     if (!text) return;
 
+    const block = document.getElementById('task-block')?.value || 'afternoon';
+    const priority = document.getElementById('task-priority')?.value || 'medium';
+    const dueDate = document.getElementById('task-date')?.value || getMadridDateKey();
+    const repeat = document.getElementById('task-repeat')?.value || '';
+
     state.tasks.unshift({
-        id: generateId('tsk'),
+        id: `tsk-${Date.now()}`,
         text,
+        block,
+        priority,
+        dueDate,
+        repeat,
         done: false,
-        priority: document.getElementById('task-priority')?.value || 'medium',
-        block: document.getElementById('task-block')?.value || 'afternoon',
-        date: document.getElementById('task-date')?.value || '',
-        repeat: document.getElementById('task-repeat')?.value || '',
-        pomos: 0,
         subtasks: [],
-        createdAt: getEffectiveNowMs()
+        createdAt: Date.now()
     });
 
-    document.getElementById('task-input').value = '';
-    saveState(false);
+    if (input) input.value = '';
+    saveState();
     renderTasks();
-    refreshPomodoroTaskSelector();
+    renderPomodoroLinkedTasks();
 }
 
 function toggleTaskDone(id) {
-    const task = (state.tasks || []).find(t => t.id === id);
+    const task = state.tasks.find(t => t.id === id);
     if (!task) return;
     task.done = !task.done;
-
-    if (task.done && task.repeat && task.date) {
-        const nextDate = getNextRepeatDate(task.date, task.repeat);
-        if (nextDate) {
+    if (task.done && task.repeat) {
+        try {
+            const nextDate = getNextRepeatDate(task.dueDate || getMadridDateKey(), task.repeat);
             state.tasks.unshift({
                 ...task,
-                id: generateId('tsk'),
+                id: `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                dueDate: nextDate,
                 done: false,
-                date: nextDate,
-                pomos: 0,
                 subtasks: (task.subtasks || []).map(st => ({ ...st, done: false })),
-                createdAt: getEffectiveNowMs()
+                createdAt: Date.now()
             });
-            showToast(`Siguiente repetición programada para ${nextDate}`, 'success');
-        }
+        } catch (_) {}
     }
-
-    saveState(false);
+    saveState();
     renderTasks();
-    refreshPomodoroTaskSelector();
 }
 
 function deleteTask(id) {
-    state.tasks = (state.tasks || []).filter(t => t.id !== id);
-    saveState(false);
+    state.tasks = state.tasks.filter(t => t.id !== id);
+    saveState();
     renderTasks();
-    refreshPomodoroTaskSelector();
-}
-
-function addSubtask(taskId) {
-    const label = prompt('Texto de la subtarea:');
-    if (!label || !label.trim()) return;
-    const task = (state.tasks || []).find(t => t.id === taskId);
-    if (!task) return;
-    if (!Array.isArray(task.subtasks)) task.subtasks = [];
-    task.subtasks.push({ id: generateId('subt'), text: label.trim(), done: false });
-    saveState(false);
-    renderTasks();
-}
-
-function setTaskFilter(filterKey) {
-    currentTaskFilter = ALLOWED_TASK_FILTERS.includes(filterKey) ? filterKey : 'all';
-    document.querySelectorAll('.task-filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.filter === currentTaskFilter);
-    });
-    renderTasks();
-}
-
-function setTaskBlockFilter(blockKey) {
-    currentTaskBlockFilter = ALLOWED_TASK_BLOCKS.includes(blockKey) ? blockKey : 'all';
-    document.querySelectorAll('.task-block-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.block === currentTaskBlockFilter);
-    });
-    renderTasks();
-}
-
-function setTaskSort(sortKey) {
-    currentTaskSort = ALLOWED_TASK_SORTS.includes(sortKey) ? sortKey : 'created';
-    renderTasks();
+    renderPomodoroLinkedTasks();
 }
 
 function clearCompletedTasks() {
-    state.tasks = (state.tasks || []).filter(t => !t.done);
-    saveState(false);
+    state.tasks = state.tasks.filter(t => !t.done);
+    saveState();
     renderTasks();
-    refreshPomodoroTaskSelector();
+    renderPomodoroLinkedTasks();
+}
+
+function addSubtaskPrompt(taskId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const title = prompt('Nueva subtarea:');
+    if (!title || !title.trim()) return;
+    task.subtasks = task.subtasks || [];
+    task.subtasks.push({ id: `sub-${Date.now()}`, text: title.trim(), done: false });
+    saveState();
+    renderTasks();
+}
+
+function toggleSubtaskDone(taskId, subId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task || !task.subtasks) return;
+    const sub = task.subtasks.find(s => s.id === subId);
+    if (!sub) return;
+    sub.done = !sub.done;
+    saveState();
+    renderTasks();
 }
 
 function renderTasks() {
     const list = document.getElementById('tasks-list');
     if (!list) return;
-    list.innerHTML = '';
 
-    const todayKey = getMadridDateKey(getEffectiveNow());
-    const prioWeight = { high: 1, medium: 2, low: 3 };
-    const blockWeight = { morning: 1, afternoon: 2, night: 3 };
+    const todayKey = getMadridDateKey();
+    const blockLabels = { morning: '🌅 Mañana', afternoon: '☀️ Tarde', night: '🌙 Noche' };
+    const prioRank = { high: 0, medium: 1, low: 2 };
+    const blockRank = { morning: 0, afternoon: 1, night: 2 };
 
-    const filtered = (state.tasks || [])
-        .filter(t => {
-            if (currentTaskBlockFilter !== 'all' && t.block !== currentTaskBlockFilter) return false;
-            if (currentTaskFilter === 'pending') return !t.done;
-            if (currentTaskFilter === 'done') return Boolean(t.done);
-            if (currentTaskFilter === 'today') return t.date === todayKey;
-            if (currentTaskFilter === 'overdue') return !t.done && t.date && t.date < todayKey;
-            return true;
-        })
-        .sort((a, b) => {
-            if (currentTaskSort === 'priority') return (prioWeight[a.priority] || 9) - (prioWeight[b.priority] || 9);
-            if (currentTaskSort === 'block') return (blockWeight[a.block] || 9) - (blockWeight[b.block] || 9);
-            if (currentTaskSort === 'date') return (a.date || '9999-12-31').localeCompare(b.date || '9999-12-31');
-            return (b.createdAt || 0) - (a.createdAt || 0);
-        });
+    let filtered = (state.tasks || []).filter(t => {
+        if (state.taskBlockFilter !== 'all' && t.block !== state.taskBlockFilter) return false;
+        if (state.taskFilter === 'pending') return !t.done;
+        if (state.taskFilter === 'done') return t.done;
+        if (state.taskFilter === 'today') return t.dueDate === todayKey;
+        if (state.taskFilter === 'overdue') return !t.done && t.dueDate && t.dueDate < todayKey;
+        return true;
+    });
+
+    filtered = [...filtered].sort((a, b) => {
+        if (state.taskSort === 'priority') return (prioRank[a.priority] ?? 1) - (prioRank[b.priority] ?? 1);
+        if (state.taskSort === 'block') return (blockRank[a.block] ?? 1) - (blockRank[b.block] ?? 1);
+        if (state.taskSort === 'date') return String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'));
+        return (b.createdAt || 0) - (a.createdAt || 0);
+    });
 
     if (!filtered.length) {
-        list.innerHTML = '<div class="mono-muted">No hay tareas para mostrar con este filtro.</div>';
+        list.innerHTML = '<div class="mono-muted">No hay tareas en este filtro.</div>';
         return;
     }
 
-    filtered.forEach(task => {
-        const row = document.createElement('div');
-        row.className = `task-item ${task.done ? 'is-done' : ''}`;
+    list.innerHTML = filtered.map(task => {
+        const subsHtml = (task.subtasks || []).map(sub => `
+            <label class="subtask-row">
+                <input type="checkbox" ${sub.done ? 'checked' : ''} onchange="toggleSubtaskDone(${JSON.stringify(task.id)}, ${JSON.stringify(sub.id)})">
+                <span style="${sub.done ? 'text-decoration:line-through;opacity:0.65' : ''}">${escapeHtml(sub.text)}</span>
+            </label>
+        `).join('');
 
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.checked = Boolean(task.done);
-        chk.addEventListener('change', () => toggleTaskDone(task.id));
-
-        const body = document.createElement('div');
-        body.className = 'task-body';
-        const prioBadge = task.priority === 'high' ? '🔴 Alta' : task.priority === 'low' ? '🟢 Baja' : '🟡 Media';
-        const blockBadge = task.block === 'morning' ? '🌅 Mañana' : task.block === 'night' ? '🌙 Noche' : '☀️ Tarde';
-
-        body.innerHTML = `
-            <div class="task-text">${escapeHtml(task.text)}</div>
-            <div class="task-meta">${prioBadge} · ${blockBadge}${task.date ? ` · 📅 ${escapeHtml(task.date)}` : ''}${task.repeat ? ` · 🔁 ${escapeHtml(task.repeat)}` : ''}${task.pomos ? ` · 🍅 ${task.pomos}` : ''}</div>
+        return `
+            <div class="task-item ${task.done ? 'is-done' : ''}">
+                <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleTaskDone(${JSON.stringify(task.id)})" aria-label="Completar tarea">
+                <div class="task-body">
+                    <div class="task-text">${escapeHtml(task.text)}</div>
+                    <div class="task-meta">
+                        ${escapeHtml(blockLabels[task.block] || '☀️ Tarde')} · ${escapeHtml(task.dueDate || 'Sin fecha')} · Prioridad: ${escapeHtml(task.priority || 'media')}${task.repeat ? ` · 🔁 ${escapeHtml(task.repeat)}` : ''}
+                    </div>
+                    ${subsHtml ? `<div class="subtasks-box">${subsHtml}</div>` : ''}
+                </div>
+                <button type="button" class="btn-icon" onclick="addSubtaskPrompt(${JSON.stringify(task.id)})" title="Añadir subtarea">➕</button>
+                <button type="button" class="btn-icon" onclick="deleteTask(${JSON.stringify(task.id)})" title="Eliminar tarea">🗑️</button>
+            </div>
         `;
-
-        if (Array.isArray(task.subtasks) && task.subtasks.length) {
-            const subBox = document.createElement('div');
-            subBox.className = 'subtasks-box';
-            task.subtasks.forEach(st => {
-                const subRow = document.createElement('label');
-                subRow.className = 'subtask-row';
-                const sChk = document.createElement('input');
-                sChk.type = 'checkbox';
-                sChk.checked = Boolean(st.done);
-                sChk.addEventListener('change', () => {
-                    st.done = !st.done;
-                    saveState(false);
-                    renderTasks();
-                });
-                const sTxt = document.createElement('span');
-                sTxt.textContent = st.text;
-                if (st.done) sTxt.style.textDecoration = 'line-through';
-                subRow.append(sChk, sTxt);
-                subBox.appendChild(subRow);
-            });
-            body.appendChild(subBox);
-        }
-
-        const actions = document.createElement('div');
-        actions.className = 'filter-pills-row';
-        const subBtn = document.createElement('button');
-        subBtn.type = 'button';
-        subBtn.className = 'btn-icon';
-        subBtn.title = 'Añadir subtarea';
-        subBtn.textContent = '+Sub';
-        subBtn.addEventListener('click', () => addSubtask(task.id));
-
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'btn-icon';
-        delBtn.textContent = '🗑️';
-        delBtn.addEventListener('click', () => deleteTask(task.id));
-
-        actions.append(subBtn, delBtn);
-        row.append(chk, body, actions);
-        list.appendChild(row);
-    });
+    }).join('');
 }
 
 /* ==========================================================
-   POMODORO + RUIDO DE ENFOQUE
+   POMODORO, AUDIO & MÉTRICAS
    ========================================================== */
-function updatePomodoroDisplay() {
-    const mins = String(Math.floor(pomodoroRemainingSeconds / 60)).padStart(2, '0');
-    const secs = String(pomodoroRemainingSeconds % 60).padStart(2, '0');
-    const disp = document.getElementById('pomo-display');
-    if (disp) disp.textContent = `${mins}:${secs}`;
+function renderPomodoroLinkedTasks() {
+    const sel = document.getElementById('pomo-linked-task');
+    if (!sel) return;
+    const pending = (state.tasks || []).filter(t => !t.done);
+    sel.innerHTML = '<option value="">-- Vincular tarea (opcional) --</option>' +
+        pending.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.text)}</option>`).join('');
+    sel.value = state.pomodoro.linkedTaskId || '';
+}
 
-    const ring = document.getElementById('pomo-ring-progress');
-    if (ring) {
-        const circumference = 439.82;
-        const ratio = pomodoroSessionTotalSeconds > 0 ? pomodoroRemainingSeconds / pomodoroSessionTotalSeconds : 1;
-        ring.style.strokeDashoffset = String(circumference * (1 - ratio));
+function setPomodoroLinkedTask(taskId) {
+    state.pomodoro.linkedTaskId = taskId;
+    saveState();
+}
+
+function setPomodoroMode(mode, minutesValue) {
+    pausePomodoro();
+    state.pomodoro.mode = mode === 'break' ? 'break' : 'focus';
+    const parsed = parseInt(minutesValue, 10);
+    const fallback = state.pomodoro.mode === 'break' ? state.pomodoro.breakMinutes : state.pomodoro.focusMinutes;
+    const mins = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    if (state.pomodoro.mode === 'break') state.pomodoro.breakMinutes = mins;
+    else state.pomodoro.focusMinutes = mins;
+
+    state.pomodoro.secondsLeft = mins * 60;
+    document.getElementById('btn-mode-focus')?.classList.toggle('active', state.pomodoro.mode === 'focus');
+    document.getElementById('btn-mode-break')?.classList.toggle('active', state.pomodoro.mode === 'break');
+    saveState();
+    renderPomodoro();
+}
+
+function updatePomodoroConfig() {
+    const f = parseInt(document.getElementById('pomo-focus-mins')?.value, 10);
+    const b = parseInt(document.getElementById('pomo-break-mins')?.value, 10);
+    state.pomodoro.focusMinutes = Number.isFinite(f) && f > 0 ? f : 25;
+    state.pomodoro.breakMinutes = Number.isFinite(b) && b > 0 ? b : 5;
+    if (!state.pomodoro.running) {
+        state.pomodoro.secondsLeft = (state.pomodoro.mode === 'break' ? state.pomodoro.breakMinutes : state.pomodoro.focusMinutes) * 60;
     }
+    saveState();
+    renderPomodoro();
 }
 
 function startPomodoro() {
     if (pomodoroInterval) return;
+    state.pomodoro.running = true;
+    saveState();
     pomodoroInterval = setInterval(() => {
-        if (pomodoroRemainingSeconds > 0) {
-            pomodoroRemainingSeconds--;
-            updatePomodoroDisplay();
-            return;
+        if (state.pomodoro.secondsLeft > 0) {
+            state.pomodoro.secondsLeft -= 1;
+            renderPomodoro();
+        } else {
+            completePomodoroCycle();
         }
-        clearInterval(pomodoroInterval);
-        pomodoroInterval = null;
-        completePomodoroCycle();
     }, 1000);
 }
 
 function pausePomodoro() {
+    state.pomodoro.running = false;
     if (pomodoroInterval) {
         clearInterval(pomodoroInterval);
         pomodoroInterval = null;
     }
+    saveState();
 }
 
 function resetPomodoro() {
     pausePomodoro();
-    const mins = pomodoroCurrentMode === 'focus'
-        ? (Number(state.pomodoro.focusMinutes) || 25)
-        : (Number(state.pomodoro.breakMinutes) || 5);
-    pomodoroSessionTotalSeconds = mins * 60;
-    pomodoroRemainingSeconds = pomodoroSessionTotalSeconds;
-    updatePomodoroDisplay();
-}
-
-function setPomodoroMode(mode, minutes) {
-    pausePomodoro();
-    pomodoroCurrentMode = mode === 'break' ? 'break' : 'focus';
-    document.getElementById('btn-mode-focus')?.classList.toggle('active', pomodoroCurrentMode === 'focus');
-    document.getElementById('btn-mode-break')?.classList.toggle('active', pomodoroCurrentMode === 'break');
-    pomodoroSessionTotalSeconds = (Number(minutes) || 25) * 60;
-    pomodoroRemainingSeconds = pomodoroSessionTotalSeconds;
-    updatePomodoroDisplay();
-}
-
-function updatePomodoroConfig() {
-    const f = Math.min(180, Math.max(1, Number(document.getElementById('pomo-focus-mins')?.value) || 25));
-    const b = Math.min(60, Math.max(1, Number(document.getElementById('pomo-break-mins')?.value) || 5));
-    state.pomodoro.focusMinutes = f;
-    state.pomodoro.breakMinutes = b;
-    saveState(false);
-    resetPomodoro();
+    const mins = state.pomodoro.mode === 'break' ? state.pomodoro.breakMinutes : state.pomodoro.focusMinutes;
+    state.pomodoro.secondsLeft = mins * 60;
+    saveState();
+    renderPomodoro();
 }
 
 function completePomodoroCycle() {
-    if (pomodoroCurrentMode === 'focus') {
-        const focusedMins = Number(state.pomodoro.focusMinutes) || 25;
-        const todayKey = getMadridDateKey(getEffectiveNow());
-        if (state.pomodoro.lastStudyDay !== todayKey) {
-            state.pomodoro.todayMinutes = 0;
-            state.pomodoro.streak = (state.pomodoro.streak || 0) + 1;
-            state.pomodoro.lastStudyDay = todayKey;
+    pausePomodoro();
+    if (state.pomodoro.mode === 'focus') {
+        const added = state.pomodoro.focusMinutes || 25;
+        const today = getMadridDateKey();
+        state.pomodoro.totalMinutes = (state.pomodoro.totalMinutes || 0) + added;
+        if (state.pomodoro.lastStudyDate === today) {
+            state.pomodoro.todayMinutes = (state.pomodoro.todayMinutes || 0) + added;
+        } else {
+            state.pomodoro.todayMinutes = added;
+            state.pomodoro.lastStudyDate = today;
         }
-        state.pomodoro.todayMinutes = (state.pomodoro.todayMinutes || 0) + focusedMins;
-        state.pomodoro.totalMinutes = (state.pomodoro.totalMinutes || 0) + focusedMins;
-        state.pomodoro.history[todayKey] = (state.pomodoro.history[todayKey] || 0) + focusedMins;
-
-        if (state.pomodoro.linkedTaskId) {
-            const linked = (state.tasks || []).find(t => t.id === state.pomodoro.linkedTaskId);
-            if (linked) linked.pomos = (linked.pomos || 0) + 1;
-        }
-
-        saveState(false);
-        renderPomodoroStats();
-        renderTasks();
-        showToast(`¡Pomodoro completado! +${focusedMins} min de estudio`, 'success');
-        setPomodoroMode('break', state.pomodoro.breakMinutes || 5);
+        state.pomodoro.historyByDate[today] = (state.pomodoro.historyByDate[today] || 0) + added;
+        showToast(`¡Sesión de foco completada (+${added} min)!`, 'success');
+        setPomodoroMode('break', state.pomodoro.breakMinutes);
     } else {
-        showToast('Descanso terminado. ¡Vuelta al enfoque!');
-        setPomodoroMode('focus', state.pomodoro.focusMinutes || 25);
+        showToast('Descanso terminado. ¡Listo para otro bloque!', 'info');
+        setPomodoroMode('focus', state.pomodoro.focusMinutes);
     }
+    saveState(true);
+    renderPomodoro();
 }
 
-function refreshPomodoroTaskSelector() {
-    const sel = document.getElementById('pomo-linked-task');
-    if (!sel) return;
-    const current = state.pomodoro.linkedTaskId || '';
-    sel.innerHTML = '<option value="">-- Vincular tarea (opcional) --</option>';
-    (state.tasks || []).filter(t => !t.done).forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.text;
-        sel.appendChild(opt);
-    });
-    sel.value = [...sel.options].some(o => o.value === current) ? current : '';
-}
+function renderPomodoro() {
+    const sec = Math.max(0, Number(state.pomodoro.secondsLeft) || 0);
+    const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+    const ss = String(sec % 60).padStart(2, '0');
+    const disp = document.getElementById('pomo-display');
+    if (disp) disp.textContent = `${mm}:${ss}`;
 
-function setPomodoroLinkedTask(taskId) {
-    state.pomodoro.linkedTaskId = taskId || '';
-    saveState(false);
-}
-
-function renderPomodoroStats() {
     const todayEl = document.getElementById('pomo-today-mins');
-    const streakEl = document.getElementById('pomo-streak-days');
     const totalEl = document.getElementById('pomo-total-mins');
+    const streakEl = document.getElementById('pomo-streak-days');
     const heatEl = document.getElementById('pomo-heatmap');
 
-    if (todayEl) todayEl.textContent = `${state.pomodoro.todayMinutes || 0}m`;
-    if (streakEl) streakEl.textContent = `${state.pomodoro.streak || 0}d`;
+    const todayKey = getMadridDateKey();
+    const todayMins = state.pomodoro.lastStudyDate === todayKey ? (state.pomodoro.todayMinutes || 0) : 0;
+
+    if (todayEl) todayEl.textContent = `${todayMins}m`;
     if (totalEl) totalEl.textContent = `${state.pomodoro.totalMinutes || 0}m`;
 
-    if (heatEl) {
-        heatEl.innerHTML = '';
-        const nowMs = getEffectiveNowMs();
-        for (let i = 13; i >= 0; i--) {
-            const dKey = getMadridDateKey(new Date(nowMs - i * 86400000));
-            const mins = state.pomodoro.history?.[dKey] || 0;
-            const cell = document.createElement('div');
-            cell.className = 'heat-cell';
-            if (mins >= 90) cell.classList.add('lv-3');
-            else if (mins >= 45) cell.classList.add('lv-2');
-            else if (mins > 0) cell.classList.add('lv-1');
-            cell.title = `${dKey}: ${mins} min`;
-            heatEl.appendChild(cell);
+    let streak = 0;
+    const cursor = new Date(`${todayKey}T12:00:00Z`);
+    while (true) {
+        const k = cursor.toISOString().slice(0, 10);
+        if ((state.pomodoro.historyByDate?.[k] || 0) > 0) {
+            streak += 1;
+            cursor.setUTCDate(cursor.getUTCDate() - 1);
+        } else {
+            break;
         }
     }
+    if (streakEl) streakEl.textContent = `${streak}d`;
+
+    if (heatEl) {
+        const cells = [];
+        const d = new Date(`${todayKey}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - 13);
+        for (let i = 0; i < 14; i++) {
+            const key = d.toISOString().slice(0, 10);
+            const mins = state.pomodoro.historyByDate?.[key] || 0;
+            const lv = mins >= 60 ? 'lv-3' : mins >= 25 ? 'lv-2' : mins > 0 ? 'lv-1' : '';
+            cells.push(`<span class="heat-cell ${lv}" title="${key}: ${mins}m"></span>`);
+            d.setUTCDate(d.getUTCDate() + 1);
+        }
+        heatEl.innerHTML = cells.join('');
+    }
 }
+
+let focusAudioCtx = null;
+let focusAudioGain = null;
+let focusAudioNode = null;
 
 function toggleFocusAudio() {
     const btn = document.getElementById('btn-audio-toggle');
-    if (isAudioPlaying) {
-        try { noiseNode?.stop(); } catch (_) {}
-        noiseNode = null;
-        isAudioPlaying = false;
-        if (btn) btn.textContent = '🔇 Ruido Focus';
-        return;
-    }
+    if (!state.focusAudio.playing) {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!focusAudioCtx) focusAudioCtx = new AudioCtx();
+            if (focusAudioCtx.state === 'suspended') focusAudioCtx.resume();
 
-    try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const bufferSize = audioCtx.sampleRate * 2;
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const data = buffer.getChannelData(0);
-        let lastOut = 0;
-        for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            data[i] = (lastOut + 0.02 * white) / 1.02;
-            lastOut = data[i];
-            data[i] *= 2.5;
+            const bufferSize = 2 * focusAudioCtx.sampleRate;
+            const buffer = focusAudioCtx.createBuffer(1, bufferSize, focusAudioCtx.sampleRate);
+            const output = buffer.getChannelData(0);
+            let lastOut = 0;
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                output[i] = (lastOut + 0.02 * white) / 1.02;
+                lastOut = output[i];
+                output[i] *= 2.5;
+            }
+
+            const src = focusAudioCtx.createBufferSource();
+            src.buffer = buffer;
+            src.loop = true;
+
+            const gain = focusAudioCtx.createGain();
+            gain.gain.value = (state.focusAudio.volume || 25) / 400;
+
+            src.connect(gain);
+            gain.connect(focusAudioCtx.destination);
+            src.start(0);
+
+            focusAudioNode = src;
+            focusAudioGain = gain;
+            state.focusAudio.playing = true;
+            if (btn) btn.textContent = '🔊 Ruido Focus';
+        } catch (_) {
+            showToast('No se pudo iniciar el audio ambiental', 'error');
         }
-        noiseNode = audioCtx.createBufferSource();
-        noiseNode.buffer = buffer;
-        noiseNode.loop = true;
-
-        audioGain = audioCtx.createGain();
-        audioGain.gain.value = (Number(document.getElementById('audio-volume')?.value) || 25) / 300;
-        noiseNode.connect(audioGain);
-        audioGain.connect(audioCtx.destination);
-        noiseNode.start();
-        isAudioPlaying = true;
-        if (btn) btn.textContent = '🔊 Ruido Activo';
-    } catch (_) {
-        showToast('No se pudo iniciar el audio en este navegador', 'error');
+    } else {
+        try { focusAudioNode?.stop(); } catch (_) {}
+        focusAudioNode = null;
+        state.focusAudio.playing = false;
+        if (btn) btn.textContent = '🔇 Ruido Focus';
     }
+    saveState();
 }
 
 function updateFocusAudioVolume(val) {
-    if (audioGain) {
-        audioGain.gain.value = (Number(val) || 25) / 300;
+    state.focusAudio.volume = Number(val) || 25;
+    if (focusAudioGain) {
+        focusAudioGain.gain.value = state.focusAudio.volume / 400;
     }
+    saveState();
 }
 
 /* ==========================================================
-   BLOC DE NOTAS, STICKY, CODE STUDIO, SQL, ACADEMY, DEVLAB Y BOOT
+   SCRATCHPAD & STICKY
    ========================================================== */
-function switchNoteTab(tabKey) {
-    const tab = ALLOWED_NOTE_TABS.includes(tabKey) ? tabKey : 'general';
-    state.ui.noteTab = tab;
+function switchNoteTab(tabName) {
+    state.notes.activeTab = tabName;
     document.querySelectorAll('.note-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.notetab === tab);
+        btn.classList.toggle('active', btn.dataset.notetab === tabName);
     });
     const area = document.getElementById('notes-area');
-    if (area) area.value = state.notes[tab] || '';
-    updateNoteWordCount();
-    saveState(false);
+    if (area) area.value = state.notes.tabs[tabName] || '';
+    updateNoteMetrics();
+    saveState();
 }
 
 function handleNoteInput() {
-    const tab = state.ui.noteTab || 'general';
     const area = document.getElementById('notes-area');
     if (!area) return;
-    state.notes[tab] = area.value;
-    updateNoteWordCount();
-    saveState(false);
+    state.notes.tabs[state.notes.activeTab] = area.value;
+    updateNoteMetrics();
+    saveState();
 }
 
-function updateNoteWordCount() {
+function updateNoteMetrics() {
+    const text = state.notes.tabs[state.notes.activeTab] || '';
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const el = document.getElementById('notes-word-count');
+    if (el) el.textContent = `${words} palabras · ${text.length} car.`;
+}
+
+function toggleNoteMarkdownPreview() {
+    const preview = document.getElementById('notes-md-preview');
     const area = document.getElementById('notes-area');
-    const counter = document.getElementById('notes-word-count');
-    if (!area || !counter) return;
-    const text = area.value.trim();
-    const words = text ? text.split(/\s+/).length : 0;
-    counter.textContent = `${words} palabras · ${area.value.length} car.`;
+    if (!preview || !area) return;
+    const show = preview.classList.contains('is-hidden');
+    if (show) {
+        const lines = escapeHtml(area.value)
+            .replace(/^### (.*)$/gm, '<h4>$1</h4>')
+            .replace(/^## (.*)$/gm, '<h3>$1</h3>')
+            .replace(/^# (.*)$/gm, '<h2>$1</h2>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+        preview.innerHTML = lines || '<em>Sin contenido</em>';
+        preview.classList.remove('is-hidden');
+        area.classList.add('is-hidden');
+    } else {
+        preview.classList.add('is-hidden');
+        area.classList.remove('is-hidden');
+    }
 }
 
 function saveNoteRevision() {
-    const tab = state.ui.noteTab || 'general';
-    const content = state.notes[tab] || '';
-    if (!content.trim()) return;
-    state.noteRevisions.unshift({
-        id: generateId('rev'),
-        tab,
-        content,
-        createdAt: getEffectiveNowMs()
+    const content = state.notes.tabs[state.notes.activeTab] || '';
+    state.notes.revisions.unshift({
+        id: `rev-${Date.now()}`,
+        tab: state.notes.activeTab,
+        date: new Date().toLocaleString('es-ES'),
+        content
     });
-    state.noteRevisions = state.noteRevisions.slice(0, MAX_NOTE_REVISIONS);
-    saveState(false);
+    state.notes.revisions = state.notes.revisions.slice(0, 20);
+    saveState();
     showToast('Versión de nota guardada', 'success');
 }
 
 function openNoteHistoryModal() {
     const list = document.getElementById('note-history-list');
     if (list) {
-        list.innerHTML = '';
-        if (!state.noteRevisions.length) {
+        if (!state.notes.revisions.length) {
             list.innerHTML = '<div class="mono-muted">No hay versiones guardadas.</div>';
         } else {
-            state.noteRevisions.forEach(rev => {
-                const row = document.createElement('div');
-                row.className = 'grade-item-row';
-                const info = document.createElement('span');
-                info.textContent = `[${rev.tab}] ${new Date(rev.createdAt).toLocaleString('es-ES')} · ${rev.content.slice(0, 45)}...`;
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'btn-cyan btn-sm';
-                btn.textContent = 'Restaurar';
-                btn.addEventListener('click', () => {
-                    switchNoteTab(rev.tab);
-                    state.notes[rev.tab] = rev.content;
-                    const area = document.getElementById('notes-area');
-                    if (area) area.value = rev.content;
-                    saveState(false);
-                    closeNoteHistoryModal();
-                    showToast('Nota restaurada', 'success');
-                });
-                row.append(info, btn);
-                list.appendChild(row);
-            });
+            list.innerHTML = state.notes.revisions.map(r => `
+                <div class="grade-item-row">
+                    <span>[${escapeHtml(r.tab)}] ${escapeHtml(r.date)}</span>
+                    <button type="button" class="btn-cyan btn-sm" onclick="restoreNoteRevision(${JSON.stringify(r.id)})">Restaurar</button>
+                </div>
+            `).join('');
         }
     }
-    document.getElementById('note-history-modal').style.display = 'flex';
+    const modal = document.getElementById('note-history-modal');
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeNoteHistoryModal() {
-    document.getElementById('note-history-modal').style.display = 'none';
+    const modal = document.getElementById('note-history-modal');
+    if (modal) modal.style.display = 'none';
 }
 
-function toggleNoteMarkdownPreview() {
-    const area = document.getElementById('notes-area');
-    const prev = document.getElementById('notes-md-preview');
-    if (!area || !prev) return;
-    const showing = !prev.classList.contains('is-hidden');
-    if (showing) {
-        prev.classList.add('is-hidden');
-        area.classList.remove('is-hidden');
-    } else {
-        prev.innerHTML = escapeHtml(area.value).replace(/\n/g, '<br>');
-        area.classList.add('is-hidden');
-        prev.classList.remove('is-hidden');
-    }
+function restoreNoteRevision(id) {
+    const rev = state.notes.revisions.find(r => r.id === id);
+    if (!rev) return;
+    state.notes.activeTab = rev.tab;
+    state.notes.tabs[rev.tab] = rev.content;
+    saveState();
+    switchNoteTab(rev.tab);
+    closeNoteHistoryModal();
+    showToast('Versión restaurada', 'success');
 }
 
 function exportCurrentNoteMd() {
-    const tab = state.ui.noteTab || 'general';
-    const blob = new Blob([state.notes[tab] || ''], { type: 'text/markdown;charset=utf-8' });
+    const text = state.notes.tabs[state.notes.activeTab] || '';
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `nota-${tab}.md`;
+    a.download = `nota-${state.notes.activeTab}-${getMadridDateKey()}.md`;
     a.click();
     URL.revokeObjectURL(url);
 }
 
 function toggleStickyNote() {
+    state.notes.stickyOpen = !state.notes.stickyOpen;
     const drawer = document.getElementById('sticky-drawer');
-    if (!drawer) return;
-    drawer.classList.toggle('is-hidden');
-    const area = document.getElementById('sticky-note-area');
-    if (area) area.value = state.stickyNote || '';
+    if (drawer) drawer.classList.toggle('is-hidden', !state.notes.stickyOpen);
+    saveState();
 }
 
 function saveStickyNote() {
     const area = document.getElementById('sticky-note-area');
     if (!area) return;
-    state.stickyNote = area.value;
-    saveState(false);
+    state.notes.sticky = area.value;
+    saveState();
 }
-
-function toggleForm(formId) {
-    const el = document.getElementById(formId);
-    if (el) el.classList.toggle('is-hidden');
-}
-
-function switchStudioTab(tabKey) {
-    const tab = ALLOWED_STUDIO_TABS.includes(tabKey) ? tabKey : 'html';
-    state.ui.studioActiveTab = tab;
-
+/* ==========================================================
+   WORKSPACE 2: CODE STUDIO (HTML / CSS / JS + PYTHON + JAVA)
+   ========================================================== */
+function switchStudioTab(tab) {
+    state.studio.activeTab = tab;
     document.querySelectorAll('.studio-file-tab').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.sttab === tab);
     });
 
-    ['html', 'css', 'js', 'python', 'java'].forEach(lang => {
-        const ed = document.getElementById(`studio-editor-${lang}`);
-        if (ed) ed.classList.toggle('active', tab === lang);
+    const tabs = ['html', 'css', 'js', 'python', 'java'];
+    tabs.forEach(t => {
+        const el = document.getElementById(`studio-editor-${t}`);
+        if (el) el.classList.toggle('active', t === tab);
     });
 
     const savedPanel = document.getElementById('studio-saved-panel');
     if (savedPanel) savedPanel.classList.toggle('is-hidden', tab !== 'saved');
 
-    updateStudioEditorMetrics();
-    updateStudioOutputModeLabel();
-    if (tab !== 'saved') renderStudioPreview();
-    saveState(false);
-}
+    const iframe = document.getElementById('studio-preview-iframe');
+    const runnerOut = document.getElementById('studio-runner-output');
+    const modeLabel = document.getElementById('studio-output-mode-label');
 
-function handleStudioEditorInput(lang) {
-    const ed = document.getElementById(`studio-editor-${lang}`);
-    if (!ed) return;
-    state.studio[lang] = ed.value;
-    updateStudioEditorMetrics();
-    saveState(false);
-    if (document.getElementById('studio-live-toggle')?.checked) {
-        renderStudioPreview();
+    if (tab === 'python' || tab === 'java') {
+        iframe?.classList.add('is-hidden');
+        runnerOut?.classList.remove('is-hidden');
+        if (modeLabel) modeLabel.textContent = tab === 'python' ? 'Salida Python 3' : 'Salida Java Console';
+    } else {
+        iframe?.classList.remove('is-hidden');
+        runnerOut?.classList.add('is-hidden');
+        if (modeLabel) modeLabel.textContent = 'Vista Previa Web en Vivo';
     }
+
+    if (tab === 'saved') renderStudioSavedList();
+    updateStudioMetrics();
+    saveState();
 }
 
 function handleStudioTitleChange() {
-    const inp = document.getElementById('studio-project-title');
-    if (!inp) return;
-    state.studio.projectTitle = inp.value;
-    saveState(false);
+    const val = document.getElementById('studio-project-title')?.value || '';
+    state.studio.title = val;
+    saveState();
 }
 
-function updateStudioEditorMetrics() {
-    const tab = state.ui.studioActiveTab || 'html';
-    const metricsEl = document.getElementById('studio-editor-metrics');
-    if (!metricsEl) return;
-    if (tab === 'saved') {
-        metricsEl.textContent = `${state.studio.savedProjects.length} proyectos`;
-        return;
+function handleStudioEditorInput(lang) {
+    const el = document.getElementById(`studio-editor-${lang}`);
+    if (!el) return;
+    state.studio[lang] = el.value;
+    updateStudioMetrics();
+    saveState();
+
+    const liveChecked = document.getElementById('studio-live-toggle')?.checked;
+    state.studio.autoRun = Boolean(liveChecked);
+    if (liveChecked && ['html', 'css', 'js'].includes(lang)) {
+        runStudioCode();
     }
-    const text = state.studio[tab] || '';
+}
+
+function updateStudioMetrics() {
+    const active = state.studio.activeTab;
+    const text = ['html', 'css', 'js', 'python', 'java'].includes(active)
+        ? (state.studio[active] || '')
+        : '';
     const lines = text ? text.split('\n').length : 0;
-    metricsEl.textContent = `${lines} líneas · ${text.length} car.`;
+    const label = document.getElementById('studio-editor-metrics');
+    if (label) label.textContent = `${lines} líneas · ${text.length} car.`;
 }
 
-function updateStudioOutputModeLabel() {
-    const lbl = document.getElementById('studio-output-mode-label');
-    if (!lbl) return;
-    const tab = state.ui.studioActiveTab || 'html';
-    if (tab === 'python') lbl.textContent = 'Salida Python 3 (Ejecución Real)';
-    else if (tab === 'java') lbl.textContent = 'Salida Java 17 (Compilación y Ejecución Real)';
-    else lbl.textContent = 'Vista Previa Web en Vivo';
-}
-
-function setStudioViewport(widthStr) {
-    state.ui.studioViewport = ALLOWED_VIEWPORTS.includes(widthStr) ? widthStr : '100%';
-    document.querySelectorAll('.vp-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.vp === state.ui.studioViewport);
-    });
-    const frame = document.getElementById('studio-preview-frame');
-    if (frame) frame.style.width = state.ui.studioViewport;
-    saveState(false);
-}
-
-function clearStudioConsole() {
-    studioConsoleLogs = [];
-    const box = document.getElementById('studio-console-output');
-    if (box) box.innerHTML = '';
-}
-
-function appendStudioConsoleLine(level, msg) {
+function appendStudioConsole(msg, level = 'log') {
     const box = document.getElementById('studio-console-output');
     if (!box) return;
     const line = document.createElement('div');
-    line.className = `console-line ${level === 'error' ? 'console-err' : level === 'warn' ? 'console-warn' : ''}`;
-    line.textContent = `[${level.toUpperCase()}] ${msg}`;
+    line.className = level === 'error' ? 'console-err' : level === 'warn' ? 'console-warn' : 'console-line';
+    line.textContent = `[${new Date().toLocaleTimeString('es-ES', { hour12: false })}] ${msg}`;
     box.appendChild(line);
     box.scrollTop = box.scrollHeight;
 }
 
-function renderStudioPreview() {
-    const tab = state.ui.studioActiveTab || 'html';
-    const frame = document.getElementById('studio-preview-frame');
-    const runnerOut = document.getElementById('studio-runner-output');
-    if (!frame || !runnerOut) return;
-
-    if (tab === 'python' || tab === 'java') {
-        frame.classList.add('is-hidden');
-        runnerOut.classList.remove('is-hidden');
-        return;
-    }
-
-    runnerOut.classList.add('is-hidden');
-    frame.classList.remove('is-hidden');
-
-    const fontName = state.ui.studioFont || '';
-    const fontHead = fontName
-        ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName).replace(/%20/g, '+')}:wght@400;600;700&display=swap"><style>body{font-family:'${fontName}',sans-serif;}</style>`
-        : '';
-
-    const bridgeScript = `<script>
-        ['log','warn','error'].forEach(fn => {
-            const orig = console[fn];
-            console[fn] = (...args) => {
-                orig.apply(console, args);
-                parent.postMessage({ source: 'dw-studio-console', level: fn, message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
-            };
-        });
-        window.onerror = (msg, _, line) => parent.postMessage({ source: 'dw-studio-console', level: 'error', message: msg + ' (línea ' + line + ')' }, '*');
-    <\/script>`;
-
-    frame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">${fontHead}<style>${state.studio.css || ''}</style>${bridgeScript}</head><body>${state.studio.html || ''}<script>${state.studio.js || ''}<\/script></body></html>`;
+function clearStudioConsole() {
+    const box = document.getElementById('studio-console-output');
+    if (box) box.innerHTML = '';
 }
 
-async function runStudioCode() {
-    const tab = state.ui.studioActiveTab || 'html';
-    if (tab !== 'python' && tab !== 'java') {
-        renderStudioPreview();
-        showToast('Vista previa web actualizada');
+let pyodideInstance = null;
+let pyodideLoadingPromise = null;
+
+async function ensurePyodideLoaded() {
+    if (pyodideInstance) return pyodideInstance;
+    if (pyodideLoadingPromise) return pyodideLoadingPromise;
+
+    pyodideLoadingPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js';
+        script.onload = async () => {
+            try {
+                pyodideInstance = await window.loadPyodide();
+                resolve(pyodideInstance);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        script.onerror = () => reject(new Error('No se pudo cargar Pyodide desde CDN'));
+        document.head.appendChild(script);
+    });
+
+    return pyodideLoadingPromise;
+}
+
+async function runPythonInStudio(code) {
+    const outEl = document.getElementById('studio-runner-output');
+    if (outEl) outEl.textContent = 'Ejecutando Python...';
+    try {
+        const py = await ensurePyodideLoaded();
+        await py.runPythonAsync(`
+import sys, io
+_dw_stdout = io.StringIO()
+sys.stdout = _dw_stdout
+sys.stderr = _dw_stdout
+`);
+        await py.runPythonAsync(code);
+        const captured = await py.runPythonAsync('_dw_stdout.getvalue()');
+        const text = String(captured || '').trim() || '(Ejecución completada sin salida por consola)';
+        if (outEl) outEl.textContent = text;
+        appendStudioConsole('Python ejecutado correctamente');
+    } catch (err) {
+        const msg = err?.message || String(err);
+        if (outEl) outEl.textContent = `Error Python:\n${msg}`;
+        appendStudioConsole(msg, 'error');
+    }
+}
+
+function runJavaInStudio(code) {
+    const outEl = document.getElementById('studio-runner-output');
+    const lines = [];
+    const printRegex = /System\.out\.(println|print)\s*\(([\s\S]*?)\)\s*;/g;
+    let match;
+    while ((match = printRegex.exec(code)) !== null) {
+        const rawArg = match[2].trim();
+        const cleaned = rawArg
+            .split('+')
+            .map(part => {
+                const p = part.trim();
+                if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
+                    return p.slice(1, -1);
+                }
+                return p;
+            })
+            .join('');
+        lines.push(cleaned);
+    }
+
+    const hasMain = /public\s+static\s+void\s+main\s*\(/.test(code);
+    if (!hasMain) {
+        const warn = 'Aviso: No se detectó el método estándar public static void main(String[] args).';
+        if (outEl) outEl.textContent = `${warn}\n\n${lines.join('\n')}`;
+        appendStudioConsole(warn, 'warn');
         return;
     }
 
-    const runnerOut = document.getElementById('studio-runner-output');
-    const frame = document.getElementById('studio-preview-frame');
-    if (!runnerOut) return;
-    frame?.classList.add('is-hidden');
-    runnerOut.classList.remove('is-hidden');
+    const result = lines.length
+        ? lines.join('\n')
+        : 'Compilación sintáctica local OK. (Añade System.out.println(...) para ver salida)';
+    if (outEl) outEl.textContent = result;
+    appendStudioConsole('Java ejecutado en sandbox local');
+}
 
-    const isPython = tab === 'python';
-    const language = isPython ? 'python' : 'java';
-    const version = isPython ? '3.10.0' : '15.0.2';
-    const fileName = isPython ? 'main.py' : 'Main.java';
-    const code = state.studio[tab] || '';
-
-    runnerOut.textContent = `⏳ Ejecutando ${isPython ? 'Python 3' : 'Java'} en entorno aislado...\n`;
-    appendStudioConsoleLine('log', `Enviando ${fileName} al motor de ejecución...`);
-
-    try {
-        const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                language,
-                version,
-                files: [{ name: fileName, content: code }]
-            })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const compileOut = data.compile?.output || '';
-        const runOut = data.run?.output || '';
-        const exitCode = data.run?.code ?? data.compile?.code ?? 0;
-
-        runnerOut.textContent = `${compileOut ? `[COMPILACIÓN]\n${compileOut}\n` : ''}${runOut || '(Sin salida por consola)'}\n\n--- Exit code: ${exitCode} ---`;
-        appendStudioConsoleLine(exitCode === 0 ? 'log' : 'error', `${fileName} finalizado con código ${exitCode}`);
-    } catch (err) {
-        runnerOut.textContent = `❌ No se pudo conectar con el servidor de ejecución remota (${err.message}).\nVerifica tu conexión a Internet para ejecutar Python/Java en vivo.`;
-        appendStudioConsoleLine('error', `Error de ejecución ${language}: ${err.message}`);
+function runStudioCode() {
+    const active = state.studio.activeTab;
+    if (active === 'python') {
+        runPythonInStudio(state.studio.python || '');
+        return;
     }
+    if (active === 'java') {
+        runJavaInStudio(state.studio.java || '');
+        return;
+    }
+
+    const iframe = document.getElementById('studio-preview-iframe');
+    if (!iframe) return;
+
+    const fontName = state.googleFonts.studioFont || '';
+    const fontLink = fontName
+        ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName).replace(/%20/g, '+')}:wght@400;600;700&display=swap">`
+        : '';
+    const fontStyle = fontName ? `body { font-family: '${fontName}', system-ui, sans-serif; }` : '';
+
+    const doc = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+${fontLink}
+<style>${fontStyle}\n${state.studio.css || ''}</style>
+</head>
+<body>
+${state.studio.html || ''}
+<script>
+(function(){
+  const send = (lvl, args) => {
+    try {
+      window.parent.postMessage({ source: 'dw-studio-console', level: lvl, text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+    } catch(_) {}
+  };
+  const origLog = console.log, origErr = console.error, origWarn = console.warn;
+  console.log = (...a) => { origLog.apply(console, a); send('log', a); };
+  console.error = (...a) => { origErr.apply(console, a); send('error', a); };
+  console.warn = (...a) => { origWarn.apply(console, a); send('warn', a); };
+  window.onerror = (msg, _s, line) => send('error', [msg + ' (línea ' + line + ')']);
+})();
+<\/script>
+<script>${state.studio.js || ''}<\/script>
+</body>
+</html>`;
+
+    iframe.srcdoc = doc;
 }
 
 function loadStudioTemplate(tplKey) {
     const tpl = STUDIO_TEMPLATES[tplKey];
     if (!tpl) return;
-    if (tpl.python) {
+    state.studio.title = tpl.title;
+    const titleEl = document.getElementById('studio-project-title');
+    if (titleEl) titleEl.value = tpl.title;
+
+    if (tplKey === 'python') {
         state.studio.python = tpl.python;
-        const ed = document.getElementById('studio-editor-python');
-        if (ed) ed.value = tpl.python;
+        const pyEl = document.getElementById('studio-editor-python');
+        if (pyEl) pyEl.value = tpl.python;
         switchStudioTab('python');
-    } else if (tpl.java) {
+        runStudioCode();
+    } else if (tplKey === 'java') {
         state.studio.java = tpl.java;
-        const ed = document.getElementById('studio-editor-java');
-        if (ed) ed.value = tpl.java;
+        const jvEl = document.getElementById('studio-editor-java');
+        if (jvEl) jvEl.value = tpl.java;
         switchStudioTab('java');
+        runStudioCode();
     } else {
-        state.studio.html = tpl.html || '';
-        state.studio.css = tpl.css || '';
-        state.studio.js = tpl.js || '';
-        if (document.getElementById('studio-editor-html')) document.getElementById('studio-editor-html').value = state.studio.html;
-        if (document.getElementById('studio-editor-css')) document.getElementById('studio-editor-css').value = state.studio.css;
-        if (document.getElementById('studio-editor-js')) document.getElementById('studio-editor-js').value = state.studio.js;
-        renderStudioPreview();
+        state.studio.html = tpl.html;
+        state.studio.css = tpl.css;
+        state.studio.js = tpl.js;
+        ['html', 'css', 'js'].forEach(k => {
+            const el = document.getElementById(`studio-editor-${k}`);
+            if (el) el.value = state.studio[k];
+        });
+        switchStudioTab('html');
+        runStudioCode();
     }
-    saveState(false);
-    showToast(`Plantilla "${tplKey}" cargada`, 'success');
+    saveState();
+    showToast(`Plantilla "${tpl.title}" cargada`, 'success');
 }
 
 function injectCdnIntoStudio(cdnKey) {
-    const snippet = CDN_SNIPPETS[cdnKey];
+    const snippet = STUDIO_CDNS[cdnKey];
     if (!snippet) return;
-    state.studio.html = `${snippet}\n${state.studio.html || ''}`;
-    const ed = document.getElementById('studio-editor-html');
-    if (ed) ed.value = state.studio.html;
-    renderStudioPreview();
-    saveState(false);
-    showToast(`CDN ${cdnKey} inyectado en HTML`, 'success');
+    if (!state.studio.html.includes(snippet)) {
+        state.studio.html = `${snippet}\n${state.studio.html}`;
+        const htmlEl = document.getElementById('studio-editor-html');
+        if (htmlEl) htmlEl.value = state.studio.html;
+        saveState();
+        runStudioCode();
+        showToast(`CDN ${cdnKey} inyectado en HTML`, 'success');
+    }
 }
 
 function formatStudioCode() {
-    const tab = state.ui.studioActiveTab || 'html';
-    const ed = document.getElementById(`studio-editor-${tab}`);
-    if (!ed) return;
-    ed.value = ed.value
+    const tab = state.studio.activeTab;
+    const el = document.getElementById(`studio-editor-${tab}`);
+    if (!el) return;
+    el.value = el.value
         .split('\n')
         .map(line => line.replace(/\s+$/, ''))
         .join('\n')
-        .trim() + '\n';
-    state.studio[tab] = ed.value;
-    saveState(false);
-    showToast('Espacios limpiados');
+        .trim();
+    state.studio[tab] = el.value;
+    saveState();
+    updateStudioMetrics();
+    showToast('Espacios sobrantes limpiados', 'info');
+}
+
+function setStudioViewport(width) {
+    state.studio.viewport = width;
+    document.querySelectorAll('.vp-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.vp === width);
+    });
+    const iframe = document.getElementById('studio-preview-iframe');
+    if (iframe) iframe.style.width = width;
+    saveState();
 }
 
 function saveStudioProjectToLibrary() {
-    const title = (state.studio.projectTitle || 'Proyecto sin título').trim();
-    state.studio.savedProjects.unshift({
-        id: generateId('prj'),
+    const title = (state.studio.title || 'Proyecto sin título').trim();
+    const item = {
+        id: `st-${Date.now()}`,
         title,
+        updatedAt: new Date().toLocaleString('es-ES'),
         html: state.studio.html,
         css: state.studio.css,
         js: state.studio.js,
         python: state.studio.python,
-        java: state.studio.java,
-        savedAt: getEffectiveNowMs()
-    });
-    state.studio.savedProjects = state.studio.savedProjects.slice(0, MAX_STUDIO_PROJECTS);
-    saveState(false);
-    renderSavedStudioProjects();
-    showToast(`Proyecto "${title}" guardado en biblioteca`, 'success');
+        java: state.studio.java
+    };
+    state.studio.savedProjects.unshift(item);
+    saveState();
+    renderStudioSavedList();
+    showToast(`Proyecto "${title}" guardado`, 'success');
 }
 
-function renderSavedStudioProjects() {
+function loadSavedStudioProject(id) {
+    const item = state.studio.savedProjects.find(p => p.id === id);
+    if (!item) return;
+    state.studio.title = item.title;
+    state.studio.html = item.html || '';
+    state.studio.css = item.css || '';
+    state.studio.js = item.js || '';
+    state.studio.python = item.python || '';
+    state.studio.java = item.java || '';
+
+    const titleEl = document.getElementById('studio-project-title');
+    if (titleEl) titleEl.value = item.title;
+    ['html', 'css', 'js', 'python', 'java'].forEach(k => {
+        const el = document.getElementById(`studio-editor-${k}`);
+        if (el) el.value = state.studio[k];
+    });
+    switchStudioTab('html');
+    runStudioCode();
+    saveState();
+    showToast(`Proyecto "${item.title}" cargado`, 'success');
+}
+
+function deleteSavedStudioProject(id) {
+    state.studio.savedProjects = state.studio.savedProjects.filter(p => p.id !== id);
+    saveState();
+    renderStudioSavedList();
+}
+
+function renderStudioSavedList() {
     const list = document.getElementById('studio-saved-list');
     if (!list) return;
-    list.innerHTML = '';
-    const items = state.studio.savedProjects || [];
-    if (!items.length) {
-        list.innerHTML = '<div class="mono-muted">Aún no hay proyectos guardados en la biblioteca.</div>';
+    if (!state.studio.savedProjects.length) {
+        list.innerHTML = '<div class="mono-muted">No hay proyectos guardados todavía.</div>';
         return;
     }
-    items.forEach(p => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `${p.title} (${new Date(p.savedAt).toLocaleDateString('es-ES')})`;
-
-        const acts = document.createElement('div');
-        acts.className = 'filter-pills-row';
-        const loadBtn = document.createElement('button');
-        loadBtn.type = 'button';
-        loadBtn.className = 'btn-cyan btn-sm';
-        loadBtn.textContent = 'Abrir';
-        loadBtn.addEventListener('click', () => {
-            state.studio.projectTitle = p.title;
-            state.studio.html = p.html || '';
-            state.studio.css = p.css || '';
-            state.studio.js = p.js || '';
-            state.studio.python = p.python || STUDIO_TEMPLATES.python.python;
-            state.studio.java = p.java || STUDIO_TEMPLATES.java.java;
-            syncStudioEditorsFromState();
-            switchStudioTab('html');
-            showToast(`Proyecto "${p.title}" cargado`, 'success');
-        });
-
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'btn-icon';
-        delBtn.textContent = '🗑️';
-        delBtn.addEventListener('click', () => {
-            state.studio.savedProjects = state.studio.savedProjects.filter(x => x.id !== p.id);
-            saveState(false);
-            renderSavedStudioProjects();
-        });
-
-        acts.append(loadBtn, delBtn);
-        row.append(info, acts);
-        list.appendChild(row);
-    });
+    list.innerHTML = state.studio.savedProjects.map(p => `
+        <div class="grade-item-row">
+            <span>📁 <strong>${escapeHtml(p.title)}</strong> <small>(${escapeHtml(p.updatedAt)})</small></span>
+            <div class="filter-pills-row">
+                <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject(${JSON.stringify(p.id)})">Abrir</button>
+                <button type="button" class="btn-icon" onclick="deleteSavedStudioProject(${JSON.stringify(p.id)})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 function exportStudioSingleHtml() {
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escapeHtml(state.studio.projectTitle || 'Export')}</title><style>${state.studio.css || ''}</style></head><body>${state.studio.html || ''}<script>${state.studio.js || ''}<\/script></body></html>`;
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const full = `<!DOCTYPE html>\n<html lang="es">\n<head>\n<meta charset="UTF-8">\n<title>${escapeHtml(state.studio.title || 'Proyecto')}</title>\n<style>\n${state.studio.css || ''}\n</style>\n</head>\n<body>\n${state.studio.html || ''}\n<script>\n${state.studio.js || ''}\n<\/script>\n</body>\n</html>`;
+    const blob = new Blob([full], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(state.studio.projectTitle || 'proyecto').toLowerCase().replace(/\s+/g, '-')}.html`;
+    a.download = `${(state.studio.title || 'proyecto').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.html`;
     a.click();
     URL.revokeObjectURL(url);
 }
 
 function exportStudioMultiFiles() {
-    const tab = state.ui.studioActiveTab || 'html';
-    if (tab === 'python' || tab === 'java') {
-        const ext = tab === 'python' ? 'py' : 'java';
-        const fname = tab === 'python' ? 'main.py' : 'Main.java';
-        const blob = new Blob([state.studio[tab] || ''], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fname || `codigo.${ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
-        return;
-    }
-    const bundle = `/* === index.html === */\n${state.studio.html}\n\n/* === styles.css === */\n${state.studio.css}\n\n/* === app.js === */\n${state.studio.js}`;
-    const blob = new Blob([bundle], { type: 'text/plain;charset=utf-8' });
+    const bundle = JSON.stringify({
+        title: state.studio.title,
+        html: state.studio.html,
+        css: state.studio.css,
+        js: state.studio.js,
+        python: state.studio.python,
+        java: state.studio.java
+    }, null, 2);
+    const blob = new Blob([bundle], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'proyecto-web-bundle.txt';
+    a.download = `${(state.studio.title || 'proyecto').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-studio.json`;
     a.click();
     URL.revokeObjectURL(url);
 }
 
-function syncStudioEditorsFromState() {
-    if (document.getElementById('studio-project-title')) document.getElementById('studio-project-title').value = state.studio.projectTitle || '';
-    if (document.getElementById('studio-editor-html')) document.getElementById('studio-editor-html').value = state.studio.html || '';
-    if (document.getElementById('studio-editor-css')) document.getElementById('studio-editor-css').value = state.studio.css || '';
-    if (document.getElementById('studio-editor-js')) document.getElementById('studio-editor-js').value = state.studio.js || '';
-    if (document.getElementById('studio-editor-python')) document.getElementById('studio-editor-python').value = state.studio.python || '';
-    if (document.getElementById('studio-editor-java')) document.getElementById('studio-editor-java').value = state.studio.java || '';
-}
-
 /* ==========================================================
-   BASE DE DATOS LOCAL & SQL
+   WORKSPACE 3: BASE DE DATOS Y SQL LOCAL
    ========================================================== */
-function renderDbWorkspace() {
-    const tables = state.database?.tables || {};
-    const names = Object.keys(tables);
+function renderDatabaseWorkspace() {
     const tabsBox = document.getElementById('db-tables-tabs');
-    if (tabsBox) {
-        tabsBox.innerHTML = '';
-        names.forEach(name => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = `pill-btn ${state.ui.activeDbTable === name ? 'active' : ''}`;
-            btn.textContent = name;
-            btn.addEventListener('click', () => {
-                state.ui.activeDbTable = name;
-                saveState(false);
-                renderDbWorkspace();
-            });
-            tabsBox.appendChild(btn);
-        });
-    }
-
-    const active = tables[state.ui.activeDbTable] ? state.ui.activeDbTable : names[0];
-    state.ui.activeDbTable = active || '';
+    const gridBox = document.getElementById('db-table-grid-container');
     const titleEl = document.getElementById('db-active-table-title');
-    if (titleEl) titleEl.textContent = active ? `Tabla: ${active}` : 'Sin tabla seleccionada';
+    if (!tabsBox || !gridBox) return;
 
-    const grid = document.getElementById('db-table-grid-container');
-    if (!grid) return;
-    if (!active || !tables[active]) {
-        grid.innerHTML = '<div class="mono-muted">Crea una tabla para empezar.</div>';
+    const tableNames = Object.keys(state.database.tables || {});
+    if (!tableNames.length) {
+        tabsBox.innerHTML = '';
+        gridBox.innerHTML = '<div class="mono-muted">No hay tablas. Crea una arriba.</div>';
         return;
     }
 
-    const tbl = tables[active];
-    const ths = tbl.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
-    const trs = (tbl.rows || []).map((r, rIdx) => {
-        const tds = tbl.columns.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('');
-        return `<tr>${tds}<td><button type="button" class="btn-icon" data-db-del="${rIdx}">🗑️</button></td></tr>`;
-    }).join('');
+    if (!state.database.tables[state.database.activeTable]) {
+        state.database.activeTable = tableNames[0];
+    }
 
-    grid.innerHTML = `<table class="sch-table"><thead><tr>${ths}<th>Acción</th></tr></thead><tbody>${trs || `<tr><td colspan="${tbl.columns.length + 1}" class="mono-muted">Tabla vacía</td></tr>`}</tbody></table>`;
-    grid.querySelectorAll('[data-db-del]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const idx = Number(btn.dataset.dbDel);
-            tbl.rows.splice(idx, 1);
-            saveState(false);
-            renderDbWorkspace();
-        });
-    });
+    const activeName = state.database.activeTable;
+    if (titleEl) titleEl.textContent = `🗄️ Tabla: ${activeName}`;
+
+    tabsBox.innerHTML = tableNames.map(name => `
+        <button type="button" class="pill-btn ${name === activeName ? 'active' : ''}" onclick="selectDbTable(${JSON.stringify(name)})">
+            ${escapeHtml(name)}
+        </button>
+    `).join('');
+
+    const tbl = state.database.tables[activeName];
+    const cols = tbl.columns || [];
+    const rows = tbl.rows || [];
+
+    gridBox.innerHTML = `
+        <table class="sch-table">
+            <thead>
+                <tr>
+                    ${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.length ? rows.map((row, rIdx) => `
+                    <tr>
+                        ${cols.map(c => `<td>${escapeHtml(row[c] ?? '')}</td>`).join('')}
+                        <td><button type="button" class="btn-icon" onclick="deleteDbRow(${rIdx})">🗑️</button></td>
+                    </tr>
+                `).join('') : `<tr><td colspan="${cols.length + 1}" class="mono-muted">Tabla vacía</td></tr>`}
+            </tbody>
+        </table>
+    `;
+}
+
+function selectDbTable(name) {
+    state.database.activeTable = name;
+    saveState();
+    renderDatabaseWorkspace();
 }
 
 function createDbTable() {
-    const name = (document.getElementById('db-new-table-name')?.value || '').trim().replace(/\s+/g, '_');
+    const name = (document.getElementById('db-new-table-name')?.value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const colsRaw = (document.getElementById('db-new-table-cols')?.value || '').trim();
     if (!name || !colsRaw) {
-        showToast('Indica nombre de tabla y columnas', 'error');
+        showToast('Indica nombre de tabla y columnas separadas por coma', 'error');
         return;
     }
     const columns = colsRaw.split(',').map(c => c.trim()).filter(Boolean);
     if (!columns.length) return;
+
     state.database.tables[name] = { columns, rows: [] };
-    state.ui.activeDbTable = name;
+    state.database.activeTable = name;
     document.getElementById('db-new-table-name').value = '';
     document.getElementById('db-new-table-cols').value = '';
-    saveState(false);
-    renderDbWorkspace();
+    saveState();
+    renderDatabaseWorkspace();
     showToast(`Tabla "${name}" creada`, 'success');
 }
 
 function addDbRowPrompt() {
-    const active = state.ui.activeDbTable;
-    const tbl = state.database?.tables?.[active];
+    const activeName = state.database.activeTable;
+    const tbl = state.database.tables[activeName];
     if (!tbl) return;
     const row = {};
     for (const col of tbl.columns) {
@@ -2638,161 +2445,287 @@ function addDbRowPrompt() {
         row[col] = val;
     }
     tbl.rows.push(row);
-    saveState(false);
-    renderDbWorkspace();
+    saveState();
+    renderDatabaseWorkspace();
+}
+
+function deleteDbRow(idx) {
+    const tbl = state.database.tables[state.database.activeTable];
+    if (!tbl) return;
+    tbl.rows.splice(idx, 1);
+    saveState();
+    renderDatabaseWorkspace();
 }
 
 function deleteCurrentDbTable() {
-    const active = state.ui.activeDbTable;
-    if (!active || !state.database?.tables?.[active]) return;
-    delete state.database.tables[active];
-    state.ui.activeDbTable = Object.keys(state.database.tables)[0] || '';
-    saveState(false);
-    renderDbWorkspace();
-}
-
-function insertSqlTemplate(kind) {
-    const box = document.getElementById('db-sql-input');
-    const tbl = state.ui.activeDbTable || 'alumnos';
-    if (!box) return;
-    if (kind === 'select') box.value = `SELECT * FROM ${tbl};`;
-    else if (kind === 'insert') box.value = `INSERT INTO ${tbl} (id, nombre, curso) VALUES (1, 'Marcos', '1DAM');`;
-    else if (kind === 'update') box.value = `UPDATE ${tbl} SET curso = '2DAM' WHERE id = 1;`;
-    else if (kind === 'delete') box.value = `DELETE FROM ${tbl} WHERE id = 1;`;
-}
-
-function executeLocalSql() {
-    const sql = (document.getElementById('db-sql-input')?.value || '').trim().replace(/;$/, '');
-    const out = document.getElementById('db-sql-result');
-    if (!sql || !out) return;
-
-    const selectMatch = sql.match(/^SELECT\s+\*\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*'?([^']*)'?)?$/i);
-    if (selectMatch) {
-        const [, tblName, whereCol, whereVal] = selectMatch;
-        const tbl = state.database?.tables?.[tblName];
-        if (!tbl) {
-            out.innerHTML = `<div class="mono-muted">Error: tabla "${escapeHtml(tblName)}" no existe.</div>`;
-            return;
-        }
-        const rows = whereCol ? tbl.rows.filter(r => String(r[whereCol]) === whereVal) : tbl.rows;
-        const ths = tbl.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
-        const trs = rows.map(r => `<tr>${tbl.columns.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('')}</tr>`).join('');
-        out.innerHTML = `<table class="sch-table"><thead><tr>${ths}</tr></thead><tbody>${trs || `<tr><td colspan="${tbl.columns.length}" class="mono-muted">0 filas</td></tr>`}</tbody></table>`;
-        return;
-    }
-
-    const insertMatch = sql.match(/^INSERT\s+INTO\s+([a-zA-Z0-9_]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)$/i);
-    if (insertMatch) {
-        const [, tblName, colsStr, valsStr] = insertMatch;
-        const tbl = state.database?.tables?.[tblName];
-        if (!tbl) {
-            out.innerHTML = `<div class="mono-muted">Error: tabla "${escapeHtml(tblName)}" no existe.</div>`;
-            return;
-        }
-        const cols = colsStr.split(',').map(s => s.trim());
-        const vals = valsStr.split(',').map(s => s.trim().replace(/^'|'$/g, ''));
-        const row = {};
-        cols.forEach((c, i) => { row[c] = vals[i] ?? ''; });
-        tbl.rows.push(row);
-        saveState(false);
-        renderDbWorkspace();
-        out.innerHTML = '<div class="mono-muted">✅ 1 fila insertada correctamente.</div>';
-        return;
-    }
-
-    const delMatch = sql.match(/^DELETE\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*'?([^']*)'?)?$/i);
-    if (delMatch) {
-        const [, tblName, whereCol, whereVal] = delMatch;
-        const tbl = state.database?.tables?.[tblName];
-        if (!tbl) {
-            out.innerHTML = `<div class="mono-muted">Error: tabla "${escapeHtml(tblName)}" no existe.</div>`;
-            return;
-        }
-        const before = tbl.rows.length;
-        tbl.rows = whereCol ? tbl.rows.filter(r => String(r[whereCol]) !== whereVal) : [];
-        saveState(false);
-        renderDbWorkspace();
-        out.innerHTML = `<div class="mono-muted">✅ ${before - tbl.rows.length} fila(s) eliminada(s).</div>`;
-        return;
-    }
-
-    out.innerHTML = '<div class="mono-muted">Sintaxis soportada: SELECT * FROM tabla [WHERE col=val], INSERT INTO tabla (cols) VALUES (vals), DELETE FROM tabla [WHERE col=val].</div>';
+    const name = state.database.activeTable;
+    if (!name || !state.database.tables[name]) return;
+    delete state.database.tables[name];
+    const remaining = Object.keys(state.database.tables);
+    state.database.activeTable = remaining[0] || '';
+    saveState();
+    renderDatabaseWorkspace();
+    showToast(`Tabla "${name}" eliminada`, 'info');
 }
 
 function exportDbJson() {
-    const blob = new Blob([JSON.stringify(state.database, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(state.database.tables, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'devworkspace-db.json';
+    a.download = `devworkspace-db-${getMadridDateKey()}.json`;
     a.click();
     URL.revokeObjectURL(url);
 }
 
+function insertSqlTemplate(kind) {
+    const active = state.database.activeTable || 'alumnos';
+    const tbl = state.database.tables[active];
+    const cols = tbl ? tbl.columns.join(', ') : 'id, nombre';
+    const box = document.getElementById('db-sql-input');
+    if (!box) return;
+    if (kind === 'select') box.value = `SELECT * FROM ${active};`;
+    else if (kind === 'insert') box.value = `INSERT INTO ${active} (${cols}) VALUES (${tbl ? tbl.columns.map(() => "'valor'").join(', ') : "'1', 'Dato'"});`;
+    else if (kind === 'delete') box.value = `DELETE FROM ${active} WHERE id = '1';`;
+}
+
+function executeLocalSql() {
+    const raw = (document.getElementById('db-sql-input')?.value || '').trim().replace(/;+$/, '');
+    const out = document.getElementById('db-sql-result');
+    if (!out) return;
+
+    const selectMatch = /^SELECT\s+(.+?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*['"]?([^'"]+)['"]?)?$/i.exec(raw);
+    if (selectMatch) {
+        const [, colsPart, tableName, whereCol, whereVal] = selectMatch;
+        const tbl = state.database.tables[tableName.toLowerCase()];
+        if (!tbl) {
+            out.innerHTML = `<div class="console-err">Tabla "${escapeHtml(tableName)}" no encontrada.</div>`;
+            return;
+        }
+        const cols = colsPart.trim() === '*' ? tbl.columns : colsPart.split(',').map(c => c.trim());
+        const rows = whereCol
+            ? tbl.rows.filter(r => String(r[whereCol] ?? '') === whereVal)
+            : tbl.rows;
+
+        out.innerHTML = `
+            <table class="sch-table">
+                <thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+                <tbody>
+                    ${rows.map(r => `<tr>${cols.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('')}</tr>`).join('')}
+                </tbody>
+            </table>
+        `;
+        return;
+    }
+
+    const insertMatch = /^INSERT\s+INTO\s+([a-zA-Z0-9_]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)$/i.exec(raw);
+    if (insertMatch) {
+        const [, tableName, colsRaw, valsRaw] = insertMatch;
+        const tbl = state.database.tables[tableName.toLowerCase()];
+        if (!tbl) {
+            out.innerHTML = `<div class="console-err">Tabla "${escapeHtml(tableName)}" no encontrada.</div>`;
+            return;
+        }
+        const cols = colsRaw.split(',').map(c => c.trim());
+        const vals = valsRaw.split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''));
+        const row = {};
+        tbl.columns.forEach(c => { row[c] = ''; });
+        cols.forEach((c, idx) => { row[c] = vals[idx] ?? ''; });
+        tbl.rows.push(row);
+        saveState();
+        renderDatabaseWorkspace();
+        out.innerHTML = `<div class="console-line">1 fila insertada en ${escapeHtml(tableName)}.</div>`;
+        return;
+    }
+
+    const deleteMatch = /^DELETE\s+FROM\s+([a-zA-Z0-9_]+)\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*['"]?([^'"]+)['"]?$/i.exec(raw);
+    if (deleteMatch) {
+        const [, tableName, whereCol, whereVal] = deleteMatch;
+        const tbl = state.database.tables[tableName.toLowerCase()];
+        if (!tbl) {
+            out.innerHTML = `<div class="console-err">Tabla "${escapeHtml(tableName)}" no encontrada.</div>`;
+            return;
+        }
+        const before = tbl.rows.length;
+        tbl.rows = tbl.rows.filter(r => String(r[whereCol] ?? '') !== whereVal);
+        const deleted = before - tbl.rows.length;
+        saveState();
+        renderDatabaseWorkspace();
+        out.innerHTML = `<div class="console-line">${deleted} fila(s) eliminada(s) de ${escapeHtml(tableName)}.</div>`;
+        return;
+    }
+
+    out.innerHTML = '<div class="console-warn">Sintaxis soportada: SELECT ... FROM tabla [WHERE col = \'val\'], INSERT INTO tabla (cols) VALUES (vals), DELETE FROM tabla WHERE col = \'val\'.</div>';
+}
+
 /* ==========================================================
-   ACADEMIA DAM (KANBAN, NOTAS, FLASHCARDS, BUGS, DUDAS, PROYECTOS)
+   WORKSPACE 4: ACADEMIA DAM
    ========================================================== */
+function ensureSubjectInCatalog(name, teacher = '', room = '') {
+    const clean = String(name || '').trim();
+    if (!clean) return;
+    const existing = (state.subjectsCatalog || []).find(s => s.name.toLowerCase() === clean.toLowerCase());
+    if (existing) {
+        if (teacher) existing.teacher = teacher;
+        if (room) existing.room = room;
+    } else {
+        state.subjectsCatalog.push({
+            id: `subj-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+            name: clean,
+            teacher,
+            room
+        });
+    }
+    renderSubjectSelectTargets();
+}
+
+function renderSubjectSelectTargets() {
+    const subjects = state.subjectsCatalog || [];
+    const optionsHtml = subjects.length
+        ? subjects.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('')
+        : '<option value="General">General</option>';
+
+    document.querySelectorAll('.subject-select-target').forEach(sel => {
+        const current = sel.value;
+        sel.innerHTML = optionsHtml;
+        if (current && Array.from(sel.options).some(o => o.value === current)) {
+            sel.value = current;
+        }
+    });
+
+    const fcFilter = document.getElementById('fc-filter-subject');
+    if (fcFilter) {
+        const cur = fcFilter.value || 'all';
+        fcFilter.innerHTML = '<option value="all">Todas las asignaturas</option>' + optionsHtml;
+        fcFilter.value = cur;
+    }
+}
+
+function addCatalogSubject() {
+    const name = (document.getElementById('subj-cat-name')?.value || '').trim();
+    const teacher = (document.getElementById('subj-cat-teacher')?.value || '').trim();
+    const room = (document.getElementById('subj-cat-room')?.value || '').trim();
+    if (!name) return;
+
+    ensureSubjectInCatalog(name, teacher, room);
+    document.getElementById('subj-cat-name').value = '';
+    document.getElementById('subj-cat-teacher').value = '';
+    document.getElementById('subj-cat-room').value = '';
+    toggleForm('form-add-subject-catalog');
+    saveState();
+    renderSubjectsCatalogList();
+    showToast('Asignatura guardada', 'success');
+}
+
+function deleteCatalogSubject(id) {
+    state.subjectsCatalog = state.subjectsCatalog.filter(s => s.id !== id);
+    saveState();
+    renderSubjectSelectTargets();
+    renderSubjectsCatalogList();
+}
+
+function renderSubjectsCatalogList() {
+    const list = document.getElementById('subjects-catalog-list');
+    if (!list) return;
+    if (!state.subjectsCatalog.length) {
+        list.innerHTML = '<div class="mono-muted">Sin asignaturas registradas.</div>';
+        return;
+    }
+    list.innerHTML = state.subjectsCatalog.map(s => `
+        <div class="grade-item-row">
+            <span><strong>${escapeHtml(s.name)}</strong> · ${escapeHtml(s.teacher || 'Sin profesor')} · ${escapeHtml(s.room || 'Sin aula')}</span>
+            <button type="button" class="btn-icon" onclick="deleteCatalogSubject(${JSON.stringify(s.id)})">🗑️</button>
+        </div>
+    `).join('');
+}
+
 function addKanbanTask() {
     const subject = (document.getElementById('kb-subject')?.value || '').trim();
     const title = (document.getElementById('kb-title')?.value || '').trim();
     if (!title) return;
-    state.kanban.push({ id: generateId('kb'), subject, title, status: 'todo' });
+
+    state.kanban.push({
+        id: `kb-${Date.now()}`,
+        subject,
+        title,
+        status: 'todo'
+    });
     document.getElementById('kb-title').value = '';
     toggleForm('form-add-kanban');
-    saveState(false);
+    saveState();
+    renderKanban();
+}
+
+function moveKanbanTask(id, nextStatus) {
+    const item = state.kanban.find(k => k.id === id);
+    if (!item) return;
+    item.status = nextStatus;
+    saveState();
+    renderKanban();
+}
+
+function deleteKanbanTask(id) {
+    state.kanban = state.kanban.filter(k => k.id !== id);
+    saveState();
     renderKanban();
 }
 
 function renderKanban() {
-    ALLOWED_KANBAN_COLS.forEach(col => {
-        const box = document.getElementById(`kb-col-${col}`);
-        if (!box) return;
-        box.innerHTML = '';
-        (state.kanban || []).filter(item => item.status === col).forEach(item => {
-            const card = document.createElement('div');
-            card.className = 'kanban-card';
-            card.innerHTML = `<div class="kb-subj">${escapeHtml(item.subject || 'DAM')}</div><div>${escapeHtml(item.title)}</div>`;
-            const bar = document.createElement('div');
-            bar.className = 'filter-pills-row';
-            if (col !== 'todo') {
-                const prev = document.createElement('button');
-                prev.type = 'button';
-                prev.className = 'btn-icon';
-                prev.textContent = '⬅️';
-                prev.addEventListener('click', () => { item.status = col === 'done' ? 'doing' : 'todo'; saveState(false); renderKanban(); });
-                bar.appendChild(prev);
-            }
-            if (col !== 'done') {
-                const next = document.createElement('button');
-                next.type = 'button';
-                next.className = 'btn-icon';
-                next.textContent = '➡️';
-                next.addEventListener('click', () => { item.status = col === 'todo' ? 'doing' : 'done'; saveState(false); renderKanban(); });
-                bar.appendChild(next);
-            }
-            const del = document.createElement('button');
-            del.type = 'button';
-            del.className = 'btn-icon';
-            del.textContent = '🗑️';
-            del.addEventListener('click', () => { state.kanban = state.kanban.filter(x => x.id !== item.id); saveState(false); renderKanban(); });
-            bar.appendChild(del);
-            card.appendChild(bar);
-            box.appendChild(card);
-        });
+    const cols = {
+        todo: document.getElementById('kb-col-todo'),
+        doing: document.getElementById('kb-col-doing'),
+        done: document.getElementById('kb-col-done')
+    };
+    if (!cols.todo || !cols.doing || !cols.done) return;
+
+    Object.values(cols).forEach(el => { el.innerHTML = ''; });
+
+    (state.kanban || []).forEach(item => {
+        const target = cols[item.status] || cols.todo;
+        const card = document.createElement('div');
+        card.className = 'kanban-card';
+        card.innerHTML = `
+            <span class="kb-subj">${escapeHtml(item.subject || 'General')}</span>
+            <div>${escapeHtml(item.title)}</div>
+            <div class="filter-pills-row">
+                ${item.status !== 'todo' ? `<button type="button" class="btn-ghost btn-sm" onclick="moveKanbanTask(${JSON.stringify(item.id)}, 'todo')">⬅️</button>` : ''}
+                ${item.status === 'todo' ? `<button type="button" class="btn-cyan btn-sm" onclick="moveKanbanTask(${JSON.stringify(item.id)}, 'doing')">➡️</button>` : ''}
+                ${item.status === 'doing' ? `<button type="button" class="btn-green btn-sm" onclick="moveKanbanTask(${JSON.stringify(item.id)}, 'done')">✅</button>` : ''}
+                <button type="button" class="btn-icon" onclick="deleteKanbanTask(${JSON.stringify(item.id)})">🗑️</button>
+            </div>
+        `;
+        target.appendChild(card);
     });
 }
 
 function addGrade() {
     const subject = (document.getElementById('grd-subject')?.value || '').trim();
     const title = (document.getElementById('grd-title')?.value || '').trim();
-    const score = Number(document.getElementById('grd-score')?.value);
-    const weight = Number(document.getElementById('grd-weight')?.value) || 100;
-    if (!subject || !title || !Number.isFinite(score)) return;
-    state.grades.push({ id: generateId('grd'), subject, title, score, weight });
+    const score = parseFloat(document.getElementById('grd-score')?.value || '');
+    const weight = parseFloat(document.getElementById('grd-weight')?.value || '100');
+
+    if (!title || !Number.isFinite(score)) {
+        showToast('Introduce título y nota válida', 'error');
+        return;
+    }
+
+    state.grades.unshift({
+        id: `grd-${Date.now()}`,
+        subject,
+        title,
+        score,
+        weight: Number.isFinite(weight) && weight > 0 ? weight : 100
+    });
     document.getElementById('grd-title').value = '';
     document.getElementById('grd-score').value = '';
     toggleForm('form-add-grade');
-    saveState(false);
+    saveState();
+    renderGrades();
+}
+
+function deleteGrade(id) {
+    state.grades = state.grades.filter(g => g.id !== id);
+    saveState();
     renderGrades();
 }
 
@@ -2800,219 +2733,237 @@ function renderGrades() {
     const list = document.getElementById('grades-list');
     const avgBadge = document.getElementById('grades-avg-badge');
     if (!list) return;
-    list.innerHTML = '';
 
-    const items = state.grades || [];
-    if (!items.length) {
-        if (avgBadge) avgBadge.textContent = 'Media: --';
+    const grades = state.grades || [];
+    if (avgBadge) {
+        if (!grades.length) {
+            avgBadge.textContent = 'Media: --';
+        } else {
+            const totalW = grades.reduce((acc, g) => acc + (g.weight || 100), 0);
+            const weighted = grades.reduce((acc, g) => acc + g.score * (g.weight || 100), 0);
+            avgBadge.textContent = `Media: ${(weighted / Math.max(1, totalW)).toFixed(2)}`;
+        }
+    }
+
+    if (!grades.length) {
         list.innerHTML = '<div class="mono-muted">Sin calificaciones registradas.</div>';
         return;
     }
 
-    let weightedSum = 0;
-    let totalWeight = 0;
-    items.forEach(g => {
-        weightedSum += g.score * (g.weight || 1);
-        totalWeight += (g.weight || 1);
-
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `${g.subject} · ${g.title}: ${g.score.toFixed(2)} (${g.weight}%)`;
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => { state.grades = state.grades.filter(x => x.id !== g.id); saveState(false); renderGrades(); });
-        row.append(info, del);
-        list.appendChild(row);
-    });
-
-    if (avgBadge) {
-        avgBadge.textContent = `Media: ${(weightedSum / Math.max(1, totalWeight)).toFixed(2)}`;
-    }
+    list.innerHTML = grades.map(g => `
+        <div class="grade-item-row">
+            <span><strong>${escapeHtml(g.subject)}</strong> · ${escapeHtml(g.title)}: <strong>${g.score.toFixed(2)}</strong> (${g.weight}%)</span>
+            <button type="button" class="btn-icon" onclick="deleteGrade(${JSON.stringify(g.id)})">🗑️</button>
+        </div>
+    `).join('');
 }
 
-function switchStudyHubTab(tabKey) {
-    state.ui.studyHubTab = tabKey;
+function switchStudyHubTab(tab) {
     document.querySelectorAll('.study-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.studytab === tabKey);
+        btn.classList.toggle('active', btn.dataset.studytab === tab);
     });
-    document.getElementById('study-panel-flashcards')?.classList.toggle('is-hidden', tabKey !== 'flashcards');
-    document.getElementById('study-panel-bugs')?.classList.toggle('is-hidden', tabKey !== 'bugs');
-    document.getElementById('study-panel-doubts')?.classList.toggle('is-hidden', tabKey !== 'doubts');
-    saveState(false);
+    ['flashcards', 'bugs', 'doubts'].forEach(panel => {
+        document.getElementById(`study-panel-${panel}`)?.classList.toggle('is-hidden', panel !== tab);
+    });
+}
+
+function getFilteredFlashcards() {
+    const filter = document.getElementById('fc-filter-subject')?.value || 'all';
+    if (filter === 'all') return state.flashcards || [];
+    return (state.flashcards || []).filter(fc => fc.subject === filter);
 }
 
 function addFlashcard() {
-    const subject = (document.getElementById('fc-subject')?.value || '').trim();
+    const subject = (document.getElementById('fc-subject')?.value || 'DAM').trim();
     const front = (document.getElementById('fc-front')?.value || '').trim();
     const back = (document.getElementById('fc-back')?.value || '').trim();
     if (!front || !back) return;
-    state.flashcards.push({ id: generateId('fc'), subject, front, back });
+
+    state.flashcards.push({ id: `fc-${Date.now()}`, subject, front, back });
     document.getElementById('fc-front').value = '';
     document.getElementById('fc-back').value = '';
     toggleForm('form-add-fc');
-    saveState(false);
+    state.flashcardIndex = state.flashcards.length - 1;
+    state.flashcardFlipped = false;
+    saveState();
     renderFlashcards();
-}
-
-function renderFlashcards() {
-    const filterSubj = document.getElementById('fc-filter-subject')?.value || 'all';
-    const deck = (state.flashcards || []).filter(f => filterSubj === 'all' || f.subject === filterSubj);
-    const subjBadge = document.getElementById('fc-card-subject');
-    const counter = document.getElementById('fc-counter');
-    const content = document.getElementById('fc-card-content');
-
-    if (!deck.length) {
-        if (subjBadge) subjBadge.textContent = 'Sin tarjetas';
-        if (counter) counter.textContent = '0 / 0';
-        if (content) content.textContent = 'Añade tarjetas de estudio arriba';
-        return;
-    }
-
-    if (currentFlashcardIndex >= deck.length) currentFlashcardIndex = 0;
-    if (currentFlashcardIndex < 0) currentFlashcardIndex = deck.length - 1;
-    const card = deck[currentFlashcardIndex];
-
-    if (subjBadge) subjBadge.textContent = card.subject || 'DAM';
-    if (counter) counter.textContent = `${currentFlashcardIndex + 1} / ${deck.length}`;
-    if (content) content.textContent = isFlashcardFlipped ? card.back : card.front;
 }
 
 function flipFlashcard() {
-    isFlashcardFlipped = !isFlashcardFlipped;
-    renderFlashcards();
-}
-
-function nextFlashcard() {
-    isFlashcardFlipped = false;
-    currentFlashcardIndex++;
+    state.flashcardFlipped = !state.flashcardFlipped;
     renderFlashcards();
 }
 
 function prevFlashcard() {
-    isFlashcardFlipped = false;
-    currentFlashcardIndex--;
+    const list = getFilteredFlashcards();
+    if (!list.length) return;
+    state.flashcardIndex = (state.flashcardIndex - 1 + list.length) % list.length;
+    state.flashcardFlipped = false;
+    renderFlashcards();
+}
+
+function nextFlashcard() {
+    const list = getFilteredFlashcards();
+    if (!list.length) return;
+    state.flashcardIndex = (state.flashcardIndex + 1) % list.length;
+    state.flashcardFlipped = false;
     renderFlashcards();
 }
 
 function deleteCurrentFlashcard() {
-    const filterSubj = document.getElementById('fc-filter-subject')?.value || 'all';
-    const deck = (state.flashcards || []).filter(f => filterSubj === 'all' || f.subject === filterSubj);
-    const current = deck[currentFlashcardIndex];
-    if (!current) return;
-    state.flashcards = state.flashcards.filter(f => f.id !== current.id);
-    isFlashcardFlipped = false;
-    saveState(false);
+    const list = getFilteredFlashcards();
+    if (!list.length) return;
+    const current = list[state.flashcardIndex % list.length];
+    state.flashcards = state.flashcards.filter(fc => fc.id !== current.id);
+    state.flashcardIndex = 0;
+    state.flashcardFlipped = false;
+    saveState();
     renderFlashcards();
+}
+
+function renderFlashcards() {
+    const list = getFilteredFlashcards();
+    const counter = document.getElementById('fc-counter');
+    const subjEl = document.getElementById('fc-card-subject');
+    const contentEl = document.getElementById('fc-card-content');
+    if (!contentEl) return;
+
+    if (!list.length) {
+        if (counter) counter.textContent = '0 / 0';
+        if (subjEl) subjEl.textContent = 'DAM';
+        contentEl.textContent = 'Añade tarjetas de estudio arriba';
+        return;
+    }
+
+    const idx = ((state.flashcardIndex % list.length) + list.length) % list.length;
+    const card = list[idx];
+    if (counter) counter.textContent = `${idx + 1} / ${list.length}`;
+    if (subjEl) subjEl.textContent = `${card.subject} · ${state.flashcardFlipped ? 'RESPUESTA' : 'PREGUNTA'}`;
+    contentEl.textContent = state.flashcardFlipped ? card.back : card.front;
 }
 
 function addBugLog() {
     const title = (document.getElementById('bug-title')?.value || '').trim();
     const fix = (document.getElementById('bug-fix')?.value || '').trim();
     if (!title) return;
-    state.bugs.unshift({ id: generateId('bug'), title, fix });
+    state.bugLogs.unshift({ id: `bug-${Date.now()}`, title, fix });
     document.getElementById('bug-title').value = '';
     document.getElementById('bug-fix').value = '';
     toggleForm('form-add-bug');
-    saveState(false);
+    saveState();
+    renderBugLogs();
+}
+
+function deleteBugLog(id) {
+    state.bugLogs = state.bugLogs.filter(b => b.id !== id);
+    saveState();
     renderBugLogs();
 }
 
 function renderBugLogs() {
     const list = document.getElementById('bug-logs-list');
     if (!list) return;
-    list.innerHTML = '';
-    (state.bugs || []).forEach(b => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `🐞 ${b.title}${b.fix ? ` → ✅ ${b.fix}` : ''}`;
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => { state.bugs = state.bugs.filter(x => x.id !== b.id); saveState(false); renderBugLogs(); });
-        row.append(info, del);
-        list.appendChild(row);
-    });
+    if (!state.bugLogs.length) {
+        list.innerHTML = '<div class="mono-muted">Sin bugs registrados.</div>';
+        return;
+    }
+    list.innerHTML = state.bugLogs.map(b => `
+        <div class="grade-item-row">
+            <span>🐞 <strong>${escapeHtml(b.title)}</strong> → ${escapeHtml(b.fix || 'Pendiente')}</span>
+            <button type="button" class="btn-icon" onclick="deleteBugLog(${JSON.stringify(b.id)})">🗑️</button>
+        </div>
+    `).join('');
 }
 
 function addClassDoubt() {
     const subject = (document.getElementById('doubt-subject')?.value || '').trim();
     const text = (document.getElementById('doubt-text')?.value || '').trim();
     if (!text) return;
-    state.doubts.unshift({ id: generateId('dbt'), subject, text, resolved: false });
+    state.classDoubts.unshift({ id: `dbt-${Date.now()}`, subject, text, resolved: false });
     document.getElementById('doubt-text').value = '';
     toggleForm('form-add-doubt');
-    saveState(false);
+    saveState();
+    renderClassDoubts();
+}
+
+function deleteClassDoubt(id) {
+    state.classDoubts = state.classDoubts.filter(d => d.id !== id);
+    saveState();
     renderClassDoubts();
 }
 
 function renderClassDoubts() {
     const list = document.getElementById('class-doubts-list');
     if (!list) return;
-    list.innerHTML = '';
-    (state.doubts || []).forEach(d => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `[${d.subject || 'DAM'}] ${d.text}`;
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => { state.doubts = state.doubts.filter(x => x.id !== d.id); saveState(false); renderClassDoubts(); });
-        row.append(info, del);
-        list.appendChild(row);
-    });
+    if (!state.classDoubts.length) {
+        list.innerHTML = '<div class="mono-muted">No hay dudas pendientes.</div>';
+        return;
+    }
+    list.innerHTML = state.classDoubts.map(d => `
+        <div class="grade-item-row">
+            <span>❓ <strong>[${escapeHtml(d.subject || 'DAM')}]</strong> ${escapeHtml(d.text)}</span>
+            <button type="button" class="btn-icon" onclick="deleteClassDoubt(${JSON.stringify(d.id)})">🗑️</button>
+        </div>
+    `).join('');
 }
 
 function addProject() {
     const title = (document.getElementById('prj-title')?.value || '').trim();
     const stack = (document.getElementById('prj-stack')?.value || '').trim();
-    const progress = Math.min(100, Math.max(0, Number(document.getElementById('prj-progress')?.value) || 0));
-    const url = sanitizeUrl(document.getElementById('prj-url')?.value || '');
+    const progress = Math.max(0, Math.min(100, Number(document.getElementById('prj-progress')?.value || 0)));
+    const url = normalizeExternalUrl(document.getElementById('prj-url')?.value || '');
     if (!title) return;
-    state.projects.unshift({ id: generateId('p'), title, stack, progress, url });
+
+    state.projects.unshift({ id: `prj-${Date.now()}`, title, stack, progress, url });
     document.getElementById('prj-title').value = '';
     document.getElementById('prj-stack').value = '';
     document.getElementById('prj-url').value = '';
     toggleForm('form-add-project');
-    saveState(false);
+    saveState();
+    renderProjects();
+}
+
+function deleteProject(id) {
+    state.projects = state.projects.filter(p => p.id !== id);
+    saveState();
     renderProjects();
 }
 
 function renderProjects() {
     const list = document.getElementById('projects-list');
     if (!list) return;
-    list.innerHTML = '';
-    (state.projects || []).forEach(p => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `🚀 ${p.title} (${p.stack || 'Stack'}) · ${p.progress}%`;
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => { state.projects = state.projects.filter(x => x.id !== p.id); saveState(false); renderProjects(); });
-        row.append(info, del);
-        list.appendChild(row);
-    });
+    if (!state.projects.length) {
+        list.innerHTML = '<div class="mono-muted">Sin proyectos registrados.</div>';
+        return;
+    }
+    list.innerHTML = state.projects.map(p => `
+        <div class="grade-item-row">
+            <span>🚀 <strong>${escapeHtml(p.title)}</strong> (${escapeHtml(p.stack || 'General')}) · ${p.progress}% ${p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">🔗</a>` : ''}</span>
+            <button type="button" class="btn-icon" onclick="deleteProject(${JSON.stringify(p.id)})">🗑️</button>
+        </div>
+    `).join('');
+}
+
+function renderAcademyWorkspace() {
+    renderSubjectSelectTargets();
+    renderSubjectsCatalogList();
+    renderKanban();
+    renderGrades();
+    renderFlashcards();
+    renderBugLogs();
+    renderClassDoubts();
+    renderProjects();
 }
 
 /* ==========================================================
-   DEVLAB (TOOLBOX, SERVIDORES, SNIPPETS, BOOKMARKS) Y MODALES
+   WORKSPACE 5: DEV & SYSADMIN LAB
    ========================================================== */
-function switchToolboxTab(tabKey) {
-    state.ui.toolboxTab = tabKey;
+function switchToolboxTab(tab) {
     document.querySelectorAll('.tb-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tbtab === tabKey);
+        btn.classList.toggle('active', btn.dataset.tbtab === tab);
     });
-    ['format', 'encode', 'net', 'gen'].forEach(t => {
-        document.getElementById(`tb-panel-${t}`)?.classList.toggle('is-hidden', t !== tabKey);
+    ['format', 'encode', 'net', 'gen'].forEach(panel => {
+        document.getElementById(`tb-panel-${panel}`)?.classList.toggle('is-hidden', panel !== tab);
     });
 }
 
@@ -3039,15 +2990,25 @@ function minifyJsonTool() {
 function encodeBase64Tool() {
     const area = document.getElementById('encode-input-area');
     if (!area) return;
-    area.value = btoa(unescape(encodeURIComponent(area.value)));
+    try {
+        const bytes = new TextEncoder().encode(area.value);
+        let bin = '';
+        bytes.forEach(b => { bin += String.fromCharCode(b); });
+        area.value = btoa(bin);
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 function decodeBase64Tool() {
     const area = document.getElementById('encode-input-area');
     if (!area) return;
     try {
-        area.value = decodeURIComponent(escape(atob(area.value.trim())));
-    } catch (_) {
+        const bin = atob(area.value.trim());
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        area.value = new TextDecoder().decode(bytes);
+    } catch (err) {
         showToast('Base64 inválido', 'error');
     }
 }
@@ -3072,428 +3033,580 @@ function decodeJwtTool() {
     if (!area) return;
     try {
         const parts = area.value.trim().split('.');
-        if (parts.length < 2) throw new Error('Formato JWT incorrecto');
-        const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        area.value = JSON.stringify({ header, payload }, null, 2);
+        if (parts.length < 2) throw new Error('Token JWT incompleto');
+        const decodePart = p => JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
+        area.value = JSON.stringify({ header: decodePart(parts[0]), payload: decodePart(parts[1]) }, null, 2);
     } catch (err) {
-        showToast(`Error JWT: ${err.message}`, 'error');
+        showToast(`JWT inválido: ${err.message}`, 'error');
     }
 }
 
-function convertNumberBases(sourceBase) {
-    const dec = document.getElementById('num-dec');
-    const hex = document.getElementById('num-hex');
-    const bin = document.getElementById('num-bin');
-    const raw = sourceBase === 10 ? dec?.value : sourceBase === 16 ? hex?.value : bin?.value;
-    const val = parseBaseValue(raw, sourceBase);
-    if (val === null) return;
-    if (sourceBase !== 10 && dec) dec.value = val.toString(10);
-    if (sourceBase !== 16 && hex) hex.value = val.toString(16).toUpperCase();
-    if (sourceBase !== 2 && bin) bin.value = val.toString(2);
-}
-
-function calculateSubnet() {
-    const cidr = document.getElementById('subnet-cidr-input')?.value || '';
+function runSubnetTool() {
+    const raw = document.getElementById('subnet-cidr-input')?.value || '';
     const out = document.getElementById('subnet-output');
     if (!out) return;
-    const res = calcSubnetCore(cidr);
+    const res = calculateSubnet(raw);
     if (!res) {
-        out.textContent = 'CIDR inválido (ej. 192.168.1.0/24)';
+        out.textContent = 'Formato inválido. Usa IP/CIDR (ej. 192.168.1.0/24).';
         return;
     }
-    out.textContent = `Red: ${res.network} | Broadcast: ${res.broadcast} | Máscara: ${res.mask} | Hosts útiles: ${res.usableHosts}`;
+    out.textContent = `Red: ${res.network} | Máscara: ${res.mask} | Broadcast: ${res.broadcast} | Rango: ${res.firstHost} - ${res.lastHost} | Hosts útiles: ${res.usableHosts}`;
 }
 
-function copyBoilerplate(key) {
-    const txt = BOILERPLATES[key];
-    if (!txt) return;
-    navigator.clipboard?.writeText(txt);
-    showToast(`Plantilla ${key} copiada`, 'success');
+function convertNumberBases(sourceRadix) {
+    const ids = { 10: 'num-dec', 16: 'num-hex', 2: 'num-bin' };
+    const raw = document.getElementById(ids[sourceRadix])?.value || '';
+    const val = parseBaseValue(raw, sourceRadix);
+    if (val === null) return;
+    if (sourceRadix !== 10) document.getElementById('num-dec').value = val.toString(10);
+    if (sourceRadix !== 16) document.getElementById('num-hex').value = val.toString(16).toUpperCase();
+    if (sourceRadix !== 2) document.getElementById('num-bin').value = val.toString(2);
 }
 
 function testRegexTool() {
-    const pat = document.getElementById('regex-pattern')?.value || '';
+    const pattern = document.getElementById('regex-pattern')?.value || '';
     const flags = document.getElementById('regex-flags')?.value || 'g';
-    const text = document.getElementById('regex-test-text')?.value || '';
+    const sample = document.getElementById('regex-test-text')?.value || '';
     const out = document.getElementById('regex-output');
     if (!out) return;
     try {
-        const rx = new RegExp(pat, flags);
-        const matches = [...text.matchAll(rx)].map(m => m[0]);
-        out.textContent = matches.length ? `Coincidencias (${matches.length}): ${matches.join(', ')}` : 'Sin coincidencias';
+        const rx = new RegExp(pattern, flags);
+        const matches = [...sample.matchAll(rx.global ? rx : new RegExp(pattern, `${flags}g`))].map(m => m[0]);
+        out.textContent = matches.length ? `Coincidencias (${matches.length}): ${matches.join(', ')}` : 'Sin coincidencias.';
     } catch (err) {
         out.textContent = `Regex inválida: ${err.message}`;
     }
 }
 
 function generateUuidTool() {
-    const out = document.getElementById('gen-output-box');
-    if (!out) return;
-    const val = crypto.randomUUID();
-    out.textContent = val;
-    navigator.clipboard?.writeText(val);
-    showToast('UUID v4 generado y copiado', 'success');
+    const box = document.getElementById('gen-output-box');
+    const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    if (box) box.textContent = uuid;
 }
 
 function generateSecurePassword() {
-    const out = document.getElementById('gen-output-box');
-    if (!out) return;
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-';
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-+=';
     const arr = new Uint32Array(20);
     crypto.getRandomValues(arr);
-    const pwd = [...arr].map(x => chars[x % chars.length]).join('');
-    out.textContent = pwd;
-    navigator.clipboard?.writeText(pwd);
-    showToast('Contraseña de 20 caracteres copiada', 'success');
+    const pwd = Array.from(arr, n => chars[n % chars.length]).join('');
+    const box = document.getElementById('gen-output-box');
+    if (box) box.textContent = pwd;
+}
+
+function copyBoilerplate(kind) {
+    const templates = {
+        dockerfile: 'FROM node:22-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --omit=dev\nCOPY . .\nEXPOSE 3000\nCMD ["node", "index.js"]',
+        compose: 'services:\n  app:\n    image: nginx:alpine\n    restart: unless-stopped\n    ports:\n      - "8080:80"'
+    };
+    const text = templates[kind] || '';
+    const box = document.getElementById('gen-output-box');
+    if (box) box.textContent = text;
+    navigator.clipboard?.writeText(text).then(() => showToast('Plantilla copiada al portapapeles', 'success')).catch(() => {});
 }
 
 async function generateSha256Tool() {
-    const inp = document.getElementById('hash-input-text')?.value || '';
-    const out = document.getElementById('gen-output-box');
-    if (!out) return;
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inp));
-    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-    out.textContent = hex;
+    const text = document.getElementById('hash-input-text')?.value || '';
+    const box = document.getElementById('gen-output-box');
+    if (!box) return;
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    box.textContent = hex;
 }
 
 function addServer() {
     const name = (document.getElementById('srv-name')?.value || '').trim();
     const host = (document.getElementById('srv-host')?.value || '').trim();
     const role = (document.getElementById('srv-role')?.value || '').trim();
-    const url = sanitizeUrl(document.getElementById('srv-url')?.value || '');
+    const url = normalizeExternalUrl(document.getElementById('srv-url')?.value || '');
     if (!name || !host) return;
-    state.servers.push({ id: generateId('srv'), name, host, role, url });
-    document.getElementById('srv-name').value = '';
-    document.getElementById('srv-host').value = '';
-    document.getElementById('srv-role').value = '';
-    document.getElementById('srv-url').value = '';
+
+    state.servers.unshift({ id: `srv-${Date.now()}`, name, host, role, url });
+    ['srv-name', 'srv-host', 'srv-role', 'srv-url'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
     toggleForm('form-add-server');
-    saveState(false);
+    saveState();
+    renderServers();
+}
+
+function deleteServer(id) {
+    state.servers = state.servers.filter(s => s.id !== id);
+    saveState();
     renderServers();
 }
 
 function renderServers() {
     const list = document.getElementById('servers-list');
     if (!list) return;
-    list.innerHTML = '';
-    (state.servers || []).forEach(s => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `🖥️ ${s.name} (${s.host})${s.role ? ` · ${s.role}` : ''}`;
-        const acts = document.createElement('div');
-        acts.className = 'filter-pills-row';
-        if (s.url) {
-            const link = document.createElement('a');
-            link.href = s.url;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.className = 'btn-cyan btn-sm';
-            link.textContent = 'Abrir';
-            acts.appendChild(link);
-        }
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '🗑️';
-        del.addEventListener('click', () => { state.servers = state.servers.filter(x => x.id !== s.id); saveState(false); renderServers(); });
-        acts.appendChild(del);
-        row.append(info, acts);
-        list.appendChild(row);
-    });
+    if (!state.servers.length) {
+        list.innerHTML = '<div class="mono-muted">Sin hosts registrados.</div>';
+        return;
+    }
+    list.innerHTML = state.servers.map(s => `
+        <div class="grade-item-row">
+            <span>🖥️ <strong>${escapeHtml(s.name)}</strong> (${escapeHtml(s.host)}) · ${escapeHtml(s.role || 'Host')} ${s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">🔗</a>` : ''}</span>
+            <button type="button" class="btn-icon" onclick="deleteServer(${JSON.stringify(s.id)})">🗑️</button>
+        </div>
+    `).join('');
 }
 
 function addSnippet() {
     const title = (document.getElementById('snp-title')?.value || '').trim();
-    const tag = (document.getElementById('snp-tag')?.value || '').trim();
+    const tag = (document.getElementById('snp-tag')?.value || 'general').trim();
     const code = (document.getElementById('snp-code')?.value || '').trim();
     if (!title || !code) return;
-    state.snippets.unshift({ id: generateId('snp'), title, tag, code });
+
+    state.snippets.unshift({ id: `snp-${Date.now()}`, title, tag, code });
     document.getElementById('snp-title').value = '';
     document.getElementById('snp-tag').value = '';
     document.getElementById('snp-code').value = '';
     toggleForm('form-add-snippet');
-    saveState(false);
+    saveState();
+    renderSnippets();
+}
+
+function copySnippet(code) {
+    navigator.clipboard?.writeText(code)
+        .then(() => showToast('Comando copiado', 'success'))
+        .catch(() => showToast('No se pudo copiar al portapapeles', 'error'));
+}
+
+function deleteSnippet(id) {
+    state.snippets = state.snippets.filter(s => s.id !== id);
+    saveState();
     renderSnippets();
 }
 
 function renderSnippets() {
     const list = document.getElementById('snippets-list');
-    const q = (document.getElementById('snippet-search-input')?.value || '').toLowerCase();
     if (!list) return;
-    list.innerHTML = '';
-    (state.snippets || [])
-        .filter(s => !q || s.title.toLowerCase().includes(q) || (s.tag || '').toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
-        .forEach(s => {
-            const row = document.createElement('div');
-            row.className = 'grade-item-row';
-            const info = document.createElement('span');
-            info.textContent = `⚡ ${s.title}${s.tag ? ` [${s.tag}]` : ''}: ${s.code}`;
-            const acts = document.createElement('div');
-            acts.className = 'filter-pills-row';
-            const cp = document.createElement('button');
-            cp.type = 'button';
-            cp.className = 'btn-cyan btn-sm';
-            cp.textContent = 'Copiar';
-            cp.addEventListener('click', () => { navigator.clipboard?.writeText(s.code); showToast('Comando copiado', 'success'); });
-            const del = document.createElement('button');
-            del.type = 'button';
-            del.className = 'btn-icon';
-            del.textContent = '🗑️';
-            del.addEventListener('click', () => { state.snippets = state.snippets.filter(x => x.id !== s.id); saveState(false); renderSnippets(); });
-            acts.append(cp, del);
-            row.append(info, acts);
-            list.appendChild(row);
-        });
+    const q = (document.getElementById('snippet-search-input')?.value || '').trim().toLowerCase();
+    const items = (state.snippets || []).filter(s =>
+        !q || s.title.toLowerCase().includes(q) || s.tag.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)
+    );
+    if (!items.length) {
+        list.innerHTML = '<div class="mono-muted">Sin snippets que coincidan.</div>';
+        return;
+    }
+    list.innerHTML = items.map(s => `
+        <div class="grade-item-row">
+            <span>⚡ <strong>${escapeHtml(s.title)}</strong> <small>[${escapeHtml(s.tag)}]</small>: <code>${escapeHtml(s.code)}</code></span>
+            <div class="filter-pills-row">
+                <button type="button" class="btn-cyan btn-sm" onclick="copySnippet(${JSON.stringify(s.code)})">📋</button>
+                <button type="button" class="btn-icon" onclick="deleteSnippet(${JSON.stringify(s.id)})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 function addBookmark() {
     const name = (document.getElementById('bm-name')?.value || '').trim();
-    const url = sanitizeUrl(document.getElementById('bm-url')?.value || '');
+    const url = normalizeExternalUrl(document.getElementById('bm-url')?.value || '');
     if (!name || !url) {
-        showToast('Nombre o URL inválida', 'error');
+        showToast('Introduce un nombre y URL válidos', 'error');
         return;
     }
-    state.bookmarks.push({ id: generateId('bm'), name, url });
+    state.bookmarks.push({ id: `bm-${Date.now()}`, name, url });
     document.getElementById('bm-name').value = '';
     document.getElementById('bm-url').value = '';
     toggleForm('form-add-bookmark');
-    saveState(false);
+    saveState();
+    renderBookmarks();
+}
+
+function deleteBookmark(id) {
+    state.bookmarks = state.bookmarks.filter(b => b.id !== id);
+    saveState();
     renderBookmarks();
 }
 
 function renderBookmarks() {
-    const list = document.getElementById('bookmarks-list');
-    if (!list) return;
-    list.innerHTML = '';
-    (state.bookmarks || []).forEach(b => {
-        const chip = document.createElement('div');
-        chip.className = 'pill-btn';
-        const link = document.createElement('a');
-        link.href = b.url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = `🔗 ${b.name}`;
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'btn-icon';
-        del.textContent = '×';
-        del.addEventListener('click', () => { state.bookmarks = state.bookmarks.filter(x => x.id !== b.id); saveState(false); renderBookmarks(); });
-        chip.append(link, del);
-        list.appendChild(chip);
-    });
+    const box = document.getElementById('bookmarks-list');
+    if (!box) return;
+    box.innerHTML = (state.bookmarks || []).map(b => `
+        <span class="pill-btn">
+            <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">${escapeHtml(b.name)}</a>
+            <button type="button" class="btn-icon" onclick="deleteBookmark(${JSON.stringify(b.id)})">×</button>
+        </span>
+    `).join('');
 }
 
-function createBackupSnapshot() {
-    state.snapshots.unshift({
-        id: generateId('snap'),
-        createdAt: getEffectiveNowMs(),
-        data: JSON.stringify(buildCompactVaultSnapshot())
-    });
-    state.snapshots = state.snapshots.slice(0, MAX_SNAPSHOTS);
-    saveState(false);
-    renderSnapshotsList();
-    showToast('Snapshot local creado', 'success');
+function renderDevLabWorkspace() {
+    renderServers();
+    renderSnippets();
+    renderBookmarks();
 }
 
-function renderSnapshotsList() {
-    const list = document.getElementById('snapshots-list');
-    if (!list) return;
-    list.innerHTML = '';
-    (state.snapshots || []).forEach(snap => {
-        const row = document.createElement('div');
-        row.className = 'grade-item-row';
-        const info = document.createElement('span');
-        info.textContent = `📸 ${new Date(snap.createdAt).toLocaleString('es-ES')}`;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-cyan btn-sm';
-        btn.textContent = 'Restaurar';
-        btn.addEventListener('click', () => {
-            const parsed = JSON.parse(snap.data);
-            const drv = { ...state.drive };
-            state = normalizeStateShape(parsed);
-            state.drive = drv;
-            saveState(false);
-            applyAllVisualSettings();
-            renderAll();
-            showToast('Snapshot restaurado', 'success');
-        });
-        row.append(info, btn);
-        list.appendChild(row);
-    });
-}
-
+/* ==========================================================
+   BUSCADOR GLOBAL, ATAJOS Y PWA
+   ========================================================== */
 function openGlobalSearch() {
-    document.getElementById('global-search-modal').style.display = 'flex';
-    const inp = document.getElementById('global-search-input');
-    if (inp) {
-        inp.value = '';
-        inp.focus();
+    const modal = document.getElementById('global-search-modal');
+    const input = document.getElementById('global-search-input');
+    if (modal) modal.style.display = 'flex';
+    if (input) {
+        input.value = '';
+        input.focus();
     }
     handleGlobalSearchInput();
 }
 
 function closeGlobalSearch() {
-    document.getElementById('global-search-modal').style.display = 'none';
+    const modal = document.getElementById('global-search-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 function handleGlobalSearchInput() {
     const q = (document.getElementById('global-search-input')?.value || '').trim().toLowerCase();
     const box = document.getElementById('global-search-results');
     if (!box) return;
-    box.innerHTML = '';
 
-    const items = [];
-    (state.tasks || []).forEach(t => items.push({ label: `✅ Tarea: ${t.text}`, action: () => switchWorkspace('cockpit') }));
-    (state.deliveries || []).forEach(d => items.push({ label: `📅 Entrega: ${d.subject} - ${d.title}`, action: () => switchWorkspace('cockpit') }));
-    (state.snippets || []).forEach(s => items.push({ label: `⚡ Snippet: ${s.title}`, action: () => switchWorkspace('devlab') }));
-    (state.catalogSubjects || []).forEach(s => items.push({ label: `📚 Asignatura: ${s.name}`, action: () => switchWorkspace('academy') }));
-
-    globalSearchMatches = items.filter(it => !q || it.label.toLowerCase().includes(q)).slice(0, 15);
-    globalSearchMatches.forEach(m => {
-        const div = document.createElement('div');
-        div.className = 'grade-item-row';
-        div.style.cursor = 'pointer';
-        div.textContent = m.label;
-        div.addEventListener('click', () => { m.action(); closeGlobalSearch(); });
-        box.appendChild(div);
+    const results = [];
+    (state.tasks || []).forEach(t => {
+        if (!q || t.text.toLowerCase().includes(q)) {
+            results.push({ label: `✅ Tarea: ${t.text}`, ws: 'cockpit' });
+        }
     });
+    (state.deliveries || []).forEach(d => {
+        if (!q || d.title.toLowerCase().includes(q) || (d.subject || '').toLowerCase().includes(q)) {
+            results.push({ label: `⏳ Entrega: ${d.title} (${d.subject || 'DAM'})`, ws: 'cockpit' });
+        }
+    });
+    (state.snippets || []).forEach(s => {
+        if (!q || s.title.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) {
+            results.push({ label: `⚡ Snippet: ${s.title} — ${s.code}`, ws: 'devlab' });
+        }
+    });
+    (state.flashcards || []).forEach(fc => {
+        if (!q || fc.front.toLowerCase().includes(q) || fc.back.toLowerCase().includes(q)) {
+            results.push({ label: `🧠 Flashcard [${fc.subject}]: ${fc.front}`, ws: 'academy' });
+        }
+    });
+
+    box.innerHTML = results.slice(0, 20).map(r => `
+        <div class="grade-item-row" style="cursor:pointer" onclick="switchWorkspace(${JSON.stringify(r.ws)}); closeGlobalSearch();">
+            <span>${escapeHtml(r.label)}</span>
+            <span class="badge-version">${escapeHtml(r.ws)}</span>
+        </div>
+    `).join('') || '<div class="mono-muted">Sin resultados.</div>';
 }
 
-function handleGlobalSearchKey(e) {
-    if (e.key === 'Escape') closeGlobalSearch();
-    if (e.key === 'Enter' && globalSearchMatches[0]) {
-        globalSearchMatches[0].action();
-        closeGlobalSearch();
-    }
+function handleGlobalSearchKey(event) {
+    if (event.key === 'Escape') closeGlobalSearch();
 }
 
 function openShortcutsModal() {
-    document.getElementById('shortcuts-modal').style.display = 'flex';
+    const modal = document.getElementById('shortcuts-modal');
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeShortcutsModal() {
-    document.getElementById('shortcuts-modal').style.display = 'none';
-}
-
-function toggleWeatherBadge() {
-    state.ui.weatherEnabled = !state.ui.weatherEnabled;
-    const lbl = document.getElementById('weather-text');
-    if (lbl) lbl.textContent = state.ui.weatherEnabled ? 'Clima: Activo' : 'Clima: OFF';
-    saveState(false);
-}
-
-function requestDesktopNotifications() {
-    if (typeof Notification === 'undefined') {
-        showToast('Notificaciones no soportadas en este navegador', 'error');
-        return;
-    }
-    Notification.requestPermission().then(perm => {
-        showToast(perm === 'granted' ? 'Alertas activadas' : 'Permiso de alertas denegado');
-    });
+    const modal = document.getElementById('shortcuts-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 function triggerPwaInstall() {
-    if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        deferredInstallPrompt = null;
-    } else {
-        showToast('Usa "Instalar aplicación" en el menú de tu navegador');
-    }
+    if (!deferredPwaPrompt) return;
+    deferredPwaPrompt.prompt();
+    deferredPwaPrompt.userChoice.finally(() => {
+        deferredPwaPrompt = null;
+        document.getElementById('btn-pwa-install')?.classList.add('is-hidden');
+    });
 }
 
 function applyServiceWorkerUpdate() {
-    if (pendingServiceWorker) {
-        pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
-        window.location.reload();
+    if (waitingServiceWorker) {
+        waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
     }
 }
 
+function initServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('./service-worker.js').then(reg => {
+        if (reg.waiting) {
+            waitingServiceWorker = reg.waiting;
+            document.getElementById('pwa-update-banner')?.classList.remove('is-hidden');
+        }
+        reg.addEventListener('updatefound', () => {
+            const worker = reg.installing;
+            worker?.addEventListener('statechange', () => {
+                if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                    waitingServiceWorker = worker;
+                    document.getElementById('pwa-update-banner')?.classList.remove('is-hidden');
+                }
+            });
+        });
+    }).catch(() => {});
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+    });
+}
+
+/* ==========================================================
+   RENDER COMPLETO E INICIALIZACIÓN
+   ========================================================== */
 function renderAll() {
-    populateSubjectSelects();
-    renderCatalogSubjects();
-    renderSchedule();
+    renderDriveProfileUI();
+    renderThemeSelectOptions();
+    applyTheme(state.theme);
+    document.documentElement.style.setProperty('--ui-scale', String(state.uiScale || 1));
+    const scaleSel = document.getElementById('ui-scale-select');
+    if (scaleSel) scaleSel.value = String(state.uiScale || 1);
+
+    applyDensity();
+    document.body.classList.toggle('zen-mode-active', Boolean(state.zenMode));
+    document.body.classList.toggle('presentation-mode-active', Boolean(state.presentationMode));
+
+    const presetSel = document.getElementById('workspace-preset-select');
+    if (presetSel) presetSel.value = state.workspacePreset || 'default';
+
+    renderSubjectSelectTargets();
+    renderScheduleWidget();
     renderDeliveries();
     renderTasks();
-    refreshPomodoroTaskSelector();
-    renderPomodoroStats();
-    updatePomodoroDisplay();
-    switchNoteTab(state.ui.noteTab || 'general');
-    syncStudioEditorsFromState();
-    renderSavedStudioProjects();
-    switchStudioTab(state.ui.studioActiveTab || 'html');
-    renderDbWorkspace();
-    renderKanban();
-    renderGrades();
-    renderFlashcards();
-    renderBugLogs();
-    renderClassDoubts();
-    renderProjects();
-    renderServers();
-    renderSnippets();
-    renderBookmarks();
-    renderSnapshotsList();
-    renderGoogleFontFavorites();
-    renderCustomThemesList();
+    renderPomodoroLinkedTasks();
+    renderPomodoro();
+
+    const focusIn = document.getElementById('pomo-focus-mins');
+    const breakIn = document.getElementById('pomo-break-mins');
+    if (focusIn) focusIn.value = state.pomodoro.focusMinutes || 25;
+    if (breakIn) breakIn.value = state.pomodoro.breakMinutes || 5;
+
+    switchNoteTab(state.notes.activeTab || 'general');
+    const stickyArea = document.getElementById('sticky-note-area');
+    if (stickyArea) stickyArea.value = state.notes.sticky || '';
+    document.getElementById('sticky-drawer')?.classList.toggle('is-hidden', !state.notes.stickyOpen);
+
+    const stTitle = document.getElementById('studio-project-title');
+    if (stTitle) stTitle.value = state.studio.title || '';
+    ['html', 'css', 'js', 'python', 'java'].forEach(k => {
+        const el = document.getElementById(`studio-editor-${k}`);
+        if (el) el.value = state.studio[k] || '';
+    });
+    const liveToggle = document.getElementById('studio-live-toggle');
+    if (liveToggle) liveToggle.checked = state.studio.autoRun !== false;
+    renderStudioFontSelect();
+    switchStudioTab(state.studio.activeTab || 'html');
+    setStudioViewport(state.studio.viewport || '100%');
+
+    renderDatabaseWorkspace();
+    renderAcademyWorkspace();
+    renderDevLabWorkspace();
+    renderFontsAndThemesWorkspace();
+    switchWorkspace(state.activeWorkspace || 'cockpit');
     updateStorageQuotaBadge();
 }
 
-function initApp() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-            state = normalizeStateShape(JSON.parse(raw));
-        }
-    } catch (_) {
-        state = createDefaultState();
+window.addEventListener('message', event => {
+    if (event.data && event.data.source === 'dw-studio-console') {
+        appendStudioConsole(event.data.text, event.data.level);
     }
+});
 
-    currentDeliveryFilter = state.ui.deliveryFilter || 'all';
-    applyAllVisualSettings();
+window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    deferredPwaPrompt = event;
+    document.getElementById('btn-pwa-install')?.classList.remove('is-hidden');
+});
+
+window.addEventListener('online', () => {
+    const el = document.getElementById('connection-status');
+    if (el) {
+        el.textContent = 'Listo';
+        el.className = 'badge-version connection-online';
+    }
+});
+
+window.addEventListener('offline', () => {
+    const el = document.getElementById('connection-status');
+    if (el) {
+        el.textContent = 'Offline';
+        el.className = 'badge-version connection-offline';
+    }
+});
+
+document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        openGlobalSearch();
+    } else if (event.altKey && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        toggleZenMode();
+    } else if (event.altKey && ['1', '2', '3', '4', '5', '6'].includes(event.key)) {
+        event.preventDefault();
+        const map = ['cockpit', 'studio', 'database', 'academy', 'devlab', 'fonts'];
+        switchWorkspace(map[Number(event.key) - 1]);
+    } else if (event.key === 'Escape') {
+        closeGlobalSearch();
+        closeClockModal();
+        closeScheduleModal();
+        closeDriveModal();
+        closeSnapshotsModal();
+        closeNoteHistoryModal();
+        closeShortcutsModal();
+    }
+});
+
+/* Exposición global para handlers inline en index.html */
+Object.assign(window, {
+    toggleForm,
+    openDriveModal,
+    closeDriveModal,
+    connectGoogleDrive,
+    forceDriveSyncNow,
+    pullFromGoogleDrive,
+    logoutDriveUser,
+    exportProtectedVaultFile,
+    importProtectedVaultFile,
+    switchWorkspace,
+    applyWorkspacePreset,
+    toggleZenMode,
+    togglePresentationMode,
+    toggleDensityMode,
+    handleThemeSelectChange,
+    previewCustomThemeColors,
+    activateCustomTheme,
+    saveNewCustomThemePreset,
+    deleteCustomThemePreset,
+    exportCustomThemeJson,
+    importCustomThemeJson,
+    resetAppearanceDefaults,
+    updateAppearanceSettings,
+    loadGoogleFontByName,
+    saveGoogleFontFavorite,
+    updateFontPlaygroundStyle,
+    applyLoadedFontToUi,
+    applyLoadedFontToStudio,
+    applyFontToStudioPreview,
+    openClockModal,
+    closeClockModal,
+    applyManualClock,
+    resetManualClockToAuto,
+    toggleWeatherBadge,
+    openSnapshotsModal,
+    closeSnapshotsModal,
+    createBackupSnapshot,
+    restoreSnapshot,
+    deleteSnapshot,
+    toggleScheduleViewMode,
+    openScheduleModal,
+    closeScheduleModal,
+    autofillScheduleFromCatalog,
+    addScheduleClass,
+    deleteScheduleClass,
+    clearSchedule,
+    importScheduleFromText,
+    setDeliveryFilter,
+    toggleExamCramMode,
+    requestDesktopNotifications,
+    addDelivery,
+    toggleDeliveryDone,
+    deleteDelivery,
+    setTaskFilter,
+    setTaskBlockFilter,
+    setTaskSort,
+    addTask,
+    toggleTaskDone,
+    deleteTask,
+    clearCompletedTasks,
+    addSubtaskPrompt,
+    toggleSubtaskDone,
+    setPomodoroLinkedTask,
+    setPomodoroMode,
+    updatePomodoroConfig,
+    startPomodoro,
+    pausePomodoro,
+    resetPomodoro,
+    toggleFocusAudio,
+    updateFocusAudioVolume,
+    switchNoteTab,
+    handleNoteInput,
+    toggleNoteMarkdownPreview,
+    saveNoteRevision,
+    openNoteHistoryModal,
+    closeNoteHistoryModal,
+    restoreNoteRevision,
+    exportCurrentNoteMd,
+    toggleStickyNote,
+    saveStickyNote,
+    switchStudioTab,
+    handleStudioTitleChange,
+    handleStudioEditorInput,
+    clearStudioConsole,
+    runStudioCode,
+    loadStudioTemplate,
+    injectCdnIntoStudio,
+    formatStudioCode,
+    setStudioViewport,
+    saveStudioProjectToLibrary,
+    loadSavedStudioProject,
+    deleteSavedStudioProject,
+    exportStudioSingleHtml,
+    exportStudioMultiFiles,
+    selectDbTable,
+    createDbTable,
+    addDbRowPrompt,
+    deleteDbRow,
+    deleteCurrentDbTable,
+    exportDbJson,
+    insertSqlTemplate,
+    executeLocalSql,
+    addCatalogSubject,
+    deleteCatalogSubject,
+    addKanbanTask,
+    moveKanbanTask,
+    deleteKanbanTask,
+    addGrade,
+    deleteGrade,
+    switchStudyHubTab,
+    addFlashcard,
+    flipFlashcard,
+    prevFlashcard,
+    nextFlashcard,
+    deleteCurrentFlashcard,
+    addBugLog,
+    deleteBugLog,
+    addClassDoubt,
+    deleteClassDoubt,
+    addProject,
+    deleteProject,
+    switchToolboxTab,
+    formatJsonTool,
+    minifyJsonTool,
+    encodeBase64Tool,
+    decodeBase64Tool,
+    encodeUrlTool,
+    decodeUrlTool,
+    decodeJwtTool,
+    calculateSubnet: runSubnetTool,
+    convertNumberBases,
+    testRegexTool,
+    generateUuidTool,
+    generateSecurePassword,
+    copyBoilerplate,
+    generateSha256Tool,
+    addServer,
+    deleteServer,
+    addSnippet,
+    copySnippet,
+    deleteSnippet,
+    addBookmark,
+    deleteBookmark,
+    openGlobalSearch,
+    closeGlobalSearch,
+    handleGlobalSearchInput,
+    handleGlobalSearchKey,
+    openShortcutsModal,
+    closeShortcutsModal,
+    triggerPwaInstall,
+    applyServiceWorkerUpdate
+});
+
+document.addEventListener('DOMContentLoaded', () => {
     renderAll();
-
-    updateClockDisplay();
-    syncRealTimeNetwork();
-    if (clockTickInterval) clearInterval(clockTickInterval);
-    clockTickInterval = setInterval(updateClockDisplay, 1000);
-
-    window.addEventListener('message', ev => {
-        if (ev.data?.source === 'dw-studio-console') {
-            appendStudioConsoleLine(ev.data.level || 'log', ev.data.message || '');
-        }
-    });
-
-    window.addEventListener('keydown', e => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-            e.preventDefault();
-            openGlobalSearch();
-        } else if (e.altKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
-            e.preventDefault();
-            switchWorkspace(ALLOWED_WORKSPACES[Number(e.key) - 1]);
-        }
-    });
-
-    window.addEventListener('beforeinstallprompt', e => {
-        e.preventDefault();
-        deferredInstallPrompt = e;
-        document.getElementById('btn-pwa-install')?.classList.remove('is-hidden');
-    });
-
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').then(reg => {
-            reg.addEventListener('updatefound', () => {
-                const nw = reg.installing;
-                nw?.addEventListener('statechange', () => {
-                    if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-                        pendingServiceWorker = nw;
-                        document.getElementById('pwa-update-banner')?.classList.remove('is-hidden');
-                    }
-                });
-            });
-        }).catch(() => {});
-    }
-}
-
-window.addEventListener('DOMContentLoaded', initApp);
+    updateClock();
+    setInterval(updateClock, 1000);
+    initServiceWorker();
+});

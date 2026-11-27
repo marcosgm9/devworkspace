@@ -4,7 +4,7 @@ export function mergeState(target, source) {
     for (const key of Object.keys(source)) {
         if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
         const srcVal = source[key];
-        const tgtVal = target[key];
+        const tgtVal = target ? target[key] : undefined;
         if (srcVal && typeof srcVal === 'object' && !Array.isArray(srcVal)) {
             output[key] = mergeState(tgtVal && typeof tgtVal === 'object' && !Array.isArray(tgtVal) ? tgtVal : {}, srcVal);
         } else if (srcVal !== undefined) {
@@ -66,14 +66,14 @@ export function getMadridClock(date = new Date()) {
 }
 
 export function calculateSubnet(raw) {
-    const value = String(raw).trim();
+    const value = String(raw ?? '').trim();
     const match = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/.exec(value);
-    if (!match) throw new TypeError('Formato inválido. Usa ej: 192.168.1.50/24');
+    if (!match) return null;
 
     const octets = match[1].split('.').map(Number);
     const cidr = Number(match[2]);
     if (octets.some(octet => octet < 0 || octet > 255) || cidr < 0 || cidr > 32) {
-        throw new TypeError('Formato inválido. Usa ej: 192.168.1.50/24');
+        return null;
     }
 
     const ip = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
@@ -89,6 +89,7 @@ export function calculateSubnet(raw) {
     const firstHost = cidr >= 31 ? network : network + 1;
     const lastHost = cidr >= 31 ? broadcast : broadcast - 1;
     const hosts = cidr === 32 ? 1 : cidr === 31 ? 2 : Math.pow(2, 32 - cidr) - 2;
+    const usableHosts = cidr >= 31 ? hosts : Math.max(0, Math.pow(2, 32 - cidr) - 2);
 
     return {
         cidr,
@@ -97,7 +98,8 @@ export function calculateSubnet(raw) {
         broadcast: toIp(broadcast),
         firstHost: toIp(firstHost),
         lastHost: toIp(lastHost),
-        hosts
+        hosts,
+        usableHosts
     };
 }
 
@@ -146,27 +148,32 @@ export function normalizeExternalUrl(rawUrl) {
     }
 }
 
-export function parseBaseValue(base, rawValue) {
-    const clean = String(rawValue ?? '').trim();
-    if (!clean) return { valid: true, value: null };
-
-    const patterns = {
+export function parseBaseValue(arg1, arg2) {
+    const radixMap = {
+        10: { radix: 10, regex: /^[+-]?\d+$/ },
+        2: { radix: 2, regex: /^[+-]?[01]+$/ },
+        16: { radix: 16, regex: /^[+-]?[0-9a-fA-F]+$/ },
+        8: { radix: 8, regex: /^[+-]?[0-7]+$/ },
         dec: { radix: 10, regex: /^[+-]?\d+$/ },
         bin: { radix: 2, regex: /^[+-]?[01]+$/ },
         hex: { radix: 16, regex: /^[+-]?[0-9a-fA-F]+$/ },
         oct: { radix: 8, regex: /^[+-]?[0-7]+$/ }
     };
 
-    const spec = patterns[base];
-    if (!spec || !spec.regex.test(clean)) {
-        return { valid: false, value: null };
+    if (typeof arg2 === 'number') {
+        const clean = String(arg1 ?? '').trim();
+        const spec = radixMap[arg2];
+        if (!clean || !spec || !spec.regex.test(clean)) return null;
+        const parsed = parseInt(clean, spec.radix);
+        return Number.isSafeInteger(parsed) ? parsed : null;
     }
 
+    const clean = String(arg2 ?? '').trim();
+    if (!clean) return { valid: true, value: null };
+    const spec = radixMap[arg1];
+    if (!spec || !spec.regex.test(clean)) return { valid: false, value: null };
     const parsed = parseInt(clean, spec.radix);
-    if (!Number.isSafeInteger(parsed)) {
-        return { valid: false, value: null };
-    }
-
+    if (!Number.isSafeInteger(parsed)) return { valid: false, value: null };
     return { valid: true, value: parsed };
 }
 
@@ -184,12 +191,6 @@ function fnv1aHash(str) {
     return (hash >>> 0).toString(36);
 }
 
-/**
- * Empaqueta el estado en un formato compacto y firmado para Google Drive:
- * - Elimina claves vacías/por defecto redundantes vía el llamador o JSON compacto.
- * - Comprime con DeflateStream (si el navegador lo soporta) o Base64 UTF-8.
- * - Añade checksum/firma interna para detectar manipulaciones manuales del archivo.
- */
 export async function packDrivePayload(stateObj, salt = 'devworkspace-drive-guard') {
     const rawJson = JSON.stringify(stateObj);
     const sig = fnv1aHash(`${salt}::${rawJson.length}::${rawJson}`);
@@ -259,11 +260,6 @@ export async function unpackDrivePayload(packedText, salt = 'devworkspace-drive-
     return envelope.d;
 }
 
-/**
- * Parsea un horario importado desde texto/CSV/JSON:
- * Soporta líneas tipo: "Lunes | 08:30 - 09:25 | Acceso a Datos | Aula 2 | Prof. García"
- * o CSV separado por ; o ,
- */
 export function parseScheduleImportText(rawContent) {
     const text = String(rawContent ?? '').trim();
     if (!text) return [];
@@ -282,9 +278,9 @@ export function parseScheduleImportText(rawContent) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
     for (const line of lines) {
-        if (/^(d[ií]a|day)[,;|]/i.test(line)) continue; // cabecera
-        const sep = line.includes('|') ? '|' : line.includes(';') ? ';' : ',';
-        const cols = line.split(sep).map(c => c.trim());
+        if (/^(d[ií]a|day)[,;|]/i.test(line)) continue;
+        const sep = line.includes('|') ? '|' : line.includes(';') ? ';' : line.includes(',') ? ',' : null;
+        const cols = sep ? line.split(sep).map(c => c.trim()) : line.split(/\s+/);
         if (cols.length < 3) continue;
 
         const dayKey = cols[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -298,19 +294,19 @@ export function parseScheduleImportText(rawContent) {
         let room = '';
         let teacher = '';
 
-        const rangeMatch = /^(\d{1,2}:\d{2})\s*[-–a]+\s*(\d{1,2}:\d{2})$/.exec(cols[1]);
+        const rangeMatch = /^(\d{1,2}:\d{2})\s*[-–]+\s*(\d{1,2}:\d{2})$/.exec(cols[1]);
         if (rangeMatch) {
             start = rangeMatch[1].padStart(5, '0');
             end = rangeMatch[2].padStart(5, '0');
-            subject = cols[2] || '';
-            room = cols[3] || '';
-            teacher = cols[4] || '';
+            subject = sep ? (cols[2] || '') : cols.slice(2).join(' ');
+            room = sep ? (cols[3] || '') : '';
+            teacher = sep ? (cols[4] || '') : '';
         } else if (/^\d{1,2}:\d{2}$/.test(cols[1]) && /^\d{1,2}:\d{2}$/.test(cols[2] || '')) {
             start = cols[1].padStart(5, '0');
             end = cols[2].padStart(5, '0');
-            subject = cols[3] || '';
-            room = cols[4] || '';
-            teacher = cols[5] || '';
+            subject = sep ? (cols[3] || '') : cols.slice(3).join(' ');
+            room = sep ? (cols[4] || '') : '';
+            teacher = sep ? (cols[5] || '') : '';
         }
 
         if (start && end && subject) {
