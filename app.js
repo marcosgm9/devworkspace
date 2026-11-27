@@ -640,18 +640,26 @@ function resetAppearanceDefaults() {
    -------------------------------------------------------------------------- */
 async function syncRealTimeNetwork() {
     const statusEl = document.getElementById('net-status');
-    if (statusEl) statusEl.textContent = '🔄 Sincronizando...';
+    if (statusEl) {
+        statusEl.textContent = '🔄 Sincronizando...';
+        statusEl.style.color = '';
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
     try {
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', {
+        const res = await fetch('https://gateway.timeapi.world/timezone/Europe/Madrid', {
             cache: 'no-store',
             signal: controller.signal
         });
-        if (!res.ok) throw new Error('HTTP error');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const serverMs = new Date(data.datetime).getTime();
+        const serverMs = typeof data.unixtime === 'number'
+            ? data.unixtime * 1000
+            : new Date(data.datetime).getTime();
+
+        if (!Number.isFinite(serverMs)) throw new Error('Fecha inválida');
+
         clockOffsetMs = serverMs - Date.now();
         if (statusEl) {
             statusEl.textContent = '🟢 Hora Madrid Sync';
@@ -1900,7 +1908,6 @@ function clearStickyNote() {
     if (el) el.value = '';
     saveState();
 }
-
 /* --------------------------------------------------------------------------
    WORKSPACE 2: LIVE CODE STUDIO (HTML / CSS / JS EN VIVO)
    -------------------------------------------------------------------------- */
