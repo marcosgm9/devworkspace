@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevWorkspace v7.1 - Studio Edition</title>
-    <meta name="description" content="Workspace personal para estudiar, organizar tareas y desarrollar proyectos.">
-    <meta name="theme-color" content="#060813">
+    <title>DevWorkspace v7.2 - Studio &amp; Drive Edition</title>
+    <meta name="description" content="Workspace personal para estudiar, organizar tareas, gestionar BD, editar código y sincronizar con Google Drive.">
+    <meta name="theme-color" content="#050711">
     <link rel="icon" href="./icon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,20 +24,21 @@
             <div class="brand-box">
                 <span class="brand-logo">&gt;_</span>
                 <h1>DevWorkspace</h1>
-                <span class="badge-version">v7.1 STUDIO</span>
+                <span class="badge-version">v7.2 DRIVE STUDIO</span>
             </div>
 
             <div id="user-profile-widget" class="user-profile-widget is-hidden">
                 <span class="user-status-dot"></span>
                 <span id="user-name">Conectado</span>
-                <span id="cloud-sync-indicator" class="sync-badge">Cloud OK</span>
+                <span id="cloud-sync-indicator" class="sync-badge">Drive OK</span>
                 <span id="cloud-last-sync" class="mono-muted">Sin cambios pendientes</span>
-                <button type="button" id="btn-force-sync" onclick="forceCloudSyncNow()" class="btn-icon" title="Forzar sincronización ahora" aria-label="Forzar sincronización">🔄</button>
-                <button type="button" onclick="logoutUser()" class="btn-icon" title="Cerrar Sesión" aria-label="Cerrar Sesión">🚪</button>
+                <button type="button" id="btn-force-sync" onclick="forceDriveSyncNow()" class="btn-icon" title="Guardar en Google Drive ahora" aria-label="Guardar en Google Drive">💾</button>
+                <button type="button" onclick="pullFromGoogleDrive(true)" class="btn-icon" title="Importar desde Google Drive" aria-label="Importar desde Google Drive">📥</button>
+                <button type="button" onclick="logoutDriveUser()" class="btn-icon" title="Desconectar Google Drive" aria-label="Desconectar Google Drive">🚪</button>
             </div>
 
-            <button type="button" id="btn-cloud-login" onclick="openAuthModal()" class="btn-pill-header" title="Sincronizar con Firebase">
-                ☁️ Cloud
+            <button type="button" id="btn-cloud-login" onclick="openDriveModal()" class="btn-pill-header" title="Conectar y guardar en Google Drive">
+                ☁️ Google Drive
             </button>
         </div>
 
@@ -47,7 +48,10 @@
                 🏠 Cockpit
             </button>
             <button type="button" class="ws-tab" data-ws="studio" onclick="switchWorkspace('studio')">
-                💻 Live Code Studio
+                💻 Code Studio
+            </button>
+            <button type="button" class="ws-tab" data-ws="database" onclick="switchWorkspace('database')">
+                🗄️ Base de Datos
             </button>
             <button type="button" class="ws-tab" data-ws="academy" onclick="switchWorkspace('academy')">
                 🎓 Academia
@@ -80,7 +84,7 @@
                 📲 Instalar
             </button>
 
-            <div id="clock-container" onclick="syncRealTimeNetwork()" title="Clic para sincronizar hora real (Madrid)">
+            <div id="clock-container" onclick="openClockModal()" title="Clic para ajustar la hora manualmente o sincronizar con red">
                 <div id="time">00:00:00</div>
                 <div id="date">---</div>
                 <div id="net-status" class="net-status">🔄 Sincronizando...</div>
@@ -103,6 +107,7 @@
                 <option value="today">📅 Solo Hoy</option>
                 <option value="exam">📝 Modo Examen</option>
                 <option value="dev">💻 Modo Código</option>
+                <option value="db">🗄️ Modo Base de Datos</option>
                 <option value="sysadmin">🖥️ Modo Redes / Lab</option>
             </select>
 
@@ -116,7 +121,7 @@
         </div>
 
         <div class="sub-toolbar-right">
-            <select id="theme-select" class="compact-select" title="Tema visual" aria-label="Tema visual">
+            <select id="theme-select" class="compact-select" title="Tema visual (incluye tus temas propios con su fuente)" aria-label="Tema visual">
                 <option value="cyberpunk">⚡ Cyberpunk</option>
                 <option value="dracula">🧛 Dracula</option>
                 <option value="valorant">🎯 Valorant</option>
@@ -149,6 +154,7 @@
                         <span class="card-title-text">📅 Horario &amp; Clase Actual</span>
                         <div class="card-actions">
                             <button type="button" class="btn-ghost btn-sm" onclick="toggleScheduleViewMode()">Tabla / Actual</button>
+                            <button type="button" class="btn-violet btn-sm" onclick="importScheduleFromDrive()" title="Subir / importar tu horario desde Google Drive">☁️ Subir de Drive</button>
                             <button type="button" class="btn-cyan btn-sm" onclick="openScheduleModal()">⚙️ Configurar</button>
                         </div>
                     </div>
@@ -178,7 +184,7 @@
                         <div id="form-add-delivery" class="collapsible-panel">
                             <div class="form-grid-2">
                                 <input type="text" id="deliv-title" placeholder="Título (ej. Práctica API REST)" aria-label="Título de entrega">
-                                <input type="text" id="deliv-subject" placeholder="Módulo (ej. Acceso a Datos)" aria-label="Módulo de entrega">
+                                <select id="deliv-subject" class="subject-select-target" aria-label="Asignatura de entrega"></select>
                                 <select id="deliv-type" aria-label="Tipo de entrega">
                                     <option value="Práctica">Práctica</option>
                                     <option value="Examen">Examen</option>
@@ -400,13 +406,13 @@
     </main>
 
     <!-- ==========================================================
-         WORKSPACE 2: LIVE CODE STUDIO (HTML / CSS / JS SANDBOX)
+         WORKSPACE 2: CODE STUDIO (HTML / CSS / JS + PYTHON + JAVA)
          ========================================================== -->
     <main id="ws-studio" class="workspace-view">
         <div class="studio-topbar card">
             <div class="studio-controls-left">
-                <span class="card-title-text">💻 Live Code Studio</span>
-                <input type="text" id="studio-project-title" placeholder="Nombre del proyecto web..." value="Mi Proyecto Web" aria-label="Nombre del proyecto web">
+                <span class="card-title-text">💻 Code Studio</span>
+                <input type="text" id="studio-project-title" placeholder="Nombre del proyecto..." value="Mi Proyecto Web" aria-label="Nombre del proyecto">
 
                 <select id="studio-template-select" onchange="loadStudioTemplate(this.value); this.value='';" class="compact-select" aria-label="Cargar plantilla">
                     <option value="">📄 Cargar Plantilla...</option>
@@ -414,10 +420,12 @@
                     <option value="cybercard">Tarjeta Cyberpunk Neon</option>
                     <option value="flexgrid">Layout Flexbox + Grid</option>
                     <option value="domlab">Práctica JavaScript DOM</option>
+                    <option value="python">🐍 Python Script Base</option>
+                    <option value="java">☕ Java Main Class</option>
                 </select>
 
                 <select id="studio-cdn-select" onchange="injectStudioCdn(this.value); this.value='';" class="compact-select" aria-label="Inyectar CDN">
-                    <option value="">📦 Inyectar CDN...</option>
+                    <option value="">📦 Inyectar CDN Web...</option>
                     <option value="tailwind">Tailwind CSS (Play CDN)</option>
                     <option value="bootstrap">Bootstrap 5.3 CSS</option>
                     <option value="alpine">Alpine.js 3</option>
@@ -430,30 +438,32 @@
             </div>
 
             <div class="studio-controls-right">
-                <label class="checkbox-inline" title="Renderizar automáticamente al escribir">
-                    <input type="checkbox" id="studio-autorun" checked> Auto-Run
+                <label class="checkbox-inline" title="Renderizar automáticamente al escribir en modo Web">
+                    <input type="checkbox" id="studio-autorun" checked> Auto-Run Web
                 </label>
-                <button type="button" class="btn-cyan btn-sm" onclick="runStudioPreview()">▶ Ejecutar</button>
+                <button type="button" class="btn-cyan btn-sm" onclick="runStudioActiveCode()">▶ Ejecutar</button>
                 <button type="button" class="btn-ghost btn-sm" onclick="formatStudioCode()" title="Formatear código activo">✨ Formatear</button>
-                <button type="button" class="btn-green btn-sm" onclick="saveStudioProject()">💾 Guardar</button>
-                <button type="button" class="btn-violet btn-sm" onclick="exportStudioSingleHtml()">⬇️ Exportar .html</button>
-                <label class="btn-ghost btn-sm file-btn-label" title="Importar archivo .html local">
-                    📂 Abrir .html
-                    <input type="file" accept=".html,.htm" class="is-hidden" onchange="importStudioHtmlFile(event)">
+                <button type="button" class="btn-green btn-sm" onclick="saveStudioProject()">💾 Guardar (Drive)</button>
+                <button type="button" class="btn-violet btn-sm" onclick="exportStudioActiveFile()">⬇️ Descargar</button>
+                <label class="btn-ghost btn-sm file-btn-label" title="Importar archivo .html, .py o .java">
+                    📂 Abrir Archivo
+                    <input type="file" accept=".html,.htm,.py,.java,.js,.css" class="is-hidden" onchange="importStudioAnyFile(event)">
                 </label>
                 <button type="button" class="btn-ghost btn-sm" onclick="toggleStudioFullscreen()" title="Pantalla completa" aria-label="Pantalla completa">⛶</button>
             </div>
         </div>
 
         <div id="studio-workbench" class="studio-workbench">
-            <!-- PANEL IZQUIERDO: EDITORES HTML / CSS / JS -->
+            <!-- PANEL IZQUIERDO: EDITORES HTML / CSS / JS / PYTHON / JAVA -->
             <div class="studio-editors-pane card">
                 <div class="studio-editor-tabs">
                     <div class="filter-pills-row">
                         <button type="button" id="ed-tab-html" class="pill-btn active" onclick="switchStudioEditorTab('html')">HTML</button>
                         <button type="button" id="ed-tab-css" class="pill-btn" onclick="switchStudioEditorTab('css')">CSS</button>
-                        <button type="button" id="ed-tab-js" class="pill-btn" onclick="switchStudioEditorTab('js')">JavaScript</button>
-                        <button type="button" id="ed-tab-saved" class="pill-btn" onclick="switchStudioEditorTab('saved')">📁 Proyectos Guardados</button>
+                        <button type="button" id="ed-tab-js" class="pill-btn" onclick="switchStudioEditorTab('js')">JS</button>
+                        <button type="button" id="ed-tab-python" class="pill-btn" onclick="switchStudioEditorTab('python')">🐍 Python</button>
+                        <button type="button" id="ed-tab-java" class="pill-btn" onclick="switchStudioEditorTab('java')">☕ Java</button>
+                        <button type="button" id="ed-tab-saved" class="pill-btn" onclick="switchStudioEditorTab('saved')">📁 Guardados</button>
                     </div>
                     <div class="filter-pills-row">
                         <span id="studio-editor-metrics" class="mono-muted">0 líneas</span>
@@ -473,26 +483,34 @@
                     <textarea id="code-js" class="code-editor-textarea" spellcheck="false" placeholder="Escribe tu JavaScript aquí..." aria-label="Editor JavaScript"></textarea>
                 </div>
 
+                <div id="ed-pane-python" class="editor-wrapper">
+                    <textarea id="code-python" class="code-editor-textarea" spellcheck="false" placeholder="# Escribe tu código Python 3 aquí y pulsa Ejecutar..." aria-label="Editor Python"></textarea>
+                </div>
+
+                <div id="ed-pane-java" class="editor-wrapper">
+                    <textarea id="code-java" class="code-editor-textarea" spellcheck="false" placeholder="// Escribe tu clase Java aquí (public class Main) y pulsa Ejecutar..." aria-label="Editor Java"></textarea>
+                </div>
+
                 <div id="ed-pane-saved" class="editor-wrapper saved-projects-pane">
                     <div id="studio-saved-projects-list" class="scroll-list-lg"></div>
                 </div>
             </div>
 
-            <!-- PANEL DERECHO: PREVIEW + CONSOLA JS -->
+            <!-- PANEL DERECHO: PREVIEW WEB + CONSOLA DE SALIDA (JS / PYTHON / JAVA) -->
             <div class="studio-preview-pane card">
                 <div class="preview-toolbar">
-                    <span class="mono-muted">Vista Previa en Vivo</span>
+                    <span id="studio-output-mode-label" class="mono-muted">Vista Previa Web &amp; Salida</span>
                     <div class="filter-pills-row">
                         <button type="button" id="vp-desktop" class="pill-btn active" onclick="setStudioViewport('100%')">🖥️ 100%</button>
                         <button type="button" id="vp-tablet" class="pill-btn" onclick="setStudioViewport('768px')">📟 768px</button>
                         <button type="button" id="vp-mobile" class="pill-btn" onclick="setStudioViewport('375px')">📱 375px</button>
                         <select id="studio-console-filter" onchange="renderStudioConsole()" class="compact-select" aria-label="Filtrar consola">
                             <option value="all">Todos</option>
-                            <option value="log">Log</option>
+                            <option value="log">Log / Stdout</option>
                             <option value="warn">Warn</option>
                             <option value="error">Error</option>
                         </select>
-                        <button type="button" class="btn-ghost btn-sm" onclick="clearStudioConsole()">🧹 Consola</button>
+                        <button type="button" class="btn-ghost btn-sm" onclick="clearStudioConsole()">🧹 Limpiar</button>
                     </div>
                 </div>
 
@@ -502,7 +520,7 @@
 
                 <div class="studio-console-box">
                     <div class="console-header">
-                        <span>&gt;_ Consola JS Integrada</span>
+                        <span>&gt;_ Consola de Ejecución (JS / Python / Java)</span>
                         <span id="studio-console-count" class="badge-version">0 logs</span>
                     </div>
                     <div id="studio-console-output" class="console-output"></div>
@@ -512,12 +530,103 @@
     </main>
 
     <!-- ==========================================================
-         WORKSPACE 3: ACADEMIA & ESTUDIO (DAM)
+         WORKSPACE 3: GESTOR DE BASE DE DATOS (TABLAS, REGISTROS Y SQL)
+         ========================================================== -->
+    <main id="ws-database" class="workspace-view">
+        <div class="grid-2-col">
+            <!-- COLUMNA IZQUIERDA: TABLAS Y REGISTROS -->
+            <div class="ws-column">
+                <section class="card" id="card-db-manager">
+                    <div class="card-header">
+                        <span class="card-title-text">🗄️ Gestor de Base de Datos (Guardado en Drive)</span>
+                        <div class="card-actions">
+                            <button type="button" class="btn-ghost btn-sm" onclick="exportDatabaseSql()">📤 Exportar SQL</button>
+                            <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-db-new-table')">✚ Nueva Tabla</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="form-db-new-table" class="collapsible-panel">
+                            <div class="form-grid-2">
+                                <input type="text" id="db-new-table-name" placeholder="Nombre tabla (ej. alumnos)">
+                                <input type="text" id="db-new-table-cols" placeholder="Columnas separadas por coma (ej. id, nombre, nota)">
+                            </div>
+                            <div class="form-inline-end">
+                                <button type="button" class="btn-green" onclick="createDbTable()">Crear Tabla</button>
+                            </div>
+                        </div>
+
+                        <div class="form-inline-between">
+                            <div class="form-inline-row">
+                                <label class="mono-muted" for="db-active-table-select">Tabla activa:</label>
+                                <select id="db-active-table-select" onchange="selectDbTable(this.value)" class="compact-select"></select>
+                            </div>
+                            <div class="filter-pills-row">
+                                <button type="button" class="btn-cyan btn-sm" onclick="toggleForm('form-db-insert-row')">✚ Insertar Fila</button>
+                                <button type="button" class="btn-danger btn-sm" onclick="dropCurrentDbTable()">🗑️ Borrar Tabla</button>
+                            </div>
+                        </div>
+
+                        <div id="form-db-insert-row" class="collapsible-panel">
+                            <div id="db-insert-fields-container" class="form-grid-2"></div>
+                            <div class="form-inline-end">
+                                <button type="button" class="btn-green" onclick="insertDbRow()">Guardar Registro</button>
+                            </div>
+                        </div>
+
+                        <div id="db-table-data-container" class="scroll-list-lg"></div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- COLUMNA DERECHA: CONSOLA SQL INTERACTIVA -->
+            <div class="ws-column">
+                <section class="card" id="card-db-sql">
+                    <div class="card-header">
+                        <span class="card-title-text">⚡ Consola de Consultas SQL</span>
+                        <div class="card-actions">
+                            <button type="button" class="btn-cyan btn-sm" onclick="runDbSqlQuery()">▶ Ejecutar SQL</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="mono-muted">Soporta <code>SELECT * FROM tabla WHERE col = valor</code>, <code>INSERT INTO tabla (...) VALUES (...)</code>, <code>DELETE FROM tabla WHERE col = valor</code>, <code>CREATE TABLE</code> y <code>SHOW TABLES</code>.</p>
+                        <textarea id="db-sql-input" class="notes-area" placeholder="SELECT * FROM alumnos;">SHOW TABLES;</textarea>
+                        <div id="db-sql-status" class="tb-status-msg"></div>
+                        <div id="db-sql-output" class="scroll-list-lg"></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- ==========================================================
+         WORKSPACE 4: ACADEMIA, ASIGNATURAS & ESTUDIO (DAM)
          ========================================================== -->
     <main id="ws-academy" class="workspace-view">
         <div class="grid-2-col">
-            <!-- COLUMNA IZQUIERDA: KANBAN + CALCULADORA DE NOTAS -->
+            <!-- COLUMNA IZQUIERDA: GESTOR GLOBAL DE ASIGNATURAS + KANBAN + NOTAS -->
             <div class="ws-column">
+                <!-- CATÁLOGO GLOBAL DE ASIGNATURAS Y PROFESORES -->
+                <section class="card" id="card-subjects-catalog">
+                    <div class="card-header">
+                        <span class="card-title-text">📘 Mis Asignaturas &amp; Profesores</span>
+                        <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-subject-catalog')">✚ Asignatura</button>
+                    </div>
+                    <div class="card-body">
+                        <p class="mono-muted">Añade aquí tus asignaturas con su profesor y aula; aparecerán automáticamente para elegirlas con un clic en el Horario, Entregas, Kanban, Notas, Flashcards y Dudas.</p>
+                        <div id="form-add-subject-catalog" class="collapsible-panel">
+                            <div class="form-grid-3">
+                                <input type="text" id="subj-cat-name" placeholder="Asignatura (ej. Programación)">
+                                <input type="text" id="subj-cat-teacher" placeholder="Profesor/a (ej. Prof. López)">
+                                <input type="text" id="subj-cat-room" placeholder="Aula por defecto (ej. Aula 12)">
+                            </div>
+                            <div class="form-inline-end">
+                                <button type="button" class="btn-green" onclick="addCatalogSubject()">Guardar Asignatura</button>
+                            </div>
+                        </div>
+                        <div id="subjects-catalog-list" class="scroll-list-sm"></div>
+                    </div>
+                </section>
+
                 <!-- KANBAN DE ESTUDIO -->
                 <section class="card" id="card-kanban">
                     <div class="card-header">
@@ -531,7 +640,7 @@
                         <div id="form-kanban-add" class="collapsible-panel">
                             <div class="form-grid-2">
                                 <input type="text" id="kanban-new-title" placeholder="Tema (ej. Hilos y Sockets)">
-                                <input type="text" id="kanban-new-subject" placeholder="Módulo (ej. PSP)">
+                                <select id="kanban-new-subject" class="subject-select-target" aria-label="Asignatura Kanban"></select>
                                 <input type="number" id="kanban-new-pomos" value="2" min="1" max="20" title="Pomodoros estimados">
                                 <select id="kanban-new-prio">
                                     <option value="high">🔴 Crítico</option>
@@ -573,7 +682,7 @@
                     <div class="card-body">
                         <div id="form-add-grade-subject" class="collapsible-panel">
                             <div class="form-grid-3">
-                                <input type="text" id="new-grade-subj-name" placeholder="Asignatura">
+                                <select id="new-grade-subj-name" class="subject-select-target" aria-label="Asignatura para notas"></select>
                                 <input type="number" id="new-grade-subj-target" value="5.0" step="0.1" min="0" max="10" title="Nota objetivo">
                                 <input type="number" id="new-grade-subj-credits" value="6" min="1" max="30" title="Horas / Créditos">
                             </div>
@@ -622,7 +731,7 @@
 
                             <div id="form-add-flashcard" class="collapsible-panel">
                                 <div class="form-grid-2">
-                                    <input type="text" id="fc-new-subj" placeholder="Módulo">
+                                    <select id="fc-new-subj" class="subject-select-target" aria-label="Asignatura flashcard"></select>
                                     <input type="text" id="fc-new-q" placeholder="Pregunta / Concepto">
                                 </div>
                                 <div class="form-inline-row mt-6">
@@ -649,7 +758,7 @@
                             </div>
                             <div id="form-add-bug" class="collapsible-panel">
                                 <div class="form-grid-2">
-                                    <input type="text" id="bug-new-subj" placeholder="Lenguaje / Módulo">
+                                    <select id="bug-new-subj" class="subject-select-target" aria-label="Asignatura bug"></select>
                                     <input type="text" id="bug-new-error" placeholder="Mensaje de error">
                                     <input type="text" id="bug-new-cause" placeholder="Causa raíz">
                                     <input type="text" id="bug-new-fix" placeholder="Solución aplicada">
@@ -664,7 +773,7 @@
                         <!-- DUDAS -->
                         <div id="hub-view-doubts" class="is-hidden">
                             <div class="form-inline-row">
-                                <input type="text" id="doubt-new-subj" placeholder="Módulo" class="w-110">
+                                <select id="doubt-new-subj" class="subject-select-target w-110" aria-label="Asignatura duda"></select>
                                 <input type="text" id="doubt-new-text" placeholder="Escribe la duda para preguntar..." onkeydown="if(event.key==='Enter') addClassDoubt()">
                                 <button type="button" class="btn-green" onclick="addClassDoubt()" aria-label="Añadir duda">✚</button>
                             </div>
@@ -711,7 +820,7 @@
     </main>
 
     <!-- ==========================================================
-         WORKSPACE 4: DEV & SYSADMIN LAB
+         WORKSPACE 5: DEV & SYSADMIN LAB
          ========================================================== -->
     <main id="ws-devlab" class="workspace-view">
         <div class="grid-2-col">
@@ -862,11 +971,14 @@
                     </div>
                 </section>
 
-                <!-- SNIPPET & COMMAND VAULT -->
+                <!-- SNIPPET & COMMAND VAULT (100% EDITABLE: ELIMINAR TODOS Y AÑADIR PROPIOS) -->
                 <section class="card" id="card-snippets">
                     <div class="card-header">
                         <span class="card-title-text">⚡ Snippet &amp; Command Vault</span>
-                        <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-snippet')">✚ Snippet</button>
+                        <div class="card-actions">
+                            <button type="button" class="btn-danger btn-sm" onclick="clearAllSnippets()" title="Vaciar todos los snippets">🧹 Vaciar</button>
+                            <button type="button" class="btn-green btn-sm" onclick="toggleForm('form-add-snippet')">✚ Snippet</button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="form-grid-3">
@@ -913,7 +1025,7 @@
     </main>
 
     <!-- ==========================================================
-         WORKSPACE 5: GOOGLE FONTS & THEME STUDIO
+         WORKSPACE 6: GOOGLE FONTS & THEME STUDIO
          ========================================================== -->
     <main id="ws-fonts" class="workspace-view">
         <div class="grid-2-col">
@@ -950,11 +1062,11 @@
                                 </label>
                             </div>
                         </div>
-                        <textarea id="gf-preview-sample" class="notes-area min-h-85">DevWorkspace v7.1 — 0123456789 {} [] () =&gt; const x = "Hola Mundo";</textarea>
+                        <textarea id="gf-preview-sample" class="notes-area min-h-85">DevWorkspace v7.2 — 0123456789 {} [] () =&gt; const x = "Hola Mundo";</textarea>
                         <div class="filter-pills-row">
                             <button type="button" class="btn-cyan btn-sm" onclick="applyLoadedFontToUi('sans')">Aplicar a Interfaz (UI)</button>
                             <button type="button" class="btn-violet btn-sm" onclick="applyLoadedFontToUi('mono')">Aplicar a Código / Terminal</button>
-                            <button type="button" class="btn-green btn-sm" onclick="applyLoadedFontToStudio()">Aplicar en Live Code Studio</button>
+                            <button type="button" class="btn-green btn-sm" onclick="applyLoadedFontToStudio()">Aplicar en Code Studio</button>
                         </div>
                     </div>
 
@@ -965,10 +1077,10 @@
                 </div>
             </section>
 
-            <!-- PERSONALIZACIÓN DE TEMA Y ESCALA UI -->
+            <!-- PERSONALIZACIÓN DE TEMAS CON FUENTE VINCULADA -->
             <section class="card">
                 <div class="card-header">
-                    <span class="card-title-text">🎨 Personalización de Tema &amp; Escala</span>
+                    <span class="card-title-text">🎨 Mis Temas Propios (Colores + Fuente vinculada)</span>
                 </div>
                 <div class="card-body">
                     <div class="form-grid-2">
@@ -982,28 +1094,45 @@
                             </select>
                         </div>
                         <div>
-                            <label class="mono-muted" for="custom-theme-name">Nombre de Tema Personalizado:</label>
-                            <input type="text" id="custom-theme-name" value="Mi Tema" class="w-full mt-4">
+                            <label class="mono-muted" for="custom-theme-name">Nombre del Tema:</label>
+                            <input type="text" id="custom-theme-name" placeholder="Ej. Neon Red" value="Mi Tema" class="w-full mt-4">
+                        </div>
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div>
+                            <label class="mono-muted" for="custom-theme-font-ui">Fuente UI del Tema (Google Font):</label>
+                            <input type="text" id="custom-theme-font-ui" placeholder="Ej. Space Grotesk (opcional)" class="w-full mt-4">
+                        </div>
+                        <div>
+                            <label class="mono-muted" for="custom-theme-font-mono">Fuente Código del Tema:</label>
+                            <input type="text" id="custom-theme-font-mono" placeholder="Ej. Fira Code (opcional)" class="w-full mt-4">
                         </div>
                     </div>
 
                     <div class="color-pickers-grid">
-                        <label>Fondo Principal <input type="color" id="cp-bg" value="#060813" oninput="previewCustomThemeColors()"></label>
-                        <label>Fondo Tarjeta <input type="color" id="cp-card" value="#0d131f" oninput="previewCustomThemeColors()"></label>
+                        <label>Fondo Principal <input type="color" id="cp-bg" value="#050711" oninput="previewCustomThemeColors()"></label>
+                        <label>Fondo Tarjeta <input type="color" id="cp-card" value="#0b111e" oninput="previewCustomThemeColors()"></label>
                         <label>Bordes <input type="color" id="cp-border" value="#1e293b" oninput="previewCustomThemeColors()"></label>
                         <label>Texto Principal <input type="color" id="cp-text" value="#f1f5f9" oninput="previewCustomThemeColors()"></label>
-                        <label>Acento Primario <input type="color" id="cp-cyan" value="#38bdf8" oninput="previewCustomThemeColors()"></label>
-                        <label>Acento Secundario <input type="color" id="cp-violet" value="#a855f7" oninput="previewCustomThemeColors()"></label>
+                        <label>Acento Primario <input type="color" id="cp-cyan" value="#00f0ff" oninput="previewCustomThemeColors()"></label>
+                        <label>Acento Secundario <input type="color" id="cp-violet" value="#b84dff" oninput="previewCustomThemeColors()"></label>
                     </div>
 
                     <div class="filter-pills-row">
-                        <button type="button" class="btn-cyan" onclick="activateCustomTheme()">✨ Activar Tema Personalizado</button>
-                        <button type="button" class="btn-violet btn-sm" onclick="exportCustomThemeJson()">💾 Exportar Tema</button>
+                        <button type="button" class="btn-green" onclick="saveNewCustomThemePreset()">💾 Guardar en Selector de Temas</button>
+                        <button type="button" class="btn-cyan" onclick="activateCustomTheme()">✨ Previsualizar Activo</button>
+                        <button type="button" class="btn-violet btn-sm" onclick="exportCustomThemeJson()">📤 Exportar</button>
                         <label class="btn-ghost btn-sm file-btn-label">
-                            📂 Importar Tema
+                            📂 Importar
                             <input type="file" accept=".json" class="is-hidden" onchange="importCustomThemeJson(event)">
                         </label>
-                        <button type="button" class="btn-ghost" onclick="resetAppearanceDefaults()">Restaurar Tipografía Base</button>
+                        <button type="button" class="btn-ghost btn-sm" onclick="resetAppearanceDefaults()">Restaurar Base</button>
+                    </div>
+
+                    <div>
+                        <span class="mono-muted">🎭 Tus Temas Guardados (aparecen directo en el selector superior con su fuente):</span>
+                        <div id="saved-custom-themes-list" class="scroll-list-sm mt-6"></div>
                     </div>
                 </div>
             </section>
@@ -1020,8 +1149,31 @@
                 <h2 id="global-search-title">🔍 Buscador Global (Ctrl + K)</h2>
                 <button type="button" class="btn-icon" onclick="closeGlobalSearch()" aria-label="Cerrar buscador">✖</button>
             </div>
-            <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar tareas, notas, entregas, flashcards, proyectos..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)" aria-label="Buscar en todo el espacio de trabajo">
+            <input type="text" id="global-search-input" class="global-search-input" placeholder="Buscar tareas, asignaturas, notas, entregas, tablas BD..." oninput="filterGlobalSearch()" onkeydown="handleGlobalSearchKeydown(event)" aria-label="Buscar en todo el espacio de trabajo">
             <ul id="global-search-results" class="global-search-results" aria-live="polite"></ul>
+        </div>
+    </div>
+
+    <!-- AJUSTE MANUAL DE HORA Y SINCRONIZACIÓN -->
+    <div id="clock-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="clock-modal-title" onclick="if(event.target===this) closeClockModal()">
+        <div class="modal-content auth-modal-content">
+            <div class="modal-header">
+                <h2 id="clock-modal-title">🕒 Ajuste de Hora</h2>
+                <button type="button" class="btn-icon" onclick="closeClockModal()" aria-label="Cerrar reloj">✖</button>
+            </div>
+            <p class="mono-muted">Ajusta la hora manualmente (afecta al reloj, horario de clase actual y avisos) o sincronízala con la red.</p>
+            <div class="form-grid-2">
+                <label class="mono-muted" style="text-align:left">Fecha manual
+                    <input type="date" id="manual-clock-date" class="w-full mt-4">
+                </label>
+                <label class="mono-muted" style="text-align:left">Hora manual
+                    <input type="time" id="manual-clock-time" step="1" class="w-full mt-4">
+                </label>
+            </div>
+            <div class="filter-pills-row" style="justify-content:center">
+                <button type="button" class="btn-green" onclick="applyManualClock()">✅ Aplicar Hora Manual</button>
+                <button type="button" class="btn-cyan" onclick="syncRealTimeNetwork(); closeClockModal();">🌐 Hora Automática</button>
+            </div>
         </div>
     </div>
 
@@ -1042,7 +1194,8 @@
                 </select>
                 <input type="time" id="sch-add-start" value="08:30" aria-label="Hora de inicio">
                 <input type="time" id="sch-add-end" value="09:25" aria-label="Hora de fin">
-                <input type="text" id="sch-add-subject" placeholder="Asignatura">
+                <select id="sch-add-subject" class="subject-select-target" onchange="autofillScheduleFromCatalog(this.value)" aria-label="Asignatura"></select>
+                <input type="text" id="sch-add-teacher" placeholder="Profesor/a" class="w-110">
                 <input type="text" id="sch-add-room" placeholder="Aula" class="w-90">
                 <button type="button" class="btn-green" onclick="addScheduleClass()" aria-label="Añadir clase">✚</button>
             </div>
@@ -1050,10 +1203,11 @@
             <div class="modal-footer-actions">
                 <div class="filter-pills-row">
                     <button type="button" class="btn-danger btn-sm" onclick="clearSchedule()">Vaciar Horario</button>
+                    <button type="button" class="btn-violet btn-sm" onclick="importScheduleFromDrive()">☁️ Importar desde Drive</button>
                     <button type="button" class="btn-ghost btn-sm" onclick="exportScheduleJson()">💾 Exportar</button>
                     <label class="btn-ghost btn-sm file-btn-label">
-                        📂 Importar
-                        <input type="file" accept=".json" class="is-hidden" onchange="importScheduleJson(event)">
+                        📂 Subir Archivo (.csv/.txt/.json)
+                        <input type="file" accept=".json,.csv,.txt" class="is-hidden" onchange="importScheduleFile(event)">
                     </label>
                 </div>
                 <button type="button" class="btn-cyan" onclick="closeScheduleModal()">Listo</button>
@@ -1061,23 +1215,30 @@
         </div>
     </div>
 
-    <!-- AUTENTICACIÓN FIREBASE -->
-    <div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title" onclick="if(event.target===this) closeAuthModal()">
+    <!-- GOOGLE DRIVE SYNC & STORAGE -->
+    <div id="drive-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="drive-title" onclick="if(event.target===this) closeDriveModal()">
         <div class="modal-content auth-modal-content">
             <div class="modal-header">
-                <h2 id="auth-title">DevWorkspace Cloud</h2>
-                <button type="button" class="btn-icon" onclick="closeAuthModal()" aria-label="Cerrar autenticación">✖</button>
+                <h2 id="drive-title">☁️ Sincronización Google Drive</h2>
+                <button type="button" class="btn-icon" onclick="closeDriveModal()" aria-label="Cerrar Google Drive">✖</button>
             </div>
-            <p id="auth-subtitle" class="mono-muted">Inicia sesión para sincronizar tus proyectos, notas y tareas en Firebase.</p>
+            <p class="mono-muted">Guarda e importa todos tus datos (horario, asignaturas, temas, BD, código y snippets) en tu <strong>Google Drive</strong> en formato comprimido y protegido (`devworkspace_vault.dwpk`, solo modificable por la web).</p>
             <div class="auth-input-group">
-                <input type="email" id="auth-email" placeholder="Correo electrónico">
-                <input type="password" id="auth-password" placeholder="Contraseña" onkeydown="if(event.key==='Enter') handleEmailAuth()">
+                <input type="text" id="gdrive-client-id" placeholder="Google OAuth Client ID (opcional si ya está configurado)" aria-label="Google Client ID">
+                <button type="button" class="btn-cyan btn-full" onclick="connectGoogleDrive()">🔑 Conectar con Google Drive</button>
+                <div class="form-grid-2">
+                    <button type="button" class="btn-green" onclick="forceDriveSyncNow()">💾 Guardar en Drive</button>
+                    <button type="button" class="btn-violet" onclick="pullFromGoogleDrive(true)">📥 Importar de Drive</button>
+                </div>
             </div>
-            <button type="button" id="auth-main-btn" class="btn-cyan btn-full" onclick="handleEmailAuth()">🔑 Iniciar Sesión</button>
-            <button type="button" class="btn-link-action" onclick="toggleAuthMode()">¿No tienes cuenta? Regístrate aquí</button>
-            <button type="button" class="btn-link-action" onclick="sendPasswordReset()">¿Olvidaste tu contraseña? Enviar enlace</button>
-            <div class="auth-divider"><span>O</span></div>
-            <button type="button" class="btn-ghost btn-full" onclick="continueAsGuest()">⚡ Seguir en Modo Local</button>
+            <div class="auth-divider"><span>RESPALDO PROTEGIDO LOCAL (.DWPK)</span></div>
+            <div class="form-grid-2">
+                <button type="button" class="btn-ghost btn-sm" onclick="exportProtectedVaultFile()">⬇️ Descargar .dwpk</button>
+                <label class="btn-ghost btn-sm file-btn-label" style="justify-content:center">
+                    ⬆️ Importar .dwpk
+                    <input type="file" accept=".dwpk" class="is-hidden" onchange="importProtectedVaultFile(event)">
+                </label>
+            </div>
         </div>
     </div>
 
@@ -1152,7 +1313,7 @@
                 <div><kbd>Ctrl + K</kbd> Buscador Global</div>
                 <div><kbd>Ctrl + N</kbd> Nueva Tarea</div>
                 <div><kbd>Ctrl + P</kbd> Iniciar/Parar Pomodoro</div>
-                <div><kbd>Alt + 1..5</kbd> Cambiar Workspace</div>
+                <div><kbd>Alt + 1..6</kbd> Cambiar Workspace</div>
                 <div><kbd>Alt + Z</kbd> Modo Zen</div>
                 <div><kbd>Esc</kbd> Cerrar Modal Activo</div>
                 <div><kbd>?</kbd> Ver Atajos</div>
@@ -1169,28 +1330,22 @@
     <footer class="main-footer">
         <div class="footer-left">
             <a href="#" onclick="resetWorkspacePrompt(); return false;" class="footer-link-danger">🧹 Vaciar</a>
-            <a href="#" onclick="exportData(); return false;" class="footer-link-cyan">💾 Exportar JSON</a>
-            <a href="#" onclick="document.getElementById('import-file').click(); return false;" class="footer-link-violet">📂 Importar JSON</a>
-            <input type="file" id="import-file" accept=".json" class="is-hidden" onchange="importData(event)">
+            <a href="#" onclick="forceDriveSyncNow(); return false;" class="footer-link-cyan">☁️ Guardar en Drive</a>
+            <a href="#" onclick="pullFromGoogleDrive(true); return false;" class="footer-link-violet">📥 Importar de Drive</a>
         </div>
         <div class="footer-right">
-            <span id="storage-quota-badge" class="badge-version">Storage: 0 KB</span>
-            <span>DevWorkspace v7.1 Studio Edition</span>
+            <span id="storage-quota-badge" class="badge-version">Vault: 0 KB</span>
+            <span>DevWorkspace v7.2 Drive Studio</span>
         </div>
     </footer>
 
-    <!-- CONFIGURACIÓN FIREBASE PARA SINCRONIZACIÓN ENTRE ORDENADORES -->
+    <!-- CONFIGURACIÓN GOOGLE DRIVE OAUTH (OPCIONAL: PEGA TU CLIENT ID AQUÍ) -->
     <script>
-      window.DEVWORKSPACE_FIREBASE_CONFIG = {
-        apiKey: "AIzaSyAAtZX3Q-64Iu_P20B8Nwd3s_Sdl589lFI",
-        authDomain: "devworkspace-9be90.firebaseapp.com",
-        projectId: "devworkspace-9be90",
-        storageBucket: "devworkspace-9be90.firebasestorage.app",
-        messagingSenderId: "308043648982",
-        appId: "1:308043648982:web:eac9eccc00f3a1ead89e77",
-        measurementId: "G-KEV0S83H0M"
+      window.DEVWORKSPACE_GOOGLE_CONFIG = {
+        clientId: ""
       };
     </script>
+    <script src="[https://accounts.google.com/gsi/client](https://accounts.google.com/gsi/client)" async defer></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>

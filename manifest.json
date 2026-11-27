@@ -2,14 +2,14 @@
   "id": "./",
   "name": "DevWorkspace Studio",
   "short_name": "DevWorkspace",
-  "description": "Workspace personal para estudiar, organizar tareas y desarrollar proyectos.",
+  "description": "Workspace personal para estudiar, organizar tareas, gestionar BD, editar código y sincronizar con Google Drive.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#060813",
-  "theme_color": "#060813",
+  "background_color": "#050711",
+  "theme_color": "#00f0ff",
   "icons": [
     {
       "src": "./icon.svg",

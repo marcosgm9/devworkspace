@@ -169,3 +169,154 @@ export function parseBaseValue(base, rawValue) {
 
     return { valid: true, value: parsed };
 }
+
+/* --------------------------------------------------------------------------
+   COMPACTACIÓN LIGERA, FIRMA DE INTEGRIDAD Y PARSEO DE HORARIOS
+   -------------------------------------------------------------------------- */
+const PACK_MAGIC = 'DWPK1.';
+
+function fnv1aHash(str) {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+/**
+ * Empaqueta el estado en un formato compacto y firmado para Google Drive:
+ * - Elimina claves vacías/por defecto redundantes vía el llamador o JSON compacto.
+ * - Comprime con DeflateStream (si el navegador lo soporta) o Base64 UTF-8.
+ * - Añade checksum/firma interna para detectar manipulaciones manuales del archivo.
+ */
+export async function packDrivePayload(stateObj, salt = 'devworkspace-drive-guard') {
+    const rawJson = JSON.stringify(stateObj);
+    const sig = fnv1aHash(`${salt}::${rawJson.length}::${rawJson}`);
+    const envelope = JSON.stringify({ v: 1, s: sig, d: stateObj });
+
+    if (typeof CompressionStream === 'function') {
+        const stream = new Blob([envelope]).stream().pipeThrough(new CompressionStream('deflate'));
+        const buf = await new Response(stream).arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) {
+            bin += String.fromCharCode(bytes[i]);
+        }
+        return `${PACK_MAGIC}z.${btoa(bin)}`;
+    }
+
+    const bytes = new TextEncoder().encode(envelope);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) {
+        bin += String.fromCharCode(bytes[i]);
+    }
+    return `${PACK_MAGIC}r.${btoa(bin)}`;
+}
+
+export async function unpackDrivePayload(packedText, salt = 'devworkspace-drive-guard') {
+    const clean = String(packedText ?? '').trim();
+    if (!clean.startsWith(PACK_MAGIC)) {
+        throw new Error('Formato de archivo de Drive no reconocido o alterado');
+    }
+
+    const rest = clean.slice(PACK_MAGIC.length);
+    const dotIdx = rest.indexOf('.');
+    if (dotIdx === -1) throw new Error('Cabecera de paquete inválida');
+
+    const mode = rest.slice(0, dotIdx);
+    const b64 = rest.slice(dotIdx + 1);
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+    }
+
+    let jsonText = '';
+    if (mode === 'z') {
+        if (typeof DecompressionStream !== 'function') {
+            throw new Error('Este navegador no soporta descompresión Deflate');
+        }
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+        jsonText = await new Response(stream).text();
+    } else if (mode === 'r') {
+        jsonText = new TextDecoder().decode(bytes);
+    } else {
+        throw new Error('Modo de empaquetado desconocido');
+    }
+
+    const envelope = JSON.parse(jsonText);
+    if (!envelope || envelope.v !== 1 || !envelope.d || typeof envelope.s !== 'string') {
+        throw new Error('Estructura interna de archivo corrupta');
+    }
+
+    const rawJson = JSON.stringify(envelope.d);
+    const expectedSig = fnv1aHash(`${salt}::${rawJson.length}::${rawJson}`);
+    if (envelope.s !== expectedSig) {
+        throw new Error('El archivo ha sido modificado manualmente o está corrupto');
+    }
+
+    return envelope.d;
+}
+
+/**
+ * Parsea un horario importado desde texto/CSV/JSON:
+ * Soporta líneas tipo: "Lunes | 08:30 - 09:25 | Acceso a Datos | Aula 2 | Prof. García"
+ * o CSV separado por ; o ,
+ */
+export function parseScheduleImportText(rawContent) {
+    const text = String(rawContent ?? '').trim();
+    if (!text) return [];
+
+    const dayAliases = {
+        dom: 0, domingo: 0, sun: 0, sunday: 0,
+        lun: 1, lunes: 1, mon: 1, monday: 1,
+        mar: 2, martes: 2, tue: 2, tuesday: 2,
+        mie: 3, mié: 3, miercoles: 3, miércoles: 3, wed: 3, wednesday: 3,
+        jue: 4, jueves: 4, thu: 4, thursday: 4,
+        vie: 5, viernes: 5, fri: 5, friday: 5,
+        sab: 6, sáb: 6, sabado: 6, sábado: 6, sat: 6, saturday: 6
+    };
+
+    const rows = [];
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    for (const line of lines) {
+        if (/^(d[ií]a|day)[,;|]/i.test(line)) continue; // cabecera
+        const sep = line.includes('|') ? '|' : line.includes(';') ? ';' : ',';
+        const cols = line.split(sep).map(c => c.trim());
+        if (cols.length < 3) continue;
+
+        const dayKey = cols[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        let day = dayAliases[dayKey];
+        if (day === undefined && /^[0-6]$/.test(cols[0])) day = Number(cols[0]);
+        if (day === undefined) continue;
+
+        let start = '';
+        let end = '';
+        let subject = '';
+        let room = '';
+        let teacher = '';
+
+        const rangeMatch = /^(\d{1,2}:\d{2})\s*[-–a]+\s*(\d{1,2}:\d{2})$/.exec(cols[1]);
+        if (rangeMatch) {
+            start = rangeMatch[1].padStart(5, '0');
+            end = rangeMatch[2].padStart(5, '0');
+            subject = cols[2] || '';
+            room = cols[3] || '';
+            teacher = cols[4] || '';
+        } else if (/^\d{1,2}:\d{2}$/.test(cols[1]) && /^\d{1,2}:\d{2}$/.test(cols[2] || '')) {
+            start = cols[1].padStart(5, '0');
+            end = cols[2].padStart(5, '0');
+            subject = cols[3] || '';
+            room = cols[4] || '';
+            teacher = cols[5] || '';
+        }
+
+        if (start && end && subject) {
+            rows.push({ day, start, end, subject, room, teacher });
+        }
+    }
+
+    return rows;
+}

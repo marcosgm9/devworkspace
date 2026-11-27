@@ -1,4 +1,4 @@
-const CACHE_NAME = 'devworkspace-v7-shell-v7';
+const CACHE_NAME = 'devworkspace-v7-shell-v8';
 const APP_SHELL = [
     './',
     './index.html',

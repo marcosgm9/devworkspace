@@ -3,174 +3,378 @@ import {
     createDebouncer,
     getMadridDateKey,
     getMadridClock,
-    calculateSubnet as computeSubnetInfo,
+    calculateSubnet as calcSubnetCore,
     getNextRepeatDate,
     normalizeExternalUrl,
-    parseBaseValue
+    parseBaseValue,
+    packDrivePayload,
+    unpackDrivePayload,
+    parseScheduleImportText
 } from './core.js';
 
-/* ==========================================================================
-   DEVWORKSPACE v7.1 - STUDIO EDITION ENGINE
-   Arquitectura modular, limpia y compatible con LocalStorage + Firebase
-   ========================================================================== */
-
 const STORAGE_KEY = 'devworkspace_v7_state';
-const SNAPSHOTS_KEY = 'devworkspace_v7_snapshots';
-const CUSTOM_THEME_VARS = ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'];
-const STUDIO_IFRAME_ORIGIN = 'null';
-const SYNC_DEBOUNCE_MS = 1200;
-const FIREBASE_SDK_BASE = 'https://www.gstatic.com/firebasejs/10.12.2';
+const MAX_SNAPSHOTS = 12;
+const MAX_NOTE_REVISIONS = 25;
+const MAX_SERVER_LOGS = 40;
+const MAX_STUDIO_PROJECTS = 25;
+const DEFAULT_DRIVE_SALT = 'dw-v72-drive-guard-9be90';
+const DRIVE_VAULT_FILENAME = 'devworkspace_vault.dwpk';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
-/* --------------------------------------------------------------------------
-   ESTADO GLOBAL INICIAL
-   -------------------------------------------------------------------------- */
-const defaultState = {
-    meta: {
-        updatedAt: 0
+const ALLOWED_WORKSPACES = ['cockpit', 'studio', 'database', 'academy', 'devlab', 'fonts'];
+const ALLOWED_THEMES = ['cyberpunk', 'dracula', 'valorant', 'minecraft', 'retro', 'daylight', 'custom'];
+const ALLOWED_PRESETS = ['default', 'today', 'exam', 'dev', 'db', 'sysadmin'];
+const ALLOWED_TASK_FILTERS = ['all', 'pending', 'done', 'today', 'overdue'];
+const ALLOWED_TASK_BLOCKS = ['all', 'morning', 'afternoon', 'night'];
+const ALLOWED_TASK_SORTS = ['created', 'priority', 'block', 'date'];
+const ALLOWED_PRIORITIES = ['high', 'medium', 'low'];
+const ALLOWED_REPEATS = ['', 'daily', 'weekly', 'monthly'];
+const ALLOWED_DELIVERY_FILTERS = ['all', 'pending', 'soon', 'exam', 'practice'];
+const ALLOWED_NOTE_TABS = ['general', 'comandos', 'clases'];
+const ALLOWED_STUDIO_TABS = ['html', 'css', 'js', 'python', 'java', 'saved'];
+const ALLOWED_VIEWPORTS = ['100%', '768px', '375px'];
+const ALLOWED_KANBAN_COLS = ['todo', 'doing', 'done'];
+
+const PRESET_CARDS = {
+    default: null,
+    today: ['card-schedule', 'card-tasks', 'card-pomodoro'],
+    exam: ['card-kanban', 'card-study-hub', 'card-grades', 'card-pomodoro'],
+    dev: ['card-dev-toolbox', 'card-snippets', 'card-projects'],
+    db: ['card-db-manager', 'card-db-sql'],
+    sysadmin: ['card-servers', 'card-snippets', 'card-dev-toolbox']
+};
+
+const STUDIO_TEMPLATES = {
+    blank: {
+        html: '<main class="box">\n  <h1>Hola DevWorkspace</h1>\n  <p>Listo para programar.</p>\n</main>',
+        css: 'body { font-family: system-ui, sans-serif; background: #090d16; color: #f1f5f9; padding: 2rem; }\n.box { border: 1px solid #00f0ff; border-radius: 10px; padding: 1.5rem; }',
+        js: 'console.log("HTML5 base cargado");'
     },
-    activeWorkspace: 'cockpit',
-    density: 'airy',
-    theme: 'cyberpunk',
-    customTheme: {
-        name: 'Mi Tema',
-        bg: '#060813',
-        card: '#0d131f',
-        border: '#1e293b',
-        text: '#f1f5f9',
-        cyan: '#38bdf8',
-        violet: '#a855f7'
+    cybercard: {
+        html: '<div class="cyber-card">\n  <span class="tag">SYS.ONLINE</span>\n  <h2>Módulo DAM</h2>\n  <p id="status">Estado: activo</p>\n  <button id="btn-ping">Ping</button>\n</div>',
+        css: 'body { display: grid; place-items: center; min-height: 100vh; background: #050711; color: #e2e8f0; }\n.cyber-card { background: #0c1322; border: 1px solid #00f0ff; padding: 24px; border-radius: 12px; box-shadow: 0 0 24px rgba(0,240,255,.2); }\n.tag { color: #b84dff; font-family: monospace; font-size: 12px; }\nbutton { margin-top: 12px; padding: 8px 14px; background: #00f0ff; color: #050711; border: 0; border-radius: 6px; font-weight: 700; cursor: pointer; }',
+        js: 'document.getElementById("btn-ping")?.addEventListener("click", () => {\n  document.getElementById("status").textContent = "Estado: ping OK (" + new Date().toLocaleTimeString() + ")";\n});'
     },
-    appearance: {
-        fontSans: 'Inter',
-        fontMono: 'JetBrains Mono',
-        studioFont: '',
-        uiScale: '1',
-        favoriteFonts: ['Inter', 'JetBrains Mono', 'Fira Code', 'Space Grotesk', 'Orbitron']
+    flexgrid: {
+        html: '<div class="layout">\n  <header class="hd">Cabecera</header>\n  <aside class="sb">Lateral</aside>\n  <section class="cnt">Contenido principal</section>\n</div>',
+        css: '.layout { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: auto 1fr; gap: 12px; min-height: 85vh; font-family: sans-serif; }\n.hd { grid-column: 1 / -1; background: #1e293b; color: #fff; padding: 14px; border-radius: 8px; }\n.sb, .cnt { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; }',
+        js: 'console.log("Grid layout listo");'
     },
-    weather: {
-        enabled: false,
-        lat: 38.68,
-        lon: -6.41,
-        label: 'Almendralejo'
+    domlab: {
+        html: '<h2>Contador DOM</h2>\n<button id="inc">+1</button>\n<span id="val">0</span>',
+        css: 'body { font-family: sans-serif; padding: 20px; background: #0b1020; color: #f8fafc; }\nbutton { padding: 6px 12px; cursor: pointer; }',
+        js: 'let n = 0;\ndocument.getElementById("inc")?.addEventListener("click", () => {\n  n++;\n  document.getElementById("val").textContent = String(n);\n});'
     },
-    schedule: [],
-    deliveries: [],
-    tasks: [],
-    kanban: [
-        { id: 'kb-1', title: 'Configurar entornos y SDK', subject: 'DAM', status: 'done', priority: 'low', pomos: 1 },
-        { id: 'kb-2', title: 'Repasar Consultas SQL y Joins', subject: 'Bases de Datos', status: 'doing', priority: 'high', pomos: 3 },
-        { id: 'kb-3', title: 'Arquitectura REST & JSON', subject: 'Acceso a Datos', status: 'todo', priority: 'medium', pomos: 2 }
-    ],
-    grades: [
-        {
-            id: 'gr-1',
-            name: 'Acceso a Datos',
-            target: 5.0,
-            credits: 6,
-            items: [
-                { id: 'gi-1', title: 'Práctica Ficheros XML/JSON', score: 8.5, weight: 30 },
-                { id: 'gi-2', title: 'Examen Parcial 1', score: 7.0, weight: 40 }
-            ]
-        }
-    ],
-    flashcards: [
-        { id: 'fc-1', subject: 'Redes', question: '¿Qué puerto usa SSH por defecto y qué protocolo de transporte emplea?', answer: 'Puerto 22 sobre TCP.', mastered: false },
-        { id: 'fc-2', subject: 'Bases de Datos', question: '¿Qué significan las siglas ACID en transacciones?', answer: 'Atomicidad, Consistencia, Aislamiento y Durabilidad.', mastered: false }
-    ],
-    bugLogs: [],
-    doubts: [],
-    teamProjects: [],
-    notes: {
-        general: '# Bienvenido a DevWorkspace v7.1 Studio\n\n- Usa **Live Code Studio** para probar HTML, CSS y JS en vivo.\n- Personaliza fuentes desde **Fonts & Temas**.',
-        comandos: '# Comandos frecuentes\n\n```bash\ndocker ps -a\nsystemctl status nginx\n```',
-        clases: '# Apuntes de clase\n\n> Usa el botón **Preview MD** para visualizar tus notas formateadas.'
+    python: {
+        python: '# Script Python 3 de prueba\nnombre = "Marcos"\nnotas = [8.5, 9.0, 7.5]\nmedia = sum(notas) / len(notas)\nprint(f"Alumno: {nombre} | Media: {media:.2f}")'
     },
-    noteRevisions: {
-        general: [],
-        comandos: [],
-        clases: []
-    },
-    stickyNote: '',
-    servers: [],
-    infraChangelog: [],
-    customSnippets: [],
-    bookmarks: [
-        { id: 'bm-1', name: 'MDN Web Docs', url: 'https://developer.mozilla.org/es/' },
-        { id: 'bm-2', name: 'Google Fonts', url: 'https://fonts.google.com/' },
-        { id: 'bm-3', name: 'DevDocs', url: 'https://devdocs.io/' }
-    ],
-    studioCurrent: {
-        title: 'Mi Proyecto Web',
-        html: '<div class="hero-card">\n  <span class="tag">LIVE STUDIO v7.1</span>\n  <h1>Hola, DevWorkspace</h1>\n  <p>Edita el código HTML, CSS o JS a la izquierda y mira el resultado al instante.</p>\n  <button id="demo-btn">Probar Interacción</button>\n</div>',
-        css: '* { box-sizing: border-box; margin: 0; padding: 0; }\nbody {\n  min-height: 100vh;\n  display: grid;\n  place-items: center;\n  background: #060813;\n  color: #f1f5f9;\n  font-family: system-ui, sans-serif;\n  padding: 20px;\n}\n.hero-card {\n  background: #0d131f;\n  border: 1px solid #38bdf8;\n  border-radius: 14px;\n  padding: 28px;\n  max-width: 440px;\n  text-align: center;\n  box-shadow: 0 0 28px rgba(56, 189, 248, 0.22);\n}\n.tag {\n  display: inline-block;\n  font-size: 11px;\n  letter-spacing: 1px;\n  color: #38bdf8;\n  border: 1px solid rgba(56, 189, 248, 0.4);\n  padding: 3px 8px;\n  border-radius: 6px;\n  margin-bottom: 12px;\n}\nh1 { margin-bottom: 10px; font-size: 1.6rem; }\np { color: #94a3b8; line-height: 1.5; margin-bottom: 18px; }\nbutton {\n  background: #38bdf8;\n  color: #040711;\n  border: none;\n  padding: 10px 18px;\n  border-radius: 8px;\n  font-weight: 700;\n  cursor: pointer;\n}\nbutton:hover { opacity: 0.9; }',
-        js: 'const btn = document.getElementById("demo-btn");\nlet clicks = 0;\nbtn?.addEventListener("click", () => {\n  clicks++;\n  console.log(`Botón pulsado ${clicks} veces`);\n  btn.textContent = `Pulsado (${clicks})`;\n});'
-    },
-    studioProjects: [],
-    studyStats: {
-        totalMinutes: 0,
-        dailyLog: {}
+    java: {
+        java: 'public class Main {\n    public static void main(String[] args) {\n        String curso = "1º DAM";\n        int modulos = 6;\n        System.out.println("Curso: " + curso + " - Modulos: " + modulos);\n    }\n}'
     }
 };
 
-let appState = cloneState(defaultState);
+const CDN_SNIPPETS = {
+    tailwind: '<script src="https://cdn.tailwindcss.com"></script>',
+    bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">',
+    alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>',
+    chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
+};
 
-/* Variables de runtime (no persistentes) */
+const BOILERPLATES = {
+    dockerfile: 'FROM node:22-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --only=production\nCOPY . .\nEXPOSE 3000\nCMD ["node", "server.js"]',
+    compose: 'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped'
+};
+let state = createDefaultState();
 let currentTaskFilter = 'all';
 let currentTaskBlockFilter = 'all';
 let currentTaskSort = 'created';
-let currentDeliveriesFilter = 'all';
-let currentNotesTab = 'general';
-let isNotesPreviewMode = false;
-let scheduleShowTable = false;
-let examCramOnly = false;
+let currentDeliveryFilter = 'all';
 let currentFlashcardIndex = 0;
-let currentFlashcardFlipped = false;
-let linkedPomodoroTaskId = '';
-
-/* Reloj real y Pomodoro */
-let clockOffsetMs = 0;
-let pomoInterval = null;
-let pomoRemainingSec = 25 * 60;
-let pomoMode = 'focus';
-let pomoInitialMins = 25;
-
-/* Web Audio */
-let audioCtx = null;
-let audioMasterGain = null;
-let audioActiveNodes = [];
+let isFlashcardFlipped = false;
+let pomodoroInterval = null;
+let pomodoroRemainingSeconds = 25 * 60;
+let pomodoroSessionTotalSeconds = 25 * 60;
+let pomodoroCurrentMode = 'focus';
 let isAudioPlaying = false;
-
-/* Live Code Studio */
-let studioConsoleLogs = [];
-let currentStudioEditorTab = 'html';
-let lastPreviewedGoogleFont = 'JetBrains Mono';
-let draggedKanbanId = null;
-
-/* Firebase & PWA */
-let firebaseModulesPromise = null;
-let firebaseApp = null;
-let firebaseAuth = null;
-let firebaseDb = null;
-let currentCloudUser = null;
-let isRegisterMode = false;
+let audioCtx = null;
+let audioGain = null;
+let noiseNode = null;
+let clockTickInterval = null;
+let realNetworkTimeOffset = 0;
+let hasRealNetworkTime = false;
+let manualClockOffsetMs = null;
 let deferredInstallPrompt = null;
-let waitingServiceWorker = null;
-let pendingCloudUpload = false;
-let lastCloudSyncTimestamp = 0;
-let isApplyingRemoteState = false;
+let pendingServiceWorker = null;
+let globalSearchMatches = [];
+let globalSearchSelectedIndex = -1;
+let studioConsoleLogs = [];
+let notifiedDeliveryAlerts = new Set();
+let googleTokenClient = null;
+let pendingDriveAction = null;
 
-/* Undo y Edición */
-let lastUndoAction = null;
-let activeEditContext = null;
+function createDefaultState() {
+    return {
+        ui: {
+            workspace: 'cockpit',
+            theme: 'cyberpunk',
+            preset: 'default',
+            density: 'airy',
+            zenMode: false,
+            presentationMode: false,
+            noteTab: 'general',
+            deliveryFilter: 'all',
+            examCramMode: false,
+            studyHubTab: 'flashcards',
+            toolboxTab: 'format',
+            studioActiveTab: 'html',
+            studioViewport: '100%',
+            scheduleViewMode: 'current',
+            activeDbTable: 'alumnos',
+            uiScale: 1,
+            fontSans: 'Inter',
+            fontMono: 'JetBrains Mono',
+            studioFont: '',
+            previewFontSize: 18,
+            weatherEnabled: false,
+            customTheme: {
+                name: 'Mi Tema',
+                fontUi: '',
+                fontMono: '',
+                bg: '#050711',
+                card: '#0b111e',
+                border: '#1e293b',
+                text: '#f1f5f9',
+                cyan: '#00f0ff',
+                violet: '#b84dff'
+            }
+        },
+        drive: {
+            connected: false,
+            userName: '',
+            userEmail: '',
+            accessToken: '',
+            clientId: '',
+            fileId: '',
+            lastSync: null,
+            dirty: false
+        },
+        catalogSubjects: [
+            { id: 'sub-prog', name: 'Programación', teacher: '', room: '' },
+            { id: 'sub-bd', name: 'Bases de Datos', teacher: '', room: '' },
+            { id: 'sub-ed', name: 'Entornos de Desarrollo', teacher: '', room: '' },
+            { id: 'sub-lm', name: 'Lenguajes de Marcas', teacher: '', room: '' },
+            { id: 'sub-si', name: 'Sistemas Informáticos', teacher: '', room: '' }
+        ],
+        schedule: [],
+        deliveries: [],
+        tasks: [],
+        pomodoro: {
+            focusMinutes: 25,
+            breakMinutes: 5,
+            todayMinutes: 0,
+            totalMinutes: 0,
+            streak: 0,
+            lastStudyDay: null,
+            linkedTaskId: '',
+            history: {}
+        },
+        notes: { general: '', comandos: '', clases: '' },
+        noteRevisions: [],
+        stickyNote: '',
+        studio: {
+            projectTitle: 'Proyecto Web Base',
+            html: STUDIO_TEMPLATES.blank.html,
+            css: STUDIO_TEMPLATES.blank.css,
+            js: STUDIO_TEMPLATES.blank.js,
+            python: STUDIO_TEMPLATES.python.python,
+            java: STUDIO_TEMPLATES.java.java,
+            savedProjects: []
+        },
+        database: {
+            tables: {
+                alumnos: {
+                    columns: ['id', 'nombre', 'curso'],
+                    rows: []
+                }
+            }
+        },
+        kanban: [],
+        grades: [],
+        flashcards: [],
+        bugs: [],
+        doubts: [],
+        projects: [],
+        servers: [],
+        infraLogs: [],
+        snippets: [],
+        bookmarks: [],
+        customFonts: ['JetBrains Mono', 'Fira Code', 'Space Grotesk', 'Outfit', 'Orbitron', 'IBM Plex Mono'],
+        customThemePresets: [],
+        snapshots: []
+    };
+}
+function normalizeStateShape(raw) {
+    const def = createDefaultState();
+    const merged = mergeState(def, raw && typeof raw === 'object' ? raw : {});
 
-/* --------------------------------------------------------------------------
-   UTILIDADES BASE, CODIFICACIÓN Y ALMACENAMIENTO
-   -------------------------------------------------------------------------- */
-function cloneState(obj) {
-    if (typeof structuredClone === 'function') {
-        return structuredClone(obj);
+    merged.ui.workspace = ALLOWED_WORKSPACES.includes(merged.ui.workspace) ? merged.ui.workspace : 'cockpit';
+    merged.ui.theme = ALLOWED_THEMES.includes(merged.ui.theme) ? merged.ui.theme : 'cyberpunk';
+    merged.ui.preset = ALLOWED_PRESETS.includes(merged.ui.preset) ? merged.ui.preset : 'default';
+    merged.ui.density = merged.ui.density === 'compact' ? 'compact' : 'airy';
+    merged.ui.noteTab = ALLOWED_NOTE_TABS.includes(merged.ui.noteTab) ? merged.ui.noteTab : 'general';
+    merged.ui.deliveryFilter = ALLOWED_DELIVERY_FILTERS.includes(merged.ui.deliveryFilter) ? merged.ui.deliveryFilter : 'all';
+    merged.ui.studioActiveTab = ALLOWED_STUDIO_TABS.includes(merged.ui.studioActiveTab) ? merged.ui.studioActiveTab : 'html';
+    merged.ui.studioViewport = ALLOWED_VIEWPORTS.includes(merged.ui.studioViewport) ? merged.ui.studioViewport : '100%';
+    merged.ui.scheduleViewMode = merged.ui.scheduleViewMode === 'table' ? 'table' : 'current';
+    merged.ui.uiScale = Number.isFinite(Number(merged.ui.uiScale)) ? Math.min(1.25, Math.max(0.8, Number(merged.ui.uiScale))) : 1;
+    merged.ui.previewFontSize = Number.isFinite(Number(merged.ui.previewFontSize)) ? Math.min(48, Math.max(10, Number(merged.ui.previewFontSize))) : 18;
+
+    if (!merged.ui.customTheme || typeof merged.ui.customTheme !== 'object') {
+        merged.ui.customTheme = { ...def.ui.customTheme };
     }
-    return JSON.parse(JSON.stringify(obj));
+    if (!merged.drive || typeof merged.drive !== 'object') {
+        merged.drive = { ...def.drive };
+    }
+    if (!Array.isArray(merged.catalogSubjects) || !merged.catalogSubjects.length) {
+        merged.catalogSubjects = [...def.catalogSubjects];
+    }
+    if (!merged.database || typeof merged.database !== 'object' || typeof merged.database.tables !== 'object') {
+        merged.database = { ...def.database };
+    }
+
+    ['schedule', 'deliveries', 'tasks', 'noteRevisions', 'kanban', 'grades', 'flashcards', 'bugs', 'doubts', 'projects', 'servers', 'infraLogs', 'snippets', 'bookmarks', 'customFonts', 'customThemePresets', 'snapshots']
+        .forEach(key => {
+            if (!Array.isArray(merged[key])) merged[key] = [];
+        });
+
+    if (!merged.notes || typeof merged.notes !== 'object') {
+        merged.notes = { general: '', comandos: '', clases: '' };
+    }
+    ['general', 'comandos', 'clases'].forEach(k => {
+        if (typeof merged.notes[k] !== 'string') merged.notes[k] = '';
+    });
+
+    if (!merged.studio || typeof merged.studio !== 'object') {
+        merged.studio = { ...def.studio };
+    } else {
+        ['html', 'css', 'js', 'python', 'java'].forEach(k => {
+            if (typeof merged.studio[k] !== 'string') merged.studio[k] = def.studio[k] || '';
+        });
+        if (!Array.isArray(merged.studio.savedProjects)) merged.studio.savedProjects = [];
+    }
+
+    if (!merged.pomodoro || typeof merged.pomodoro !== 'object') {
+        merged.pomodoro = { ...def.pomodoro };
+    } else if (!merged.pomodoro.history || typeof merged.pomodoro.history !== 'object') {
+        merged.pomodoro.history = {};
+    }
+
+    return merged;
+}
+
+function buildCompactVaultSnapshot() {
+    const cleanTasks = (state.tasks || []).map(t => {
+        const obj = {
+            id: t.id,
+            text: t.text,
+            done: Boolean(t.done),
+            priority: t.priority || 'medium',
+            block: t.block || 'afternoon',
+            createdAt: t.createdAt || 0
+        };
+        if (t.date) obj.date = t.date;
+        if (t.repeat) obj.repeat = t.repeat;
+        if (t.pomos) obj.pomos = t.pomos;
+        if (Array.isArray(t.subtasks) && t.subtasks.length) obj.subtasks = t.subtasks;
+        return obj;
+    });
+
+    return {
+        ui: state.ui,
+        catalogSubjects: state.catalogSubjects,
+        schedule: state.schedule,
+        deliveries: state.deliveries,
+        tasks: cleanTasks,
+        pomodoro: state.pomodoro,
+        notes: state.notes,
+        noteRevisions: state.noteRevisions.slice(0, MAX_NOTE_REVISIONS),
+        stickyNote: state.stickyNote,
+        studio: {
+            projectTitle: state.studio.projectTitle,
+            html: state.studio.html,
+            css: state.studio.css,
+            js: state.studio.js,
+            python: state.studio.python,
+            java: state.studio.java,
+            savedProjects: state.studio.savedProjects.slice(0, MAX_STUDIO_PROJECTS)
+        },
+        database: state.database,
+        kanban: state.kanban,
+        grades: state.grades,
+        flashcards: state.flashcards,
+        bugs: state.bugs,
+        doubts: state.doubts,
+        projects: state.projects,
+        servers: state.servers,
+        infraLogs: state.infraLogs.slice(0, MAX_SERVER_LOGS),
+        snippets: state.snippets,
+        bookmarks: state.bookmarks,
+        customFonts: state.customFonts,
+        customThemePresets: state.customThemePresets
+    };
+}
+function saveState(forceDrivePush = false) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        updateStorageQuotaBadge();
+    } catch (_) {
+        showToast('Aviso: límite de almacenamiento local alcanzado', 'error');
+    }
+
+    if (!state.drive) {
+        state.drive = { connected: false, dirty: false };
+    }
+    state.drive.dirty = true;
+    updateDriveSyncIndicator('pending');
+
+    if (state.drive.connected && state.drive.accessToken) {
+        if (forceDrivePush) {
+            debouncedDriveSync.cancel();
+            pushToGoogleDrive();
+        } else {
+            debouncedDriveSync();
+        }
+    }
+}
+
+const debouncedDriveSync = createDebouncer(() => {
+    if (state.drive?.connected && state.drive?.accessToken) {
+        pushToGoogleDrive();
+    }
+}, 2500);
+
+function updateStorageQuotaBadge() {
+    const badge = document.getElementById('storage-quota-badge');
+    if (!badge) return;
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY) || '';
+        const kb = (new Blob([raw]).size / 1024).toFixed(1);
+        badge.textContent = `Vault: ${kb} KB`;
+    } catch (_) {
+        badge.textContent = 'Vault: -- KB';
+    }
+}
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type === 'success' ? 'toast-success' : type === 'error' ? 'toast-error' : ''}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.remove();
+    }, 3400);
 }
 
 function escapeHtml(str) {
@@ -183,655 +387,1070 @@ function escapeHtml(str) {
 }
 
 function generateId(prefix = 'id') {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function utf8ToBase64(text) {
-    const bytes = new TextEncoder().encode(String(text));
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
     }
-    return btoa(binary);
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function base64ToUtf8(b64) {
-    const binary = atob(String(b64).trim());
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+function sanitizeUrl(rawUrl) {
+    return normalizeExternalUrl(rawUrl);
+}
+/* ==========================================================
+   SINCRONIZACIÓN CON GOOGLE DRIVE Y ARCHIVO PROTEGIDO (.DWPK)
+   ========================================================== */
+function openDriveModal() {
+    const cidInput = document.getElementById('gdrive-client-id');
+    if (cidInput) {
+        cidInput.value = state.drive?.clientId || window.DEVWORKSPACE_GOOGLE_CONFIG?.clientId || '';
     }
-    return new TextDecoder().decode(bytes);
+    document.getElementById('drive-modal').style.display = 'flex';
 }
 
-function copyTextToClipboard(text, okMsg = 'Copiado al portapapeles') {
-    if (!navigator.clipboard) {
-        showToast('Portapapeles no disponible en este contexto', 'error');
+function closeDriveModal() {
+    document.getElementById('drive-modal').style.display = 'none';
+}
+
+function getEffectiveGoogleClientId() {
+    const fromInput = (document.getElementById('gdrive-client-id')?.value || '').trim();
+    const fromState = (state.drive?.clientId || '').trim();
+    const fromGlobal = (window.DEVWORKSPACE_GOOGLE_CONFIG?.clientId || '').trim();
+    return fromInput || fromState || fromGlobal;
+}
+
+function connectGoogleDrive() {
+    const clientId = getEffectiveGoogleClientId();
+    if (!clientId) {
+        showToast('Introduce tu Google OAuth Client ID (o configúralo en index.html)', 'error');
         return;
     }
-    navigator.clipboard.writeText(String(text))
-        .then(() => showToast(okMsg, 'success'))
-        .catch(() => showToast('No se pudo copiar al portapapeles', 'error'));
-}
+    state.drive.clientId = clientId;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-function copyElementValue(elId) {
-    const el = document.getElementById(elId);
-    if (!el) return;
-    const val = 'value' in el ? el.value : el.textContent;
-    copyTextToClipboard(val);
-}
-
-function showToast(message, type = 'info', actionLabel = '', onAction = null) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type === 'success' ? 'toast-success' : type === 'error' ? 'toast-error' : ''}`;
-
-    const textSpan = document.createElement('span');
-    textSpan.textContent = message;
-    toast.appendChild(textSpan);
-
-    if (actionLabel && typeof onAction === 'function') {
-        const actionBtn = document.createElement('button');
-        actionBtn.type = 'button';
-        actionBtn.className = 'btn-cyan btn-sm';
-        actionBtn.textContent = actionLabel;
-        actionBtn.onclick = () => {
-            onAction();
-            toast.remove();
-        };
-        toast.appendChild(actionBtn);
+    if (!window.google?.accounts?.oauth2) {
+        showToast('Cargando Google Identity Services... inténtalo de nuevo en 2s', 'error');
+        return;
     }
 
-    container.appendChild(toast);
+    googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: DRIVE_SCOPE,
+        callback: async (tokenResponse) => {
+            if (!tokenResponse || tokenResponse.error || !tokenResponse.access_token) {
+                showToast(`Error de autenticación Google: ${tokenResponse?.error || 'sin token'}`, 'error');
+                return;
+            }
+            state.drive.accessToken = tokenResponse.access_token;
+            state.drive.connected = true;
+            await fetchGoogleDriveUserInfo();
+            renderDriveProfileUi();
+            closeDriveModal();
 
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(8px)';
-        setTimeout(() => toast.remove(), 250);
-    }, actionLabel ? 5500 : 3200);
-}
-
-function registerUndo(label, restoreFn) {
-    lastUndoAction = { label, restoreFn };
-    showToast(label, 'info', '↩️ Deshacer', () => {
-        if (!lastUndoAction) return;
-        const fn = lastUndoAction.restoreFn;
-        lastUndoAction = null;
-        fn();
-        saveState();
-        renderAll();
-        showToast('Acción deshecha', 'success');
-    });
-}
-
-function toggleForm(formId) {
-    const el = document.getElementById(formId);
-    if (!el) return;
-    const isVisible = el.style.display === 'block';
-    el.style.display = isVisible ? 'none' : 'block';
-    if (!isVisible) {
-        const firstInput = el.querySelector('input, select, textarea');
-        if (firstInput) firstInput.focus();
-    }
-}
-
-function saveState(options = {}) {
-    const { skipTimestamp = false, skipCloud = false } = options;
-    try {
-        if (!skipTimestamp && !isApplyingRemoteState) {
-            appState.meta = appState.meta || {};
-            appState.meta.updatedAt = Date.now();
+            if (typeof pendingDriveAction === 'function') {
+                const action = pendingDriveAction;
+                pendingDriveAction = null;
+                action();
+            } else {
+                await pullFromGoogleDrive(false);
+            }
         }
-        const serialized = JSON.stringify(appState);
-        localStorage.setItem(STORAGE_KEY, serialized);
-        updateStorageQuotaBadge(serialized.length);
-        if (currentCloudUser && !skipCloud && !isApplyingRemoteState) {
-            pendingCloudUpload = true;
-            updateSyncStatus('saving');
-            scheduleCloudSync();
-        }
-    } catch (_) {
-        showToast('Error al guardar estado local (cuota llena)', 'error');
-    }
+    });
+
+    googleTokenClient.requestAccessToken({ prompt: state.drive.connected ? '' : 'consent' });
 }
 
-function loadLocalState() {
+async function fetchGoogleDriveUserInfo() {
+    if (!state.drive?.accessToken) return;
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        appState = mergeState(cloneState(defaultState), parsed);
-        updateStorageQuotaBadge(raw.length);
-    } catch (_) {
-        appState = cloneState(defaultState);
+        const res = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)', {
+            headers: { Authorization: `Bearer ${state.drive.accessToken}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            state.drive.userName = data.user?.displayName || 'Cuenta Google';
+            state.drive.userEmail = data.user?.emailAddress || '';
+        }
+    } catch (_) {}
+}
+
+function ensureDriveToken(onReady) {
+    if (state.drive?.connected && state.drive?.accessToken) {
+        onReady();
+        return;
     }
+    pendingDriveAction = onReady;
+    openDriveModal();
+    showToast('Conecta primero con Google Drive para continuar');
 }
 
-function updateStorageQuotaBadge(bytesLen) {
-    const badge = document.getElementById('storage-quota-badge');
-    if (!badge) return;
-    const kb = (bytesLen / 1024).toFixed(1);
-    badge.textContent = `Storage: ${kb} KB`;
-}
-
-/* --------------------------------------------------------------------------
-   NAVEGACIÓN DE WORKSPACES Y PERFILES
-   -------------------------------------------------------------------------- */
-function switchWorkspace(wsName) {
-    appState.activeWorkspace = wsName;
-    document.querySelectorAll('.workspace-view').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.ws-tab').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.ws === wsName);
-    });
-    const target = document.getElementById(`ws-${wsName}`);
-    if (target) target.classList.add('active');
-
-    if (wsName === 'studio') {
-        runStudioPreview();
-        updateStudioEditorMetrics();
+function logoutDriveUser() {
+    if (state.drive?.accessToken && window.google?.accounts?.oauth2?.revoke) {
+        try { window.google.accounts.oauth2.revoke(state.drive.accessToken); } catch (_) {}
     }
-    saveState({ skipTimestamp: true, skipCloud: true });
+    state.drive = {
+        connected: false,
+        userName: '',
+        userEmail: '',
+        accessToken: '',
+        clientId: state.drive?.clientId || '',
+        fileId: state.drive?.fileId || '',
+        lastSync: state.drive?.lastSync || null,
+        dirty: false
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    renderDriveProfileUi();
+    showToast('Sesión de Google Drive cerrada');
 }
 
-function applyWorkspacePreset(preset) {
-    const allCardIds = [
-        'card-schedule', 'card-deliveries', 'card-tasks', 'card-pomodoro',
-        'card-notes', 'card-kanban', 'card-grades', 'card-study-hub',
-        'card-projects', 'card-dev-toolbox', 'card-servers', 'card-snippets', 'card-bookmarks'
-    ];
+function renderDriveProfileUi() {
+    const widget = document.getElementById('user-profile-widget');
+    const loginBtn = document.getElementById('btn-cloud-login');
+    const nameEl = document.getElementById('user-name');
 
-    allCardIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('hidden-card');
-    });
-
-    if (preset === 'today') {
-        switchWorkspace('cockpit');
-        ['card-notes'].forEach(id => document.getElementById(id)?.classList.add('hidden-card'));
-    } else if (preset === 'exam') {
-        switchWorkspace('academy');
-        ['card-projects'].forEach(id => document.getElementById(id)?.classList.add('hidden-card'));
-        examCramOnly = true;
-        renderKanban();
-    } else if (preset === 'dev') {
-        switchWorkspace('studio');
-    } else if (preset === 'sysadmin') {
-        switchWorkspace('devlab');
+    if (state.drive?.connected) {
+        widget?.classList.remove('is-hidden');
+        loginBtn?.classList.add('is-hidden');
+        if (nameEl) nameEl.textContent = state.drive.userEmail || state.drive.userName || 'Drive Conectado';
+        updateDriveSyncIndicator(state.drive.dirty ? 'pending' : 'ok');
     } else {
-        examCramOnly = false;
-        renderKanban();
+        widget?.classList.add('is-hidden');
+        loginBtn?.classList.remove('is-hidden');
     }
-    showToast(`Perfil aplicado: ${preset.toUpperCase()}`, 'info');
 }
 
-function toggleZenMode() {
-    document.body.classList.toggle('zen-mode-active');
-    const active = document.body.classList.contains('zen-mode-active');
-    document.getElementById('btn-zen-mode')?.classList.toggle('active', active);
-    if (active) switchWorkspace('cockpit');
+function updateDriveSyncIndicator(mode) {
+    const badge = document.getElementById('cloud-sync-indicator');
+    const lastEl = document.getElementById('cloud-last-sync');
+    if (badge) {
+        badge.classList.remove('sync-saving', 'sync-error');
+        if (mode === 'saving') {
+            badge.textContent = 'Subiendo...';
+            badge.classList.add('sync-saving');
+        } else if (mode === 'error') {
+            badge.textContent = 'Error Drive';
+            badge.classList.add('sync-error');
+        } else if (mode === 'pending') {
+            badge.textContent = 'Pendiente';
+            badge.classList.add('sync-saving');
+        } else {
+            badge.textContent = 'Drive OK';
+        }
+    }
+    if (lastEl && state.drive?.lastSync) {
+        lastEl.textContent = `Sync: ${new Date(state.drive.lastSync).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    }
 }
 
-function togglePresentationMode() {
-    document.body.classList.toggle('presentation-mode-active');
-    const active = document.body.classList.contains('presentation-mode-active');
-    document.getElementById('btn-present-mode')?.classList.toggle('active', active);
-    showToast(active ? 'Modo Clase activado: datos sensibles difuminados' : 'Modo Clase desactivado');
+async function findDriveVaultFileId() {
+    if (!state.drive?.accessToken) return '';
+    if (state.drive.fileId) return state.drive.fileId;
+
+    const q = encodeURIComponent(`name='${DRIVE_VAULT_FILENAME}' and trashed=false`);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`, {
+        headers: { Authorization: `Bearer ${state.drive.accessToken}` }
+    });
+    if (!res.ok) throw new Error('No se pudo consultar Google Drive');
+    const data = await res.json();
+    const id = data.files?.[0]?.id || '';
+    if (id) state.drive.fileId = id;
+    return id;
+}
+
+async function pushToGoogleDrive() {
+    if (!state.drive?.connected || !state.drive?.accessToken) return;
+    updateDriveSyncIndicator('saving');
+
+    try {
+        const snapshot = buildCompactVaultSnapshot();
+        const packedBody = await packDrivePayload(snapshot, DEFAULT_DRIVE_SALT);
+        const fileId = await findDriveVaultFileId();
+
+        let res;
+        if (fileId) {
+            res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${state.drive.accessToken}`,
+                    'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: packedBody
+            });
+        } else {
+            const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${state.drive.accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name: DRIVE_VAULT_FILENAME, mimeType: 'text/plain' })
+            });
+            if (!createRes.ok) throw new Error('Error creando archivo en Drive');
+            const created = await createRes.json();
+            state.drive.fileId = created.id;
+
+            res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(created.id)}?uploadType=media`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${state.drive.accessToken}`,
+                    'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: packedBody
+            });
+        }
+
+        if (!res.ok) throw new Error('Error subiendo datos a Drive');
+        state.drive.dirty = false;
+        state.drive.lastSync = getEffectiveNowMs();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        updateDriveSyncIndicator('ok');
+    } catch (err) {
+        updateDriveSyncIndicator('error');
+        showToast(`Fallo al guardar en Drive: ${err.message}`, 'error');
+    }
+}
+
+async function forceDriveSyncNow() {
+    ensureDriveToken(async () => {
+        await pushToGoogleDrive();
+        if (!state.drive.dirty) {
+            showToast('Guardado en Google Drive correctamente', 'success');
+        }
+    });
+}
+
+async function pullFromGoogleDrive(showFeedback = true) {
+    ensureDriveToken(async () => {
+        updateDriveSyncIndicator('saving');
+        try {
+            const fileId = await findDriveVaultFileId();
+            if (!fileId) {
+                updateDriveSyncIndicator('ok');
+                if (showFeedback) showToast('Aún no existe ningún archivo guardado en tu Google Drive');
+                return;
+            }
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+                headers: { Authorization: `Bearer ${state.drive.accessToken}` }
+            });
+            if (!res.ok) throw new Error('No se pudo descargar el archivo de Drive');
+            const packedText = await res.text();
+            const unpacked = await unpackDrivePayload(packedText, DEFAULT_DRIVE_SALT);
+
+            const preservedDrive = {
+                ...state.drive,
+                dirty: false,
+                lastSync: getEffectiveNowMs()
+            };
+            state = normalizeStateShape(unpacked);
+            state.drive = preservedDrive;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            applyAllVisualSettings();
+            renderAll();
+            updateDriveSyncIndicator('ok');
+            if (showFeedback) showToast('Datos importados desde Google Drive', 'success');
+        } catch (err) {
+            updateDriveSyncIndicator('error');
+            showToast(`Error al importar de Drive: ${err.message}`, 'error');
+        }
+    });
+}
+
+async function exportProtectedVaultFile() {
+    try {
+        const packed = await packDrivePayload(buildCompactVaultSnapshot(), DEFAULT_DRIVE_SALT);
+        const blob = new Blob([packed], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = DRIVE_VAULT_FILENAME;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Respaldo protegido (.dwpk) descargado', 'success');
+    } catch (err) {
+        showToast(`Error exportando .dwpk: ${err.message}`, 'error');
+    }
+}
+
+async function importProtectedVaultFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const unpacked = await unpackDrivePayload(text, DEFAULT_DRIVE_SALT);
+        const preservedDrive = { ...state.drive, dirty: true };
+        state = normalizeStateShape(unpacked);
+        state.drive = preservedDrive;
+        saveState(false);
+        applyAllVisualSettings();
+        renderAll();
+        closeDriveModal();
+        showToast('Respaldo .dwpk importado y verificado', 'success');
+    } catch (err) {
+        showToast(`Archivo .dwpk inválido o alterado: ${err.message}`, 'error');
+    } finally {
+        event.target.value = '';
+    }
+}
+/* ==========================================================
+   RELOJ SINCRONIZADO + AJUSTE MANUAL DE HORA
+   ========================================================== */
+function getEffectiveNowMs() {
+    if (typeof manualClockOffsetMs === 'number' && Number.isFinite(manualClockOffsetMs)) {
+        return Date.now() + manualClockOffsetMs;
+    }
+    return Date.now() + (hasRealNetworkTime ? realNetworkTimeOffset : 0);
+}
+
+function getEffectiveNow() {
+    return new Date(getEffectiveNowMs());
+}
+
+function formatDateInputValue(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function formatTimeInputValue(d) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+function openClockModal() {
+    const now = getEffectiveNow();
+    const dInp = document.getElementById('manual-clock-date');
+    const tInp = document.getElementById('manual-clock-time');
+    if (dInp) dInp.value = formatDateInputValue(now);
+    if (tInp) tInp.value = formatTimeInputValue(now);
+    document.getElementById('clock-modal').style.display = 'flex';
+}
+
+function closeClockModal() {
+    document.getElementById('clock-modal').style.display = 'none';
+}
+
+function applyManualClock() {
+    const dVal = document.getElementById('manual-clock-date')?.value || '';
+    const tVal = document.getElementById('manual-clock-time')?.value || '';
+    if (!dVal || !tVal) {
+        showToast('Indica fecha y hora válidas', 'error');
+        return;
+    }
+    const normalizedTime = /^\d{2}:\d{2}$/.test(tVal) ? `${tVal}:00` : tVal;
+    const targetDate = new Date(`${dVal}T${normalizedTime}`);
+    if (!Number.isFinite(targetDate.getTime())) {
+        showToast('Fecha u hora inválida', 'error');
+        return;
+    }
+    manualClockOffsetMs = targetDate.getTime() - Date.now();
+    updateClockDisplay();
+    renderSchedule();
+    renderDeliveries();
+    closeClockModal();
+    showToast('Hora manual aplicada', 'success');
+}
+
+function resetManualClockToAuto() {
+    manualClockOffsetMs = null;
+    syncRealTimeNetwork();
+    updateClockDisplay();
+    renderSchedule();
+    renderDeliveries();
+}
+
+function updateClockDisplay() {
+    const now = getEffectiveNow();
+    const timeEl = document.getElementById('time');
+    const dateEl = document.getElementById('date');
+    const netEl = document.getElementById('net-status');
+
+    if (timeEl) {
+        timeEl.textContent = now.toLocaleTimeString('es-ES', { hour12: false });
+    }
+    if (dateEl) {
+        dateEl.textContent = now.toLocaleDateString('es-ES', {
+            weekday: 'short',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    }
+    if (netEl) {
+        if (typeof manualClockOffsetMs === 'number' && Number.isFinite(manualClockOffsetMs)) {
+            netEl.textContent = '✋ Hora manual';
+        } else if (hasRealNetworkTime) {
+            netEl.textContent = '🌐 Hora sincronizada';
+        } else {
+            netEl.textContent = '🕒 Hora local';
+        }
+    }
+
+    checkDeliveryNotifications();
+}
+
+async function syncRealTimeNetwork() {
+    const netEl = document.getElementById('net-status');
+    if (netEl && !(typeof manualClockOffsetMs === 'number' && Number.isFinite(manualClockOffsetMs))) {
+        netEl.textContent = '🔄 Sincronizando...';
+    }
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', { signal: controller.signal });
+        clearTimeout(timer);
+        if (res.ok) {
+            const data = await res.json();
+            if (data && typeof data.unixtime === 'number') {
+                realNetworkTimeOffset = data.unixtime * 1000 - Date.now();
+                hasRealNetworkTime = true;
+            }
+        }
+    } catch (_) {
+        hasRealNetworkTime = false;
+    }
+    updateClockDisplay();
+}
+/* ==========================================================
+   WORKSPACES, PERFILES, DENSIDAD, ZEN, CLASE Y TEMAS/FUENTES
+   ========================================================== */
+function switchWorkspace(ws) {
+    if (!ALLOWED_WORKSPACES.includes(ws)) return;
+    state.ui.workspace = ws;
+
+    document.querySelectorAll('.ws-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.ws === ws);
+    });
+    document.querySelectorAll('.workspace-view').forEach(view => {
+        view.classList.toggle('active', view.id === `ws-${ws}`);
+    });
+
+    if (ws === 'studio') {
+        updateStudioEditorMetrics();
+        updateStudioOutputModeLabel();
+        if (state.ui.studioActiveTab !== 'saved') renderStudioPreview();
+    } else if (ws === 'database') {
+        renderDbWorkspace();
+    } else if (ws === 'academy') {
+        populateSubjectSelects();
+        renderCatalogSubjects();
+        renderKanban();
+        renderGrades();
+        renderFlashcards();
+        renderBugLogs();
+        renderClassDoubts();
+        renderProjects();
+    } else if (ws === 'fonts') {
+        renderGoogleFontFavorites();
+        renderCustomThemesList();
+    }
+
+    saveState(false);
+}
+
+function applyWorkspacePreset(presetName) {
+    const chosen = ALLOWED_PRESETS.includes(presetName) ? presetName : 'default';
+    state.ui.preset = chosen;
+    const sel = document.getElementById('workspace-preset-select');
+    if (sel) sel.value = chosen;
+
+    const allowedIds = PRESET_CARDS[chosen];
+    document.querySelectorAll('.card').forEach(card => {
+        if (!card.id) return;
+        if (!allowedIds) {
+            card.classList.remove('hidden-card');
+        } else {
+            card.classList.toggle('hidden-card', !allowedIds.includes(card.id));
+        }
+    });
+
+    saveState(false);
 }
 
 function toggleDensityMode() {
-    appState.density = appState.density === 'compact' ? 'airy' : 'compact';
+    state.ui.density = state.ui.density === 'compact' ? 'airy' : 'compact';
     applyDensityMode();
-    saveState();
+    saveState(false);
 }
 
 function applyDensityMode() {
-    const isCompact = appState.density === 'compact';
+    const isCompact = state.ui.density === 'compact';
     document.body.classList.toggle('density-compact', isCompact);
     const btn = document.getElementById('btn-density-mode');
     if (btn) btn.textContent = isCompact ? '📐 Compacto' : '📐 Aireado';
 }
 
-/* --------------------------------------------------------------------------
-   TEMAS Y GOOGLE FONTS DINÁMICOS
-   -------------------------------------------------------------------------- */
-function applyTheme(themeName) {
-    appState.theme = themeName;
-    document.documentElement.setAttribute('data-theme', themeName);
-    const select = document.getElementById('theme-select');
-    if (select) select.value = themeName;
+function toggleZenMode() {
+    state.ui.zenMode = !state.ui.zenMode;
+    document.body.classList.toggle('zen-mode-active', state.ui.zenMode);
+    document.getElementById('btn-zen-mode')?.classList.toggle('active', state.ui.zenMode);
+    saveState(false);
+}
 
-    if (themeName === 'custom') {
-        applyCustomThemeVariables(appState.customTheme);
+function togglePresentationMode() {
+    state.ui.presentationMode = !state.ui.presentationMode;
+    document.body.classList.toggle('presentation-mode-active', state.ui.presentationMode);
+    document.getElementById('btn-present-mode')?.classList.toggle('active', state.ui.presentationMode);
+    saveState(false);
+}
+
+function ensureGoogleFontLoaded(fontName) {
+    const clean = String(fontName || '').trim();
+    if (!clean) return;
+    const linkEl = document.getElementById('dynamic-google-fonts');
+    if (!linkEl) return;
+
+    const currentHref = linkEl.getAttribute('href') || '';
+    const encoded = encodeURIComponent(clean).replace(/%20/g, '+');
+    const familySpec = `family=${encoded}:wght@400;500;600;700`;
+
+    if (currentHref.includes(familySpec)) return;
+    if (!currentHref || !currentHref.includes('fonts.googleapis.com/css2')) {
+        linkEl.setAttribute('href', `https://fonts.googleapis.com/css2?${familySpec}&display=swap`);
     } else {
-        CUSTOM_THEME_VARS.forEach(v => document.documentElement.style.removeProperty(v));
+        linkEl.setAttribute('href', `${currentHref}&${familySpec}`);
     }
-    saveState();
 }
 
-function syncCustomThemeInputs() {
-    const c = appState.customTheme || defaultState.customTheme;
-    const setVal = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.value = val;
-    };
-    setVal('custom-theme-name', c.name || 'Mi Tema');
-    setVal('cp-bg', c.bg || '#060813');
-    setVal('cp-card', c.card || '#0d131f');
-    setVal('cp-border', c.border || '#1e293b');
-    setVal('cp-text', c.text || '#f1f5f9');
-    setVal('cp-cyan', c.cyan || '#38bdf8');
-    setVal('cp-violet', c.violet || '#a855f7');
+function applyFontVariables() {
+    const sans = state.ui.fontSans || 'Inter';
+    const mono = state.ui.fontMono || 'JetBrains Mono';
+    ensureGoogleFontLoaded(sans);
+    ensureGoogleFontLoaded(mono);
+    document.documentElement.style.setProperty('--font-sans', `'${sans}', system-ui, sans-serif`);
+    document.documentElement.style.setProperty('--font-mono', `'${mono}', monospace`);
 }
 
-function applyCustomThemeVariables(c) {
-    if (!c) return;
-    const root = document.documentElement.style;
-    root.setProperty('--bg-color', c.bg);
-    root.setProperty('--card-bg', c.card);
-    root.setProperty('--card-border', c.border);
-    root.setProperty('--text-main', c.text);
-    root.setProperty('--accent-cyan', c.cyan);
-    root.setProperty('--accent-violet', c.violet);
+function applyTheme(themeKey) {
+    const valid = ALLOWED_THEMES.includes(themeKey) ? themeKey : 'cyberpunk';
+    state.ui.theme = valid;
+
+    const sel = document.getElementById('theme-select');
+    if (sel) sel.value = valid;
+
+    if (valid === 'custom') {
+        document.documentElement.removeAttribute('data-theme');
+        applyCustomThemeObject(state.ui.customTheme);
+    } else {
+        document.documentElement.setAttribute('data-theme', valid);
+        clearInlineCustomThemeVars();
+        applyFontVariables();
+    }
+
+    saveState(false);
+}
+
+function clearInlineCustomThemeVars() {
+    ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'].forEach(v => {
+        document.documentElement.style.removeProperty(v);
+    });
+}
+
+function applyCustomThemeObject(ct) {
+    if (!ct || typeof ct !== 'object') return;
+    if (ct.bg) document.documentElement.style.setProperty('--bg-color', ct.bg);
+    if (ct.card) document.documentElement.style.setProperty('--card-bg', ct.card);
+    if (ct.border) document.documentElement.style.setProperty('--card-border', ct.border);
+    if (ct.text) document.documentElement.style.setProperty('--text-main', ct.text);
+    if (ct.cyan) document.documentElement.style.setProperty('--accent-cyan', ct.cyan);
+    if (ct.violet) document.documentElement.style.setProperty('--accent-violet', ct.violet);
+
+    if (ct.fontUi) state.ui.fontSans = ct.fontUi;
+    if (ct.fontMono) state.ui.fontMono = ct.fontMono;
+    applyFontVariables();
 }
 
 function previewCustomThemeColors() {
-    appState.customTheme = {
-        name: document.getElementById('custom-theme-name')?.value || 'Mi Tema',
-        bg: document.getElementById('cp-bg')?.value || '#060813',
-        card: document.getElementById('cp-card')?.value || '#0d131f',
+    const ct = {
+        name: (document.getElementById('custom-theme-name')?.value || '').trim() || 'Mi Tema',
+        fontUi: (document.getElementById('custom-theme-font-ui')?.value || '').trim(),
+        fontMono: (document.getElementById('custom-theme-font-mono')?.value || '').trim(),
+        bg: document.getElementById('cp-bg')?.value || '#050711',
+        card: document.getElementById('cp-card')?.value || '#0b111e',
         border: document.getElementById('cp-border')?.value || '#1e293b',
         text: document.getElementById('cp-text')?.value || '#f1f5f9',
-        cyan: document.getElementById('cp-cyan')?.value || '#38bdf8',
-        violet: document.getElementById('cp-violet')?.value || '#a855f7'
+        cyan: document.getElementById('cp-cyan')?.value || '#00f0ff',
+        violet: document.getElementById('cp-violet')?.value || '#b84dff'
     };
-    if (appState.theme === 'custom') {
-        applyCustomThemeVariables(appState.customTheme);
-    }
+    state.ui.customTheme = ct;
+    state.ui.theme = 'custom';
+    document.documentElement.removeAttribute('data-theme');
+    if (document.getElementById('theme-select')) document.getElementById('theme-select').value = 'custom';
+    applyCustomThemeObject(ct);
 }
 
 function activateCustomTheme() {
     previewCustomThemeColors();
+    saveState(false);
+    showToast('Tema personalizado aplicado');
+}
+
+function saveNewCustomThemePreset() {
+    const name = (document.getElementById('custom-theme-name')?.value || '').trim();
+    if (!name) {
+        showToast('Escribe un nombre para el tema', 'error');
+        return;
+    }
+    const preset = {
+        id: generateId('thm'),
+        name,
+        fontUi: (document.getElementById('custom-theme-font-ui')?.value || '').trim(),
+        fontMono: (document.getElementById('custom-theme-font-mono')?.value || '').trim(),
+        bg: document.getElementById('cp-bg')?.value || '#050711',
+        card: document.getElementById('cp-card')?.value || '#0b111e',
+        border: document.getElementById('cp-border')?.value || '#1e293b',
+        text: document.getElementById('cp-text')?.value || '#f1f5f9',
+        cyan: document.getElementById('cp-cyan')?.value || '#00f0ff',
+        violet: document.getElementById('cp-violet')?.value || '#b84dff'
+    };
+
+    const existingIdx = state.customThemePresets.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+    if (existingIdx >= 0) state.customThemePresets[existingIdx] = preset;
+    else state.customThemePresets.push(preset);
+
+    state.ui.customTheme = { ...preset };
+    state.ui.theme = 'custom';
+    saveState(false);
+    renderCustomThemesList();
     applyTheme('custom');
-    showToast(`Tema personalizado "${appState.customTheme.name}" activado`, 'success');
+    showToast(`Tema "${name}" guardado con su fuente vinculada`, 'success');
+}
+
+function applySavedThemePreset(presetId) {
+    const preset = (state.customThemePresets || []).find(p => p.id === presetId);
+    if (!preset) return;
+    state.ui.customTheme = { ...preset };
+    state.ui.theme = 'custom';
+    syncCustomThemeInputsFromState();
+    saveState(false);
+    applyTheme('custom');
+    showToast(`Tema "${preset.name}" activado`, 'success');
+}
+
+function deleteSavedThemePreset(presetId) {
+    state.customThemePresets = (state.customThemePresets || []).filter(p => p.id !== presetId);
+    saveState(false);
+    renderCustomThemesList();
+}
+
+function renderCustomThemesList() {
+    const sel = document.getElementById('theme-select');
+    const listBox = document.getElementById('saved-custom-themes-list');
+
+    if (sel) {
+        [...sel.querySelectorAll('option[data-custom-preset="1"]')].forEach(o => o.remove());
+        (state.customThemePresets || []).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = `preset:${p.id}`;
+            opt.dataset.customPreset = '1';
+            opt.textContent = `🎨 ${p.name}`;
+            sel.appendChild(opt);
+        });
+    }
+
+    if (!listBox) return;
+    listBox.innerHTML = '';
+    const presets = state.customThemePresets || [];
+    if (!presets.length) {
+        listBox.innerHTML = '<div class="mono-muted">Aún no has guardado temas propios.</div>';
+        return;
+    }
+
+    presets.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `${p.name} · UI: ${p.fontUi || state.ui.fontSans} · Code: ${p.fontMono || state.ui.fontMono}`;
+
+        const acts = document.createElement('div');
+        acts.className = 'filter-pills-row';
+        const useBtn = document.createElement('button');
+        useBtn.type = 'button';
+        useBtn.className = 'btn-cyan btn-sm';
+        useBtn.textContent = 'Usar';
+        useBtn.addEventListener('click', () => applySavedThemePreset(p.id));
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-icon';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => deleteSavedThemePreset(p.id));
+
+        acts.append(useBtn, delBtn);
+        row.append(info, acts);
+        listBox.appendChild(row);
+    });
+}
+
+function syncCustomThemeInputsFromState() {
+    const ct = state.ui.customTheme || {};
+    if (document.getElementById('custom-theme-name')) document.getElementById('custom-theme-name').value = ct.name || 'Mi Tema';
+    if (document.getElementById('custom-theme-font-ui')) document.getElementById('custom-theme-font-ui').value = ct.fontUi || '';
+    if (document.getElementById('custom-theme-font-mono')) document.getElementById('custom-theme-font-mono').value = ct.fontMono || '';
+    if (document.getElementById('cp-bg')) document.getElementById('cp-bg').value = ct.bg || '#050711';
+    if (document.getElementById('cp-card')) document.getElementById('cp-card').value = ct.card || '#0b111e';
+    if (document.getElementById('cp-border')) document.getElementById('cp-border').value = ct.border || '#1e293b';
+    if (document.getElementById('cp-text')) document.getElementById('cp-text').value = ct.text || '#f1f5f9';
+    if (document.getElementById('cp-cyan')) document.getElementById('cp-cyan').value = ct.cyan || '#00f0ff';
+    if (document.getElementById('cp-violet')) document.getElementById('cp-violet').value = ct.violet || '#b84dff';
+}
+
+function updateAppearanceSettings() {
+    const scale = Number(document.getElementById('ui-scale-select')?.value) || 1;
+    state.ui.uiScale = scale;
+    document.documentElement.style.setProperty('--ui-scale', String(scale));
+    saveState(false);
 }
 
 function exportCustomThemeJson() {
-    previewCustomThemeColors();
-    const blob = new Blob([JSON.stringify(appState.customTheme, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(state.ui.customTheme, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(appState.customTheme.name || 'tema-devworkspace').toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.download = 'tema-devworkspace.json';
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    URL.revokeObjectURL(url);
 }
 
-function importCustomThemeJson(event) {
+async function importCustomThemeJson(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const parsed = JSON.parse(String(e.target?.result || '{}'));
-            appState.customTheme = mergeState(cloneState(defaultState.customTheme), parsed);
-            syncCustomThemeInputs();
-            applyTheme('custom');
-            showToast(`Tema "${appState.customTheme.name}" importado`, 'success');
-        } catch (_) {
-            showToast('Archivo de tema JSON inválido', 'error');
-        } finally {
-            event.target.value = '';
-        }
-    };
-    reader.readAsText(file);
+    try {
+        const parsed = JSON.parse(await file.text());
+        state.ui.customTheme = { ...state.ui.customTheme, ...parsed };
+        syncCustomThemeInputsFromState();
+        applyTheme('custom');
+        saveState(false);
+        showToast('Tema importado', 'success');
+    } catch (_) {
+        showToast('JSON de tema inválido', 'error');
+    } finally {
+        event.target.value = '';
+    }
 }
 
-function buildGoogleFontUrl(fontFamily) {
-    const encoded = encodeURIComponent(fontFamily.trim()).replace(/%20/g, '+');
-    return `https://fonts.googleapis.com/css2?family=${encoded}:wght@400;500;600;700&display=swap`;
-}
-
-function injectGoogleFontStylesheet(fontFamily) {
-    if (!fontFamily) return;
-    const id = `gf-link-${fontFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-    if (document.getElementById(id)) return;
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = buildGoogleFontUrl(fontFamily);
-    document.head.appendChild(link);
+function resetAppearanceDefaults() {
+    const def = createDefaultState();
+    state.ui.theme = 'cyberpunk';
+    state.ui.uiScale = 1;
+    state.ui.fontSans = def.ui.fontSans;
+    state.ui.fontMono = def.ui.fontMono;
+    state.ui.studioFont = '';
+    state.ui.customTheme = { ...def.ui.customTheme };
+    saveState(false);
+    applyAllVisualSettings();
+    showToast('Apariencia restaurada a valores base');
 }
 
 function loadGoogleFontByName() {
-    const input = document.getElementById('gf-input-name');
-    const name = input?.value.trim();
-    if (!name) return showToast('Escribe el nombre de una fuente de Google Fonts', 'error');
+    const name = (document.getElementById('gf-input-name')?.value || '').trim();
+    if (!name) return;
     quickLoadGoogleFont(name);
 }
 
 function quickLoadGoogleFont(fontName) {
-    injectGoogleFontStylesheet(fontName);
-    lastPreviewedGoogleFont = fontName;
-    const input = document.getElementById('gf-input-name');
-    if (input) input.value = fontName;
-
-    const label = document.getElementById('gf-active-preview-label');
-    if (label) label.textContent = `Vista previa: ${fontName}`;
-
+    const clean = String(fontName || '').trim();
+    if (!clean) return;
+    ensureGoogleFontLoaded(clean);
+    if (document.getElementById('gf-input-name')) document.getElementById('gf-input-name').value = clean;
+    if (document.getElementById('gf-active-preview-label')) document.getElementById('gf-active-preview-label').textContent = `Vista previa: ${clean}`;
     const sample = document.getElementById('gf-preview-sample');
-    if (sample) sample.style.fontFamily = `'${fontName}', monospace`;
-
+    if (sample) sample.style.fontFamily = `'${clean}', sans-serif`;
     updateFontPlaygroundStyle();
-    showToast(`Fuente "${fontName}" cargada`, 'success');
+    showToast(`Fuente "${clean}" cargada`, 'success');
 }
 
 function updateFontPlaygroundStyle() {
+    const size = Number(document.getElementById('gf-preview-size')?.value) || state.ui.previewFontSize || 18;
+    state.ui.previewFontSize = size;
     const sample = document.getElementById('gf-preview-sample');
-    const size = document.getElementById('gf-preview-size')?.value || '18';
     if (sample) sample.style.fontSize = `${size}px`;
 }
 
 function saveGoogleFontFavorite() {
-    const name = (document.getElementById('gf-input-name')?.value || lastPreviewedGoogleFont).trim();
+    const name = (document.getElementById('gf-input-name')?.value || '').trim();
     if (!name) return;
-    if (!appState.appearance.favoriteFonts.includes(name)) {
-        appState.appearance.favoriteFonts.push(name);
-        saveState();
-        renderFavoriteFonts();
-        showToast(`"${name}" guardada en favoritas`, 'success');
-    } else {
-        showToast('Esa fuente ya está en favoritas');
+    if (!state.customFonts.includes(name)) {
+        state.customFonts.push(name);
+        saveState(false);
+        renderGoogleFontFavorites();
+        showToast(`Fuente "${name}" guardada en favoritos`, 'success');
     }
 }
 
-function removeGoogleFontFavorite(fontName) {
-    appState.appearance.favoriteFonts = appState.appearance.favoriteFonts.filter(f => f !== fontName);
-    saveState();
-    renderFavoriteFonts();
+function renderGoogleFontFavorites() {
+    const box = document.getElementById('gf-favorites-list');
+    const studioSel = document.getElementById('studio-font-select');
+    const fonts = state.customFonts || [];
+
+    if (studioSel) {
+        const currentVal = state.ui.studioFont || '';
+        studioSel.innerHTML = '<option value="">🔤 Fuente Preview (Por defecto)</option>';
+        fonts.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f;
+            opt.textContent = f;
+            studioSel.appendChild(opt);
+        });
+        studioSel.value = currentVal;
+    }
+
+    if (!box) return;
+    box.innerHTML = '';
+    fonts.forEach(f => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pill-btn';
+        btn.textContent = f;
+        btn.addEventListener('click', () => quickLoadGoogleFont(f));
+        box.appendChild(btn);
+    });
 }
 
-function renderFavoriteFonts() {
-    const container = document.getElementById('gf-favorites-list');
-    if (!container) return;
-    container.innerHTML = appState.appearance.favoriteFonts.map(font => `
-        <span class="pill-btn">
-            <span onclick="quickLoadGoogleFont('${escapeHtml(font)}')">${escapeHtml(font)}</span>
-            <button type="button" class="btn-icon" onclick="removeGoogleFontFavorite('${escapeHtml(font)}')" title="Quitar">×</button>
-        </span>
-    `).join('');
-
-    const studioSelect = document.getElementById('studio-font-select');
-    if (studioSelect) {
-        const current = appState.appearance.studioFont || '';
-        studioSelect.innerHTML = `<option value="">🔤 Fuente Preview (Por defecto)</option>` +
-            appState.appearance.favoriteFonts.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
-    }
-}
-
-function applyLoadedFontToUi(targetType) {
-    const font = lastPreviewedGoogleFont;
-    if (!font) return;
-    injectGoogleFontStylesheet(font);
-    if (targetType === 'sans') {
-        appState.appearance.fontSans = font;
-        document.documentElement.style.setProperty('--font-sans', `'${font}', system-ui, sans-serif`);
-        showToast(`Fuente UI cambiada a "${font}"`, 'success');
-    } else {
-        appState.appearance.fontMono = font;
-        document.documentElement.style.setProperty('--font-mono', `'${font}', monospace`);
-        showToast(`Fuente Código/Terminal cambiada a "${font}"`, 'success');
-    }
-    saveState();
+function applyLoadedFontToUi(target) {
+    const name = (document.getElementById('gf-input-name')?.value || '').trim();
+    if (!name) return;
+    ensureGoogleFontLoaded(name);
+    if (target === 'mono') state.ui.fontMono = name;
+    else state.ui.fontSans = name;
+    applyFontVariables();
+    saveState(false);
+    showToast(`Fuente "${name}" aplicada a ${target === 'mono' ? 'Código' : 'Interfaz'}`, 'success');
 }
 
 function applyLoadedFontToStudio() {
-    const font = lastPreviewedGoogleFont;
-    if (!font) return;
-    appState.appearance.studioFont = font;
-    renderFavoriteFonts();
-    saveState();
-    runStudioPreview();
-    showToast(`Fuente "${font}" aplicada en Live Code Studio`, 'success');
+    const name = (document.getElementById('gf-input-name')?.value || '').trim();
+    if (!name) return;
+    ensureGoogleFontLoaded(name);
+    state.ui.studioFont = name;
+    renderGoogleFontFavorites();
+    renderStudioPreview();
+    saveState(false);
+    showToast(`Fuente "${name}" aplicada en Code Studio`, 'success');
 }
 
 function applyFontToStudioPreview(fontName) {
-    appState.appearance.studioFont = fontName;
-    saveState();
-    runStudioPreview();
+    state.ui.studioFont = fontName || '';
+    if (fontName) ensureGoogleFontLoaded(fontName);
+    renderStudioPreview();
+    saveState(false);
 }
 
-function updateAppearanceSettings() {
-    const scale = document.getElementById('ui-scale-select')?.value || '1';
-    appState.appearance.uiScale = scale;
-    document.documentElement.style.setProperty('--ui-scale', scale);
-    saveState();
-}
+function applyAllVisualSettings() {
+    switchWorkspace(state.ui.workspace || 'cockpit');
+    applyWorkspacePreset(state.ui.preset || 'default');
+    applyDensityMode();
+    document.body.classList.toggle('zen-mode-active', Boolean(state.ui.zenMode));
+    document.getElementById('btn-zen-mode')?.classList.toggle('active', Boolean(state.ui.zenMode));
+    document.body.classList.toggle('presentation-mode-active', Boolean(state.ui.presentationMode));
+    document.getElementById('btn-present-mode')?.classList.toggle('active', Boolean(state.ui.presentationMode));
+    document.documentElement.style.setProperty('--ui-scale', String(state.ui.uiScale || 1));
+    if (document.getElementById('ui-scale-select')) document.getElementById('ui-scale-select').value = String(state.ui.uiScale || 1);
+    if (document.getElementById('gf-preview-size')) document.getElementById('gf-preview-size').value = String(state.ui.previewFontSize || 18);
+    if (document.getElementById('weather-text')) document.getElementById('weather-text').textContent = state.ui.weatherEnabled ? 'Clima: Activo' : 'Clima: OFF';
 
-function applyAllAppearance() {
-    const { fontSans, fontMono, uiScale } = appState.appearance;
-    [fontSans, fontMono].forEach(font => {
-        if (font && font !== 'Inter' && font !== 'JetBrains Mono') {
-            injectGoogleFontStylesheet(font);
+    syncCustomThemeInputsFromState();
+    renderCustomThemesList();
+    applyTheme(state.ui.theme || 'cyberpunk');
+    renderDriveProfileUi();
+}
+/* ==========================================================
+   CATÁLOGO GLOBAL DE ASIGNATURAS Y HORARIO
+   ========================================================== */
+function populateSubjectSelects() {
+    const subjects = state.catalogSubjects || [];
+    const targets = document.querySelectorAll('.subject-select-target');
+
+    targets.forEach(sel => {
+        const prevVal = sel.value;
+        sel.innerHTML = '';
+        subjects.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = s.name;
+            sel.appendChild(opt);
+        });
+        if (prevVal && [...sel.options].some(o => o.value === prevVal)) {
+            sel.value = prevVal;
         }
     });
-    document.documentElement.style.setProperty('--font-sans', `'${fontSans}', system-ui, sans-serif`);
-    document.documentElement.style.setProperty('--font-mono', `'${fontMono}', monospace`);
-    document.documentElement.style.setProperty('--ui-scale', uiScale || '1');
-    const scaleSelect = document.getElementById('ui-scale-select');
-    if (scaleSelect) scaleSelect.value = uiScale || '1';
-    syncCustomThemeInputs();
-    renderFavoriteFonts();
-}
 
-function resetAppearanceDefaults() {
-    appState.appearance.fontSans = 'Inter';
-    appState.appearance.fontMono = 'JetBrains Mono';
-    appState.appearance.studioFont = '';
-    appState.appearance.uiScale = '1';
-    applyAllAppearance();
-    saveState();
-    showToast('Tipografía y escala base restauradas', 'info');
-}
-
-/* --------------------------------------------------------------------------
-   RELOJ EN TIEMPO REAL (MADRID) Y CLIMA OPCIONAL
-   -------------------------------------------------------------------------- */
-async function syncRealTimeNetwork() {
-    const statusEl = document.getElementById('net-status');
-    if (statusEl) statusEl.textContent = '🔄 Sincronizando...';
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-    try {
-        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', {
-            cache: 'no-store',
-            signal: controller.signal
+    const fcFilter = document.getElementById('fc-filter-subject');
+    if (fcFilter) {
+        const prevFilter = fcFilter.value || 'all';
+        fcFilter.innerHTML = '<option value="all">Todas las asignaturas</option>';
+        subjects.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = s.name;
+            fcFilter.appendChild(opt);
         });
-        if (!res.ok) throw new Error('HTTP error');
-        const data = await res.json();
-        const serverMs = new Date(data.datetime).getTime();
-        clockOffsetMs = serverMs - Date.now();
-        if (statusEl) {
-            statusEl.textContent = '🟢 Hora Madrid Sync';
-            statusEl.style.color = 'var(--accent-green)';
-        }
-    } catch (_) {
-        clockOffsetMs = 0;
-        if (statusEl) {
-            statusEl.textContent = '🟡 Hora Sistema (Madrid)';
-            statusEl.style.color = 'var(--accent-yellow)';
-        }
-    } finally {
-        clearTimeout(timeoutId);
-    }
-    updateClockDisplay();
-}
-
-function updateClockDisplay() {
-    const now = new Date(Date.now() + clockOffsetMs);
-    const timeEl = document.getElementById('time');
-    const dateEl = document.getElementById('date');
-
-    if (timeEl) {
-        timeEl.textContent = new Intl.DateTimeFormat('es-ES', {
-            timeZone: 'Europe/Madrid',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }).format(now);
-    }
-    if (dateEl) {
-        dateEl.textContent = new Intl.DateTimeFormat('es-ES', {
-            timeZone: 'Europe/Madrid',
-            weekday: 'short',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        }).format(now);
+        fcFilter.value = [...fcFilter.options].some(o => o.value === prevFilter) ? prevFilter : 'all';
     }
 }
 
-function toggleWeatherWidget() {
-    appState.weather.enabled = !appState.weather.enabled;
-    if (appState.weather.enabled && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            pos => {
-                appState.weather.lat = Number(pos.coords.latitude.toFixed(3));
-                appState.weather.lon = Number(pos.coords.longitude.toFixed(3));
-                appState.weather.label = 'Ubicación actual';
-                saveState();
-                fetchLocalWeather();
-            },
-            () => {
-                saveState();
-                fetchLocalWeather();
-            },
-            { timeout: 4000 }
-        );
-    } else {
-        saveState();
-        fetchLocalWeather();
-    }
-}
-
-async function fetchLocalWeather() {
-    const textEl = document.getElementById('weather-text');
-    const btnEl = document.getElementById('weather-badge');
-    if (!textEl || !btnEl) return;
-
-    if (!appState.weather.enabled) {
-        textEl.textContent = 'Clima: OFF';
-        btnEl.classList.remove('active');
+function addCatalogSubject() {
+    const name = (document.getElementById('subj-cat-name')?.value || '').trim();
+    const teacher = (document.getElementById('subj-cat-teacher')?.value || '').trim();
+    const room = (document.getElementById('subj-cat-room')?.value || '').trim();
+    if (!name) {
+        showToast('Escribe el nombre de la asignatura', 'error');
         return;
     }
 
-    btnEl.classList.add('active');
-    textEl.textContent = 'Cargando...';
-    try {
-        const { lat, lon, label } = appState.weather;
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
-        const res = await fetch(url);
-        const data = await res.json();
-        const temp = Math.round(data.current_weather.temperature);
-        const wind = Math.round(data.current_weather.windspeed);
-        textEl.textContent = `${label}: ${temp}°C · ${wind} km/h`;
-    } catch (_) {
-        textEl.textContent = 'Clima: Sin red';
+    const exists = (state.catalogSubjects || []).some(s => s.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+        showToast('Esa asignatura ya está en el catálogo', 'error');
+        return;
     }
+
+    state.catalogSubjects.push({
+        id: generateId('subj'),
+        name,
+        teacher,
+        room
+    });
+
+    document.getElementById('subj-cat-name').value = '';
+    document.getElementById('subj-cat-teacher').value = '';
+    document.getElementById('subj-cat-room').value = '';
+    toggleForm('form-add-subject-catalog');
+    saveState(false);
+    populateSubjectSelects();
+    renderCatalogSubjects();
+    showToast(`Asignatura "${name}" añadida`, 'success');
 }
 
-/* --------------------------------------------------------------------------
-   HORARIO & CLASE ACTUAL
-   -------------------------------------------------------------------------- */
-const DAYS_MAP = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+function deleteCatalogSubject(id) {
+    state.catalogSubjects = (state.catalogSubjects || []).filter(s => s.id !== id);
+    saveState(false);
+    populateSubjectSelects();
+    renderCatalogSubjects();
+}
 
-function parseMinutes(hhmm) {
-    const [h, m] = String(hhmm).split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
+function renderCatalogSubjects() {
+    const list = document.getElementById('subjects-catalog-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const items = state.catalogSubjects || [];
+    if (!items.length) {
+        list.innerHTML = '<div class="mono-muted">No hay asignaturas registradas.</div>';
+        return;
+    }
+
+    items.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        const meta = [s.teacher, s.room].filter(Boolean).join(' · ');
+        info.textContent = meta ? `${s.name} (${meta})` : s.name;
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => deleteCatalogSubject(s.id));
+
+        row.append(info, del);
+        list.appendChild(row);
+    });
+}
+
+function autofillScheduleFromCatalog(subjectName) {
+    const found = (state.catalogSubjects || []).find(s => s.name === subjectName);
+    if (!found) return;
+    const tInp = document.getElementById('sch-add-teacher');
+    const rInp = document.getElementById('sch-add-room');
+    if (tInp && found.teacher && !tInp.value) tInp.value = found.teacher;
+    if (rInp && found.room && !rInp.value) rInp.value = found.room;
 }
 
 function toggleScheduleViewMode() {
-    scheduleShowTable = !scheduleShowTable;
-    renderScheduleWidget();
+    state.ui.scheduleViewMode = state.ui.scheduleViewMode === 'table' ? 'current' : 'table';
+    saveState(false);
+    renderSchedule();
 }
 
-function renderScheduleWidget() {
-    const container = document.getElementById('schedule-widget');
-    if (!container) return;
+function parseMinutes(hhmm) {
+    const [h, m] = String(hhmm || '0:0').split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return -1;
+    return h * 60 + m;
+}
 
-    const now = new Date(Date.now() + clockOffsetMs);
-    const madridClock = getMadridClock(now);
-    const currentDay = madridClock.day;
-    const currentMins = madridClock.minutes;
+function renderSchedule() {
+    const box = document.getElementById('schedule-widget');
+    if (!box) return;
 
-    if (scheduleShowTable) {
-        if (!appState.schedule.length) {
-            container.innerHTML = `<div class="mono-muted">No hay clases configuradas. Pulsa "Configurar" para añadir tu horario.</div>`;
-            return;
-        }
-        const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || parseMinutes(a.start) - parseMinutes(b.start));
-        container.innerHTML = `
-            <table class="sch-table">
-                <thead><tr><th>Día</th><th>Hora</th><th>Asignatura</th><th>Aula</th></tr></thead>
-                <tbody>
-                    ${sorted.map(c => `
-                        <tr>
-                            <td>${DAYS_MAP[c.day] || ''}</td>
-                            <td>${escapeHtml(c.start)} - ${escapeHtml(c.end)}</td>
-                            <td><strong>${escapeHtml(c.subject)}</strong></td>
-                            <td>${escapeHtml(c.room || '-')}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
+    const schedule = state.schedule || [];
+    if (!schedule.length) {
+        box.innerHTML = '<div class="mono-muted">Sin clases configuradas. Usa <strong>⚙️ Configurar</strong> o <strong>☁️ Subir de Drive</strong>.</div>';
         return;
     }
 
-    const todayClasses = appState.schedule
-        .filter(c => Number(c.day) === currentDay)
+    if (state.ui.scheduleViewMode === 'table') {
+        const dayNames = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie' };
+        const rowsHtml = [...schedule]
+            .sort((a, b) => (a.day - b.day) || a.start.localeCompare(b.start))
+            .map(c => `<tr>
+                <td>${escapeHtml(dayNames[c.day] || String(c.day))}</td>
+                <td>${escapeHtml(c.start)} - ${escapeHtml(c.end)}</td>
+                <td><strong>${escapeHtml(c.subject)}</strong></td>
+                <td>${escapeHtml(c.teacher || '-')}</td>
+                <td>${escapeHtml(c.room || '-')}</td>
+            </tr>`).join('');
+
+        box.innerHTML = `<table class="sch-table"><thead><tr><th>Día</th><th>Hora</th><th>Asignatura</th><th>Profesor/a</th><th>Aula</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+        return;
+    }
+
+    const { day, minutes: nowMins } = getMadridClock(getEffectiveNow());
+    const todayClasses = schedule
+        .filter(c => Number(c.day) === Number(day))
         .sort((a, b) => parseMinutes(a.start) - parseMinutes(b.start));
 
-    if (!todayClasses.length) {
-        container.innerHTML = `
-            <div class="sch-status">🎉 Hoy (${DAYS_MAP[currentDay]}) no tienes clases programadas</div>
-            <div class="sch-detail">Puedes cambiar a vista "Tabla / Actual" o añadir asignaturas en Configurar.</div>
-        `;
-        return;
-    }
-
-    const activeClass = todayClasses.find(c => currentMins >= parseMinutes(c.start) && currentMins < parseMinutes(c.end));
-    const nextClass = todayClasses.find(c => parseMinutes(c.start) > currentMins);
+    const activeClass = todayClasses.find(c => {
+        const s = parseMinutes(c.start);
+        const e = parseMinutes(c.end);
+        return nowMins >= s && nowMins < e;
+    });
 
     if (activeClass) {
         const s = parseMinutes(activeClass.start);
         const e = parseMinutes(activeClass.end);
-        const pct = Math.min(100, Math.max(0, Math.round(((currentMins - s) / Math.max(1, e - s)) * 100)));
-        const left = e - currentMins;
-        container.innerHTML = `
-            <div class="sch-status">🟢 En clase: <strong>${escapeHtml(activeClass.subject)}</strong> <span class="badge-version">${escapeHtml(activeClass.room || 'Aula')}</span></div>
-            <div class="sch-detail">${escapeHtml(activeClass.start)} - ${escapeHtml(activeClass.end)} · Quedan ${left} min (${pct}%) ${nextClass ? `· Siguiente: ${escapeHtml(nextClass.subject)} (${escapeHtml(nextClass.start)})` : ''}</div>
+        const pct = Math.min(100, Math.max(0, Math.round(((nowMins - s) / Math.max(1, e - s)) * 100)));
+        const remMins = Math.max(0, e - nowMins);
+        const extraInfo = [activeClass.teacher ? `Prof. ${activeClass.teacher}` : '', activeClass.room ? `Aula ${activeClass.room}` : ''].filter(Boolean).join(' · ');
+
+        box.innerHTML = `
+            <div class="sch-status">🟢 <strong>En curso:</strong> ${escapeHtml(activeClass.subject)} (${escapeHtml(activeClass.start)} - ${escapeHtml(activeClass.end)})</div>
+            <div class="sch-detail">${escapeHtml(extraInfo || 'Clase activa')} · Quedan ${remMins} min (${pct}%)</div>
             <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>
         `;
-    } else if (nextClass) {
-        const wait = parseMinutes(nextClass.start) - currentMins;
-        container.innerHTML = `
-            <div class="sch-status">⏳ Próxima clase: <strong>${escapeHtml(nextClass.subject)}</strong> a las ${escapeHtml(nextClass.start)}</div>
-            <div class="sch-detail">Empieza en ${wait} min · Aula: ${escapeHtml(nextClass.room || '-')}</div>
-        `;
-    } else {
-        container.innerHTML = `
-            <div class="sch-status">✅ Jornada lectiva de hoy completada</div>
-            <div class="sch-detail">Todas las clases del ${DAYS_MAP[currentDay]} han finalizado.</div>
-        `;
+        return;
     }
+
+    const nextClass = todayClasses.find(c => parseMinutes(c.start) > nowMins);
+    if (nextClass) {
+        const waitMins = Math.max(0, parseMinutes(nextClass.start) - nowMins);
+        const extraInfo = [nextClass.teacher ? `Prof. ${nextClass.teacher}` : '', nextClass.room ? `Aula ${nextClass.room}` : ''].filter(Boolean).join(' · ');
+        box.innerHTML = `
+            <div class="sch-status">⏳ <strong>Siguiente clase:</strong> ${escapeHtml(nextClass.subject)} a las ${escapeHtml(nextClass.start)}</div>
+            <div class="sch-detail">${escapeHtml(extraInfo || 'En espera')} · Empieza en ${waitMins} min</div>
+        `;
+        return;
+    }
+
+    box.innerHTML = `
+        <div class="sch-status">🌙 Sin más clases hoy en el horario</div>
+        <div class="sch-detail">Total de bloques registrados para hoy: ${todayClasses.length}</div>
+    `;
 }
 
 function openScheduleModal() {
-    document.getElementById('schedule-modal').style.display = 'flex';
+    populateSubjectSelects();
+    const subjSel = document.getElementById('sch-add-subject');
+    if (subjSel && subjSel.value) autofillScheduleFromCatalog(subjSel.value);
     renderScheduleEditorList();
+    document.getElementById('schedule-modal').style.display = 'flex';
 }
 
 function closeScheduleModal() {
@@ -839,2471 +1458,1916 @@ function closeScheduleModal() {
 }
 
 function addScheduleClass() {
-    const day = Number(document.getElementById('sch-add-day')?.value || 1);
-    const start = document.getElementById('sch-add-start')?.value || '';
-    const end = document.getElementById('sch-add-end')?.value || '';
-    const subject = document.getElementById('sch-add-subject')?.value.trim() || '';
-    const room = document.getElementById('sch-add-room')?.value.trim() || '';
+    const day = Number(document.getElementById('sch-add-day')?.value) || 1;
+    const start = (document.getElementById('sch-add-start')?.value || '').trim();
+    const end = (document.getElementById('sch-add-end')?.value || '').trim();
+    const subject = (document.getElementById('sch-add-subject')?.value || '').trim();
+    const teacher = (document.getElementById('sch-add-teacher')?.value || '').trim();
+    const room = (document.getElementById('sch-add-room')?.value || '').trim();
 
-    if (!subject || !start || !end) return showToast('Completa asignatura y horas', 'error');
-    if (parseMinutes(end) <= parseMinutes(start)) {
-        return showToast('La hora de fin debe ser posterior a la de inicio', 'error');
+    if (!start || !end || !subject) {
+        showToast('Completa hora de inicio, fin y asignatura', 'error');
+        return;
     }
 
-    appState.schedule.push({ id: generateId('sch'), day, start, end, subject, room });
-    document.getElementById('sch-add-subject').value = '';
-    saveState();
+    state.schedule.push({
+        id: generateId('sch'),
+        day,
+        start,
+        end,
+        subject,
+        teacher,
+        room
+    });
+
+    document.getElementById('sch-add-teacher').value = '';
+    document.getElementById('sch-add-room').value = '';
+    saveState(false);
+    renderSchedule();
     renderScheduleEditorList();
-    renderScheduleWidget();
+    showToast('Clase añadida al horario', 'success');
 }
 
 function deleteScheduleClass(id) {
-    appState.schedule = appState.schedule.filter(c => c.id !== id);
-    saveState();
+    state.schedule = (state.schedule || []).filter(c => c.id !== id);
+    saveState(false);
+    renderSchedule();
     renderScheduleEditorList();
-    renderScheduleWidget();
 }
 
 function clearSchedule() {
-    const backup = [...appState.schedule];
-    appState.schedule = [];
-    saveState();
+    state.schedule = [];
+    saveState(false);
+    renderSchedule();
     renderScheduleEditorList();
-    renderScheduleWidget();
-    registerUndo('Horario vaciado', () => {
-        appState.schedule = backup;
-    });
+    showToast('Horario vaciado');
 }
-
-function exportScheduleJson() {
-    const blob = new Blob([JSON.stringify(appState.schedule, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'devworkspace-horario.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function importScheduleJson(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const parsed = JSON.parse(String(e.target?.result || '[]'));
-            if (!Array.isArray(parsed)) throw new Error('Formato inválido');
-            appState.schedule = parsed.map(c => ({
-                id: c.id || generateId('sch'),
-                day: Number(c.day) || 1,
-                start: String(c.start || '08:30'),
-                end: String(c.end || '09:25'),
-                subject: String(c.subject || 'Asignatura'),
-                room: String(c.room || '')
-            }));
-            saveState();
-            renderScheduleEditorList();
-            renderScheduleWidget();
-            showToast('Horario importado correctamente', 'success');
-        } catch (_) {
-            showToast('Archivo de horario inválido', 'error');
-        } finally {
-            event.target.value = '';
-        }
-    };
-    reader.readAsText(file);
-}
-
 function renderScheduleEditorList() {
-    const container = document.getElementById('schedule-list-editor');
-    if (!container) return;
-    if (!appState.schedule.length) {
-        container.innerHTML = `<div class="mono-muted">Aún no has añadido clases.</div>`;
+    const list = document.getElementById('schedule-editor-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const dayNames = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie' };
+
+    const sorted = [...(state.schedule || [])].sort((a, b) => (a.day - b.day) || a.start.localeCompare(b.start));
+    if (!sorted.length) {
+        list.innerHTML = '<div class="mono-muted">No hay clases en el horario.</div>';
         return;
     }
-    const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || parseMinutes(a.start) - parseMinutes(b.start));
-    container.innerHTML = sorted.map(c => `
-        <div class="deadline-card-item">
-            <div class="deadline-card-top">
-                <span><strong>${DAYS_MAP[c.day]}</strong> · ${escapeHtml(c.start)}-${escapeHtml(c.end)} · <strong>${escapeHtml(c.subject)}</strong> (${escapeHtml(c.room || '-')})</span>
-                <button type="button" class="btn-icon" onclick="deleteScheduleClass('${c.id}')" title="Eliminar">🗑️</button>
-            </div>
-        </div>
-    `).join('');
+
+    sorted.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        const extra = [c.teacher, c.room].filter(Boolean).join(' · ');
+        info.textContent = `${dayNames[c.day] || c.day} ${c.start}-${c.end} · ${c.subject}${extra ? ` (${extra})` : ''}`;
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => deleteScheduleClass(c.id));
+
+        row.append(info, del);
+        list.appendChild(row);
+    });
 }
 
-/* --------------------------------------------------------------------------
-   ENTREGAS & EXÁMENES + NOTIFICACIONES FIABLES
-   -------------------------------------------------------------------------- */
-function setDeliveriesFilter(filter) {
-    currentDeliveriesFilter = filter;
-    ['all', 'pending', 'soon', 'exam', 'practice'].forEach(f => {
-        document.getElementById(`deliv-filter-${f}`)?.classList.toggle('active', f === filter);
+function importScheduleFromText() {
+    const raw = (document.getElementById('sch-import-text')?.value || '').trim();
+    if (!raw) {
+        showToast('Pega primero el texto del horario', 'error');
+        return;
+    }
+    const parsed = parseScheduleImportText(raw);
+    if (!parsed.length) {
+        showToast('No se detectaron líneas válidas (formato: Lun 08:15-09:15 Programación)', 'error');
+        return;
+    }
+
+    parsed.forEach(item => {
+        state.schedule.push({
+            id: generateId('sch'),
+            day: item.day,
+            start: item.start,
+            end: item.end,
+            subject: item.subject,
+            teacher: item.teacher || '',
+            room: item.room || ''
+        });
     });
+
+    document.getElementById('sch-import-text').value = '';
+    saveState(false);
+    renderSchedule();
+    renderScheduleEditorList();
+    showToast(`Importadas ${parsed.length} clases al horario`, 'success');
+}
+
+/* ==========================================================
+   ENTREGAS, EXÁMENES Y PRÁCTICAS
+   ========================================================== */
+function setDeliveryFilter(filterKey) {
+    currentDeliveryFilter = ALLOWED_DELIVERY_FILTERS.includes(filterKey) ? filterKey : 'all';
+    state.ui.deliveryFilter = currentDeliveryFilter;
+    document.querySelectorAll('.delivery-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.dfilter === currentDeliveryFilter);
+    });
+    saveState(false);
+    renderDeliveries();
+}
+
+function toggleExamCramMode() {
+    state.ui.examCramMode = !state.ui.examCramMode;
+    document.getElementById('btn-exam-cram')?.classList.toggle('active', state.ui.examCramMode);
+    saveState(false);
     renderDeliveries();
 }
 
 function addDelivery() {
-    const title = document.getElementById('deliv-title')?.value.trim();
-    const subject = document.getElementById('deliv-subject')?.value.trim() || 'General';
-    const type = document.getElementById('deliv-type')?.value || 'Práctica';
-    const datetime = document.getElementById('deliv-datetime')?.value;
-    const alertMins = Number(document.getElementById('deliv-alert-mins')?.value || 0);
+    const subject = (document.getElementById('del-subject')?.value || '').trim();
+    const title = (document.getElementById('del-title')?.value || '').trim();
+    const date = (document.getElementById('del-date')?.value || '').trim();
+    const type = document.getElementById('del-type')?.value || 'entrega';
+    const notes = (document.getElementById('del-notes')?.value || '').trim();
 
-    if (!title || !datetime) return showToast('Introduce título y fecha límite', 'error');
+    if (!subject || !title || !date) {
+        showToast('Completa asignatura, título y fecha límite', 'error');
+        return;
+    }
 
-    const item = {
-        id: generateId('deliv'),
-        title,
+    state.deliveries.push({
+        id: generateId('del'),
         subject,
+        title,
+        date,
         type,
-        datetime,
-        alertMins,
-        notified: false,
+        notes,
         done: false
-    };
-    appState.deliveries.push(item);
+    });
 
-    document.getElementById('deliv-title').value = '';
-    saveState();
+    document.getElementById('del-title').value = '';
+    document.getElementById('del-date').value = '';
+    document.getElementById('del-notes').value = '';
+    toggleForm('form-add-delivery');
+    saveState(false);
     renderDeliveries();
-    checkDueDeliveryNotifications();
     showToast('Entrega añadida', 'success');
 }
 
 function toggleDeliveryDone(id) {
-    const item = appState.deliveries.find(d => d.id === id);
+    const item = (state.deliveries || []).find(d => d.id === id);
     if (!item) return;
     item.done = !item.done;
-    saveState();
+    saveState(false);
     renderDeliveries();
 }
 
 function deleteDelivery(id) {
-    const index = appState.deliveries.findIndex(d => d.id === id);
-    if (index === -1) return;
-    const [removed] = appState.deliveries.splice(index, 1);
-    saveState();
+    state.deliveries = (state.deliveries || []).filter(d => d.id !== id);
+    saveState(false);
     renderDeliveries();
-    registerUndo(`Entrega "${removed.title}" eliminada`, () => {
-        appState.deliveries.splice(index, 0, removed);
-    });
 }
 
-function editDeliveryPrompt(id) {
-    const d = appState.deliveries.find(item => item.id === id);
-    if (!d) return;
-    openEditItemModal('Editar Entrega / Examen', [
-        { key: 'title', label: 'Título', type: 'text', value: d.title },
-        { key: 'subject', label: 'Módulo', type: 'text', value: d.subject },
-        {
-            key: 'type',
-            label: 'Tipo',
-            type: 'select',
-            value: d.type,
-            options: [
-                { value: 'Práctica', label: 'Práctica' },
-                { value: 'Examen', label: 'Examen' },
-                { value: 'Proyecto', label: 'Proyecto' }
-            ]
-        },
-        { key: 'datetime', label: 'Fecha y hora', type: 'datetime-local', value: d.datetime }
-    ], updated => {
-        if (!updated.title.trim() || !updated.datetime) {
-            showToast('Título y fecha son obligatorios', 'error');
-            return false;
-        }
-        d.title = updated.title.trim();
-        d.subject = updated.subject.trim() || 'General';
-        d.type = updated.type;
-        if (d.datetime !== updated.datetime) {
-            d.datetime = updated.datetime;
-            d.notified = false;
-        }
-        return true;
-    });
-}
-
-function enableDeadlineNotifications() {
-    if (!('Notification' in window)) return showToast('Tu navegador no soporta notificaciones', 'error');
-    Notification.requestPermission().then(perm => {
-        if (perm === 'granted') {
-            showToast('Notificaciones de entregas activadas', 'success');
-            checkDueDeliveryNotifications();
-        } else {
-            showToast('Permiso de notificaciones denegado', 'error');
-        }
-    });
-}
-
-function checkDueDeliveryNotifications() {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const now = Date.now() + clockOffsetMs;
-    let changed = false;
-
-    appState.deliveries.forEach(d => {
-        if (d.done || d.notified || !d.alertMins) return;
-        const target = new Date(d.datetime).getTime();
-        const triggerTime = target - d.alertMins * 60000;
-        if (now >= triggerTime && now <= target + 3600000) {
-            d.notified = true;
-            changed = true;
-            new Notification(`⏳ ${d.type}: ${d.title}`, {
-                body: `Módulo: ${d.subject} · Fecha límite próxima`
-            });
-        }
-    });
-
-    if (changed) saveState();
+function getDaysUntil(dateStr) {
+    if (!dateStr) return 9999;
+    const todayKey = getMadridDateKey(getEffectiveNow());
+    const [ty, tm, td] = todayKey.split('-').map(Number);
+    const [dy, dm, dd] = String(dateStr).split('-').map(Number);
+    if (!dy || !dm || !dd) return 9999;
+    const utcToday = Date.UTC(ty, tm - 1, td);
+    const utcDue = Date.UTC(dy, dm - 1, dd);
+    return Math.round((utcDue - utcToday) / 86400000);
 }
 
 function renderDeliveries() {
-    const container = document.getElementById('deliveries-list');
-    if (!container) return;
+    const list = document.getElementById('deliveries-list');
+    if (!list) return;
+    list.innerHTML = '';
 
-    const now = Date.now() + clockOffsetMs;
-    let list = [...appState.deliveries].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+    const activeFilter = ALLOWED_DELIVERY_FILTERS.includes(currentDeliveryFilter) ? currentDeliveryFilter : 'all';
+    const items = (state.deliveries || [])
+        .map(d => ({ ...d, daysLeft: getDaysUntil(d.date) }))
+        .filter(d => {
+            if (state.ui.examCramMode && (d.done || d.daysLeft > 7)) return false;
+            if (activeFilter === 'pending') return !d.done;
+            if (activeFilter === 'soon') return !d.done && d.daysLeft >= 0 && d.daysLeft <= 3;
+            if (activeFilter === 'exam') return d.type === 'examen';
+            if (activeFilter === 'practice') return d.type === 'practica';
+            return true;
+        })
+        .sort((a, b) => Number(a.done) - Number(b.done) || a.daysLeft - b.daysLeft);
 
-    if (currentDeliveriesFilter === 'pending') list = list.filter(d => !d.done);
-    if (currentDeliveriesFilter === 'soon') list = list.filter(d => !d.done && (new Date(d.datetime) - now) <= 48 * 3600000);
-    if (currentDeliveriesFilter === 'exam') list = list.filter(d => d.type === 'Examen');
-    if (currentDeliveriesFilter === 'practice') list = list.filter(d => d.type === 'Práctica');
-
-    if (!list.length) {
-        container.innerHTML = `<div class="mono-muted">No hay entregas en esta vista.</div>`;
+    if (!items.length) {
+        list.innerHTML = '<div class="mono-muted">No hay entregas o exámenes para este filtro.</div>';
         return;
     }
 
-    container.innerHTML = list.map(d => {
-        const diffMs = new Date(d.datetime).getTime() - now;
-        const hours = Math.round(diffMs / 3600000);
-        let badgeClass = 'cd-ok';
-        let badgeText = hours >= 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : `${hours}h`;
+    items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = `delivery-item ${item.done ? 'is-done' : ''}`;
 
-        if (d.done) {
-            badgeClass = 'cd-done';
-            badgeText = 'Entregada';
-        } else if (diffMs < 0) {
-            badgeClass = 'cd-urgent';
-            badgeText = 'Vencida';
-        } else if (hours <= 48) {
-            badgeClass = 'cd-warn';
-        }
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = Boolean(item.done);
+        chk.addEventListener('change', () => toggleDeliveryDone(item.id));
 
-        return `
-            <div class="deadline-card-item">
-                <div class="deadline-card-top">
-                    <div>
-                        <span class="deadline-title">${escapeHtml(d.title)}</span>
-                        <div class="deadline-meta">
-                            <span>[${escapeHtml(d.type)}]</span>
-                            <span>${escapeHtml(d.subject)}</span>
-                            <span>· ${escapeHtml(d.datetime.replace('T', ' '))}</span>
-                        </div>
-                    </div>
-                    <div class="filter-pills-row">
-                        <span class="countdown-badge ${badgeClass}">${badgeText}</span>
-                        <button type="button" class="btn-icon" onclick="editDeliveryPrompt('${d.id}')" title="Editar">✏️</button>
-                        <button type="button" class="btn-icon" onclick="toggleDeliveryDone('${d.id}')" title="Completar">${d.done ? '↩️' : '✅'}</button>
-                        <button type="button" class="btn-icon" onclick="deleteDelivery('${d.id}')" title="Eliminar">🗑️</button>
-                    </div>
-                </div>
-            </div>
+        const body = document.createElement('div');
+        body.className = 'delivery-body';
+        const badgeText = item.type === 'examen' ? '📝 Examen' : item.type === 'practica' ? '🧪 Práctica' : '📦 Entrega';
+        const dueLabel = item.done
+            ? 'Completado'
+            : item.daysLeft < 0
+                ? `Vencido (${Math.abs(item.daysLeft)}d)`
+                : item.daysLeft === 0
+                    ? 'Hoy'
+                    : `En ${item.daysLeft}d`;
+
+        body.innerHTML = `
+            <div class="delivery-title">${escapeHtml(item.title)} <span class="delivery-badge">${badgeText}</span></div>
+            <div class="delivery-meta">${escapeHtml(item.subject)} · ${escapeHtml(item.date)} · <strong>${dueLabel}</strong>${item.notes ? ` · ${escapeHtml(item.notes)}` : ''}</div>
         `;
-    }).join('');
-}
 
-/* --------------------------------------------------------------------------
-   TAREAS, SUBTAREAS Y BLOQUES DE JORNADA
-   -------------------------------------------------------------------------- */
-function setTaskFilter(filter) {
-    currentTaskFilter = filter;
-    ['all', 'pending', 'done', 'today', 'overdue'].forEach(f => {
-        document.getElementById(`filter-${f}`)?.classList.toggle('active', f === filter);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => deleteDelivery(item.id));
+
+        row.append(chk, body, del);
+        list.appendChild(row);
     });
-    renderTasks();
 }
 
-function setTaskBlockFilter(block) {
-    currentTaskBlockFilter = block || 'all';
-    renderTasks();
+function checkDeliveryNotifications() {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const todayKey = getMadridDateKey(getEffectiveNow());
+    (state.deliveries || []).forEach(d => {
+        if (d.done) return;
+        const days = getDaysUntil(d.date);
+        if (days === 0 || days === 1) {
+            const alertKey = `${todayKey}:${d.id}:${days}`;
+            if (!notifiedDeliveryAlerts.has(alertKey)) {
+                notifiedDeliveryAlerts.add(alertKey);
+                try {
+                    new Notification('DevWorkspace · Recordatorio académico', {
+                        body: `${d.subject}: ${d.title} (${days === 0 ? 'vence hoy' : 'vence mañana'})`
+                    });
+                } catch (_) {}
+            }
+        }
+    });
 }
-
-function setTaskSort(sort) {
-    currentTaskSort = sort;
-    renderTasks();
-}
-
+/* ==========================================================
+   TAREAS, SUBTAREAS, POMODORO, NOTAS, STUDIO, BD, DEVLAB Y ARRANQUE
+   ========================================================== */
 function addTask() {
-    const textEl = document.getElementById('task-text');
-    const text = textEl?.value.trim();
+    const text = (document.getElementById('task-input')?.value || '').trim();
     if (!text) return;
 
-    const block = document.getElementById('task-block')?.value || 'afternoon';
-    const priority = document.getElementById('task-priority')?.value || 'medium';
-    const date = document.getElementById('task-date')?.value || '';
-    const repeat = document.getElementById('task-repeat')?.value || '';
-
-    appState.tasks.unshift({
-        id: generateId('task'),
+    state.tasks.unshift({
+        id: generateId('tsk'),
         text,
-        block,
-        priority,
-        date,
-        repeat,
         done: false,
-        pomosSpent: 0,
+        priority: document.getElementById('task-priority')?.value || 'medium',
+        block: document.getElementById('task-block')?.value || 'afternoon',
+        date: document.getElementById('task-date')?.value || '',
+        repeat: document.getElementById('task-repeat')?.value || '',
+        pomos: 0,
         subtasks: [],
-        createdAt: Date.now()
+        createdAt: getEffectiveNowMs()
     });
 
-    textEl.value = '';
-    saveState();
+    document.getElementById('task-input').value = '';
+    saveState(false);
     renderTasks();
-    renderPomodoroTaskSelect();
-    updateStudyStats();
+    refreshPomodoroTaskSelector();
 }
 
 function toggleTaskDone(id) {
-    const t = appState.tasks.find(item => item.id === id);
-    if (!t) return;
-    t.done = !t.done;
+    const task = (state.tasks || []).find(t => t.id === id);
+    if (!task) return;
+    task.done = !task.done;
 
-    if (t.done && t.repeat) {
-        const baseDate = t.date || getMadridDateKey(new Date(Date.now() + clockOffsetMs));
-        let nextDate = '';
-        try {
-            nextDate = getNextRepeatDate(baseDate, t.repeat);
-        } catch (error) {
-            if (!(error instanceof TypeError)) throw error;
-        }
+    if (task.done && task.repeat && task.date) {
+        const nextDate = getNextRepeatDate(task.date, task.repeat);
         if (nextDate) {
-            appState.tasks.unshift({
-                ...t,
-                id: generateId('task'),
+            state.tasks.unshift({
+                ...task,
+                id: generateId('tsk'),
                 done: false,
-                pomosSpent: 0,
                 date: nextDate,
-                subtasks: (t.subtasks || []).map(st => ({ ...st, done: false })),
-                createdAt: Date.now()
+                pomos: 0,
+                subtasks: (task.subtasks || []).map(st => ({ ...st, done: false })),
+                createdAt: getEffectiveNowMs()
             });
-            showToast(`Siguiente repetición programada para ${nextDate}`, 'info');
+            showToast(`Siguiente repetición programada para ${nextDate}`, 'success');
         }
     }
-    saveState();
+
+    saveState(false);
     renderTasks();
-    renderPomodoroTaskSelect();
-    updateStudyStats();
+    refreshPomodoroTaskSelector();
 }
 
 function deleteTask(id) {
-    const index = appState.tasks.findIndex(t => t.id === id);
-    if (index === -1) return;
-    const [removed] = appState.tasks.splice(index, 1);
-    if (linkedPomodoroTaskId === id) linkedPomodoroTaskId = '';
-    saveState();
+    state.tasks = (state.tasks || []).filter(t => t.id !== id);
+    saveState(false);
     renderTasks();
-    renderPomodoroTaskSelect();
-    updateStudyStats();
-    registerUndo(`Tarea "${removed.text}" eliminada`, () => {
-        appState.tasks.splice(index, 0, removed);
+    refreshPomodoroTaskSelector();
+}
+
+function addSubtask(taskId) {
+    const label = prompt('Texto de la subtarea:');
+    if (!label || !label.trim()) return;
+    const task = (state.tasks || []).find(t => t.id === taskId);
+    if (!task) return;
+    if (!Array.isArray(task.subtasks)) task.subtasks = [];
+    task.subtasks.push({ id: generateId('subt'), text: label.trim(), done: false });
+    saveState(false);
+    renderTasks();
+}
+
+function setTaskFilter(filterKey) {
+    currentTaskFilter = ALLOWED_TASK_FILTERS.includes(filterKey) ? filterKey : 'all';
+    document.querySelectorAll('.task-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === currentTaskFilter);
     });
+    renderTasks();
 }
 
-function editTaskPrompt(id) {
-    const t = appState.tasks.find(item => item.id === id);
-    if (!t) return;
-    openEditItemModal('Editar Tarea', [
-        { key: 'text', label: 'Descripción', type: 'text', value: t.text },
-        {
-            key: 'block',
-            label: 'Bloque horario',
-            type: 'select',
-            value: t.block || 'afternoon',
-            options: [
-                { value: 'morning', label: '🌅 Mañana' },
-                { value: 'afternoon', label: '☀️ Tarde' },
-                { value: 'night', label: '🌙 Noche' }
-            ]
-        },
-        {
-            key: 'priority',
-            label: 'Prioridad',
-            type: 'select',
-            value: t.priority || 'medium',
-            options: [
-                { value: 'high', label: '🔴 Alta' },
-                { value: 'medium', label: '🟠 Media' },
-                { value: 'low', label: '🔵 Baja' }
-            ]
-        },
-        { key: 'date', label: 'Fecha límite', type: 'date', value: t.date || '' },
-        {
-            key: 'repeat',
-            label: 'Repetición',
-            type: 'select',
-            value: t.repeat || '',
-            options: [
-                { value: '', label: 'Sin repetición' },
-                { value: 'daily', label: 'Cada día' },
-                { value: 'weekly', label: 'Cada semana' },
-                { value: 'monthly', label: 'Cada mes' }
-            ]
-        }
-    ], updated => {
-        if (!updated.text.trim()) {
-            showToast('La descripción no puede estar vacía', 'error');
-            return false;
-        }
-        t.text = updated.text.trim();
-        t.block = updated.block;
-        t.priority = updated.priority;
-        t.date = updated.date;
-        t.repeat = updated.repeat;
-        return true;
+function setTaskBlockFilter(blockKey) {
+    currentTaskBlockFilter = ALLOWED_TASK_BLOCKS.includes(blockKey) ? blockKey : 'all';
+    document.querySelectorAll('.task-block-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.block === currentTaskBlockFilter);
     });
-}
-
-function addTaskSubtask(taskId) {
-    const task = appState.tasks.find(item => item.id === taskId);
-    const input = document.getElementById(`subtask-input-${taskId}`);
-    const text = input?.value.trim();
-    if (!task || !text) return;
-
-    task.subtasks = task.subtasks || [];
-    task.subtasks.push({ id: generateId('sub'), text, done: false });
-    saveState();
     renderTasks();
 }
 
-function toggleTaskSubtask(taskId, subtaskId) {
-    const task = appState.tasks.find(item => item.id === taskId);
-    const subtask = task?.subtasks?.find(item => item.id === subtaskId);
-    if (!subtask) return;
-
-    subtask.done = !subtask.done;
-    saveState();
+function setTaskSort(sortKey) {
+    currentTaskSort = ALLOWED_TASK_SORTS.includes(sortKey) ? sortKey : 'created';
     renderTasks();
 }
 
-function deleteTaskSubtask(taskId, subtaskId) {
-    const task = appState.tasks.find(item => item.id === taskId);
-    if (!task?.subtasks) return;
-
-    task.subtasks = task.subtasks.filter(item => item.id !== subtaskId);
-    saveState();
+function clearCompletedTasks() {
+    state.tasks = (state.tasks || []).filter(t => !t.done);
+    saveState(false);
     renderTasks();
+    refreshPomodoroTaskSelector();
 }
 
 function renderTasks() {
-    const listEl = document.getElementById('tasks-list');
-    if (!listEl) return;
+    const list = document.getElementById('tasks-list');
+    if (!list) return;
+    list.innerHTML = '';
 
-    const todayStr = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
-    let tasks = [...appState.tasks];
-
-    if (currentTaskFilter === 'pending') tasks = tasks.filter(t => !t.done);
-    if (currentTaskFilter === 'done') tasks = tasks.filter(t => t.done);
-    if (currentTaskFilter === 'today') tasks = tasks.filter(t => t.date === todayStr);
-    if (currentTaskFilter === 'overdue') tasks = tasks.filter(t => !t.done && t.date && t.date < todayStr);
-
-    if (currentTaskBlockFilter !== 'all') {
-        tasks = tasks.filter(t => (t.block || 'afternoon') === currentTaskBlockFilter);
-    }
-
+    const todayKey = getMadridDateKey(getEffectiveNow());
     const prioWeight = { high: 1, medium: 2, low: 3 };
     const blockWeight = { morning: 1, afternoon: 2, night: 3 };
 
-    tasks.sort((a, b) => {
-        if (currentTaskSort === 'priority') return (prioWeight[a.priority] || 9) - (prioWeight[b.priority] || 9);
-        if (currentTaskSort === 'block') return (blockWeight[a.block] || 9) - (blockWeight[b.block] || 9);
-        if (currentTaskSort === 'date') return (a.date || '9999').localeCompare(b.date || '9999');
-        return (b.createdAt || 0) - (a.createdAt || 0);
-    });
+    const filtered = (state.tasks || [])
+        .filter(t => {
+            if (currentTaskBlockFilter !== 'all' && t.block !== currentTaskBlockFilter) return false;
+            if (currentTaskFilter === 'pending') return !t.done;
+            if (currentTaskFilter === 'done') return Boolean(t.done);
+            if (currentTaskFilter === 'today') return t.date === todayKey;
+            if (currentTaskFilter === 'overdue') return !t.done && t.date && t.date < todayKey;
+            return true;
+        })
+        .sort((a, b) => {
+            if (currentTaskSort === 'priority') return (prioWeight[a.priority] || 9) - (prioWeight[b.priority] || 9);
+            if (currentTaskSort === 'block') return (blockWeight[a.block] || 9) - (blockWeight[b.block] || 9);
+            if (currentTaskSort === 'date') return (a.date || '9999-12-31').localeCompare(b.date || '9999-12-31');
+            return (b.createdAt || 0) - (a.createdAt || 0);
+        });
 
-    if (!tasks.length) {
-        listEl.innerHTML = `<li class="mono-muted">No hay tareas en este filtro.</li>`;
+    if (!filtered.length) {
+        list.innerHTML = '<div class="mono-muted">No hay tareas para mostrar con este filtro.</div>';
         return;
     }
 
-    const blockIcon = { morning: '🌅', afternoon: '☀️', night: '🌙' };
-    const prioIcon = { high: '🔴', medium: '🟠', low: '🔵' };
-    const repeatLabels = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual' };
+    filtered.forEach(task => {
+        const row = document.createElement('div');
+        row.className = `task-item ${task.done ? 'is-done' : ''}`;
 
-    listEl.innerHTML = tasks.map(t => {
-        const subtasks = Array.isArray(t.subtasks) ? t.subtasks : [];
-        const doneSubCount = subtasks.filter(st => st.done).length;
-        const subtaskProgressHtml = subtasks.length
-            ? `<span class="subtask-progress-pill">${doneSubCount}/${subtasks.length}</span>`
-            : '';
-        const subtasksHtml = subtasks.map(st => `
-            <div class="task-subtask-row ${st.done ? 'subtask-done' : ''}">
-                <label>
-                    <input type="checkbox" ${st.done ? 'checked' : ''} onchange="toggleTaskSubtask('${t.id}', '${st.id}')">
-                    <span>${escapeHtml(st.text)}</span>
-                </label>
-                <button type="button" class="btn-icon" onclick="deleteTaskSubtask('${t.id}', '${st.id}')" title="Eliminar subtarea">✕</button>
-            </div>
-        `).join('');
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = Boolean(task.done);
+        chk.addEventListener('change', () => toggleTaskDone(task.id));
 
-        return `
-            <li class="${t.done ? 'task-done' : ''}">
-                <div class="task-main-row">
-                    <label class="task-label">
-                        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone('${t.id}')">
-                        <span>${blockIcon[t.block] || '☀️'} ${prioIcon[t.priority] || '🟠'} ${escapeHtml(t.text)}</span>
-                    </label>
-                    <div class="task-actions">
-                        ${subtaskProgressHtml}
-                        ${t.pomosSpent ? `<span class="mono-muted task-pomo-badge">🍅 ${t.pomosSpent}</span>` : ''}
-                        ${t.repeat ? `<span class="mono-muted task-repeat-badge">🔁 ${repeatLabels[t.repeat] || escapeHtml(t.repeat)}</span>` : ''}
-                        ${t.date ? `<span class="mono-muted">${escapeHtml(t.date)}</span>` : ''}
-                        <button type="button" class="btn-icon" onclick="editTaskPrompt('${t.id}')" title="Editar tarea">✏️</button>
-                        <button type="button" class="btn-icon" onclick="deleteTask('${t.id}')" title="Eliminar">🗑️</button>
-                    </div>
-                </div>
-                <div class="task-subtasks">
-                    ${subtasksHtml}
-                    <div class="task-subtask-add">
-                        <input type="text" id="subtask-input-${t.id}" placeholder="Añadir subtarea..." onkeydown="if(event.key==='Enter') addTaskSubtask('${t.id}')">
-                        <button type="button" class="btn-ghost btn-sm" onclick="addTaskSubtask('${t.id}')" title="Añadir subtarea">+</button>
-                    </div>
-                </div>
-            </li>
+        const body = document.createElement('div');
+        body.className = 'task-body';
+        const prioBadge = task.priority === 'high' ? '🔴 Alta' : task.priority === 'low' ? '🟢 Baja' : '🟡 Media';
+        const blockBadge = task.block === 'morning' ? '🌅 Mañana' : task.block === 'night' ? '🌙 Noche' : '☀️ Tarde';
+
+        body.innerHTML = `
+            <div class="task-text">${escapeHtml(task.text)}</div>
+            <div class="task-meta">${prioBadge} · ${blockBadge}${task.date ? ` · 📅 ${escapeHtml(task.date)}` : ''}${task.repeat ? ` · 🔁 ${escapeHtml(task.repeat)}` : ''}${task.pomos ? ` · 🍅 ${task.pomos}` : ''}</div>
         `;
-    }).join('');
-}
 
-function exportTasksMarkdown() {
-    const md = appState.tasks.map(t => `- [${t.done ? 'x' : ' '}] (${t.block}) ${t.text} ${t.date ? `[${t.date}]` : ''}`).join('\n');
-    copyTextToClipboard(md || 'Sin tareas', 'Lista de tareas copiada en Markdown');
-}
-
-/* --------------------------------------------------------------------------
-   POMODORO, AUDIO AMBIENTE Y MÉTRICAS
-   -------------------------------------------------------------------------- */
-function renderPomodoroTaskSelect() {
-    const select = document.getElementById('pomo-linked-task');
-    if (!select) return;
-    const pendingTasks = appState.tasks.filter(t => !t.done);
-    select.innerHTML = `<option value="">🎯 Sesión libre</option>` +
-        pendingTasks.map(t => `<option value="${t.id}" ${t.id === linkedPomodoroTaskId ? 'selected' : ''}>🎯 ${escapeHtml(t.text.slice(0, 32))}</option>`).join('');
-}
-
-function setPomodoroLinkedTask(taskId) {
-    linkedPomodoroTaskId = taskId;
-}
-
-function startCustomPomodoro(mode) {
-    clearInterval(pomoInterval);
-    pomoMode = mode;
-    const focusMins = Math.max(1, Number(document.getElementById('pomo-focus-time')?.value || 25));
-    const breakMins = Math.max(1, Number(document.getElementById('pomo-break-time')?.value || 5));
-
-    pomoInitialMins = mode === 'break' ? breakMins : mode === 'exam' ? 60 : focusMins;
-    pomoRemainingSec = pomoInitialMins * 60;
-    updatePomodoroDisplay();
-
-    pomoInterval = setInterval(() => {
-        pomoRemainingSec--;
-        updatePomodoroDisplay();
-        if (pomoRemainingSec <= 0) {
-            clearInterval(pomoInterval);
-            pomoInterval = null;
-            if (pomoMode !== 'break') {
-                recordStudyMinutes(pomoInitialMins);
-                if (linkedPomodoroTaskId) {
-                    const linked = appState.tasks.find(t => t.id === linkedPomodoroTaskId);
-                    if (linked) {
-                        linked.pomosSpent = (linked.pomosSpent || 0) + 1;
-                        saveState();
-                        renderTasks();
-                    }
-                }
-            }
-            playBellChime();
-            showToast(`¡Sesión ${pomoMode.toUpperCase()} completada!`, 'success');
+        if (Array.isArray(task.subtasks) && task.subtasks.length) {
+            const subBox = document.createElement('div');
+            subBox.className = 'subtasks-box';
+            task.subtasks.forEach(st => {
+                const subRow = document.createElement('label');
+                subRow.className = 'subtask-row';
+                const sChk = document.createElement('input');
+                sChk.type = 'checkbox';
+                sChk.checked = Boolean(st.done);
+                sChk.addEventListener('change', () => {
+                    st.done = !st.done;
+                    saveState(false);
+                    renderTasks();
+                });
+                const sTxt = document.createElement('span');
+                sTxt.textContent = st.text;
+                if (st.done) sTxt.style.textDecoration = 'line-through';
+                subRow.append(sChk, sTxt);
+                subBox.appendChild(subRow);
+            });
+            body.appendChild(subBox);
         }
+
+        const actions = document.createElement('div');
+        actions.className = 'filter-pills-row';
+        const subBtn = document.createElement('button');
+        subBtn.type = 'button';
+        subBtn.className = 'btn-icon';
+        subBtn.title = 'Añadir subtarea';
+        subBtn.textContent = '+Sub';
+        subBtn.addEventListener('click', () => addSubtask(task.id));
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-icon';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => deleteTask(task.id));
+
+        actions.append(subBtn, delBtn);
+        row.append(chk, body, actions);
+        list.appendChild(row);
+    });
+}
+
+/* ==========================================================
+   POMODORO + RUIDO DE ENFOQUE
+   ========================================================== */
+function updatePomodoroDisplay() {
+    const mins = String(Math.floor(pomodoroRemainingSeconds / 60)).padStart(2, '0');
+    const secs = String(pomodoroRemainingSeconds % 60).padStart(2, '0');
+    const disp = document.getElementById('pomo-display');
+    if (disp) disp.textContent = `${mins}:${secs}`;
+
+    const ring = document.getElementById('pomo-ring-progress');
+    if (ring) {
+        const circumference = 439.82;
+        const ratio = pomodoroSessionTotalSeconds > 0 ? pomodoroRemainingSeconds / pomodoroSessionTotalSeconds : 1;
+        ring.style.strokeDashoffset = String(circumference * (1 - ratio));
+    }
+}
+
+function startPomodoro() {
+    if (pomodoroInterval) return;
+    pomodoroInterval = setInterval(() => {
+        if (pomodoroRemainingSeconds > 0) {
+            pomodoroRemainingSeconds--;
+            updatePomodoroDisplay();
+            return;
+        }
+        clearInterval(pomodoroInterval);
+        pomodoroInterval = null;
+        completePomodoroCycle();
     }, 1000);
 }
 
-function stopPomodoro() {
-    clearInterval(pomoInterval);
-    pomoInterval = null;
-    const focusMins = Math.max(1, Number(document.getElementById('pomo-focus-time')?.value || 25));
-    pomoRemainingSec = focusMins * 60;
+function pausePomodoro() {
+    if (pomodoroInterval) {
+        clearInterval(pomodoroInterval);
+        pomodoroInterval = null;
+    }
+}
+
+function resetPomodoro() {
+    pausePomodoro();
+    const mins = pomodoroCurrentMode === 'focus'
+        ? (Number(state.pomodoro.focusMinutes) || 25)
+        : (Number(state.pomodoro.breakMinutes) || 5);
+    pomodoroSessionTotalSeconds = mins * 60;
+    pomodoroRemainingSeconds = pomodoroSessionTotalSeconds;
     updatePomodoroDisplay();
 }
 
-function updatePomodoroDisplay() {
-    const disp = document.getElementById('pomodoro-display');
-    if (!disp) return;
-    const m = String(Math.floor(pomoRemainingSec / 60)).padStart(2, '0');
-    const s = String(pomoRemainingSec % 60).padStart(2, '0');
-    disp.textContent = `${m}:${s}`;
+function setPomodoroMode(mode, minutes) {
+    pausePomodoro();
+    pomodoroCurrentMode = mode === 'break' ? 'break' : 'focus';
+    document.getElementById('btn-mode-focus')?.classList.toggle('active', pomodoroCurrentMode === 'focus');
+    document.getElementById('btn-mode-break')?.classList.toggle('active', pomodoroCurrentMode === 'break');
+    pomodoroSessionTotalSeconds = (Number(minutes) || 25) * 60;
+    pomodoroRemainingSeconds = pomodoroSessionTotalSeconds;
+    updatePomodoroDisplay();
 }
 
-function recordStudyMinutes(mins) {
-    const todayKey = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
-    appState.studyStats.totalMinutes += mins;
-    appState.studyStats.dailyLog[todayKey] = (appState.studyStats.dailyLog[todayKey] || 0) + mins;
-    saveState();
-    updateStudyStats();
+function updatePomodoroConfig() {
+    const f = Math.min(180, Math.max(1, Number(document.getElementById('pomo-focus-mins')?.value) || 25));
+    const b = Math.min(60, Math.max(1, Number(document.getElementById('pomo-break-mins')?.value) || 5));
+    state.pomodoro.focusMinutes = f;
+    state.pomodoro.breakMinutes = b;
+    saveState(false);
+    resetPomodoro();
 }
 
-function updateStudyStats() {
-    const todayKey = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
-    const todayMins = appState.studyStats.dailyLog[todayKey] || 0;
-    const totalHours = (appState.studyStats.totalMinutes / 60).toFixed(1);
+function completePomodoroCycle() {
+    if (pomodoroCurrentMode === 'focus') {
+        const focusedMins = Number(state.pomodoro.focusMinutes) || 25;
+        const todayKey = getMadridDateKey(getEffectiveNow());
+        if (state.pomodoro.lastStudyDay !== todayKey) {
+            state.pomodoro.todayMinutes = 0;
+            state.pomodoro.streak = (state.pomodoro.streak || 0) + 1;
+            state.pomodoro.lastStudyDay = todayKey;
+        }
+        state.pomodoro.todayMinutes = (state.pomodoro.todayMinutes || 0) + focusedMins;
+        state.pomodoro.totalMinutes = (state.pomodoro.totalMinutes || 0) + focusedMins;
+        state.pomodoro.history[todayKey] = (state.pomodoro.history[todayKey] || 0) + focusedMins;
 
-    let streak = 0;
-    for (let i = 0; i < 365; i++) {
-        const d = new Date(Date.now() + clockOffsetMs - i * 86400000);
-        const key = getMadridDateKey(d);
-        if ((appState.studyStats.dailyLog[key] || 0) > 0) streak++;
-        else if (i > 0) break;
-    }
+        if (state.pomodoro.linkedTaskId) {
+            const linked = (state.tasks || []).find(t => t.id === state.pomodoro.linkedTaskId);
+            if (linked) linked.pomos = (linked.pomos || 0) + 1;
+        }
 
-    const totalTasks = appState.tasks.length;
-    const doneTasks = appState.tasks.filter(t => t.done).length;
-    const ratio = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-    document.getElementById('stat-focus-today').textContent = `${todayMins}m`;
-    document.getElementById('stat-focus-total').textContent = `${totalHours}h`;
-    document.getElementById('stat-streak').textContent = `🔥 ${streak}d`;
-    document.getElementById('stat-ratio').textContent = `${ratio}%`;
-
-    const barsContainer = document.getElementById('study-bars-container');
-    if (!barsContainer) return;
-    const last7 = [];
-    let weekSum = 0;
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(Date.now() + clockOffsetMs - i * 86400000);
-        const key = getMadridDateKey(d);
-        const mins = appState.studyStats.dailyLog[key] || 0;
-        weekSum += mins;
-        last7.push({ day: DAYS_MAP[getMadridClock(d).day].slice(0, 2), mins });
-    }
-    const maxMins = Math.max(30, ...last7.map(x => x.mins));
-    document.getElementById('chart-week-sum').textContent = `${weekSum} min`;
-
-    barsContainer.innerHTML = last7.map(item => {
-        const hPct = Math.max(8, Math.round((item.mins / maxMins) * 100));
-        return `
-            <div class="chart-bar-col" title="${item.mins} min">
-                <div class="chart-bar-fill" style="height:${hPct}%"></div>
-                <span class="chart-bar-day">${item.day}</span>
-            </div>
-        `;
-    }).join('');
-}
-
-/* Generador Web Audio (Ruido Rosa, Marrón, Lluvia y Binaural) */
-function toggleNoiseGenerator() {
-    if (isAudioPlaying) {
-        stopNoiseGenerator();
+        saveState(false);
+        renderPomodoroStats();
+        renderTasks();
+        showToast(`¡Pomodoro completado! +${focusedMins} min de estudio`, 'success');
+        setPomodoroMode('break', state.pomodoro.breakMinutes || 5);
     } else {
-        startNoiseGenerator();
+        showToast('Descanso terminado. ¡Vuelta al enfoque!');
+        setPomodoroMode('focus', state.pomodoro.focusMinutes || 25);
     }
 }
 
-function handleAudioTypeChange() {
+function refreshPomodoroTaskSelector() {
+    const sel = document.getElementById('pomo-linked-task');
+    if (!sel) return;
+    const current = state.pomodoro.linkedTaskId || '';
+    sel.innerHTML = '<option value="">-- Vincular tarea (opcional) --</option>';
+    (state.tasks || []).filter(t => !t.done).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.text;
+        sel.appendChild(opt);
+    });
+    sel.value = [...sel.options].some(o => o.value === current) ? current : '';
+}
+
+function setPomodoroLinkedTask(taskId) {
+    state.pomodoro.linkedTaskId = taskId || '';
+    saveState(false);
+}
+
+function renderPomodoroStats() {
+    const todayEl = document.getElementById('pomo-today-mins');
+    const streakEl = document.getElementById('pomo-streak-days');
+    const totalEl = document.getElementById('pomo-total-mins');
+    const heatEl = document.getElementById('pomo-heatmap');
+
+    if (todayEl) todayEl.textContent = `${state.pomodoro.todayMinutes || 0}m`;
+    if (streakEl) streakEl.textContent = `${state.pomodoro.streak || 0}d`;
+    if (totalEl) totalEl.textContent = `${state.pomodoro.totalMinutes || 0}m`;
+
+    if (heatEl) {
+        heatEl.innerHTML = '';
+        const nowMs = getEffectiveNowMs();
+        for (let i = 13; i >= 0; i--) {
+            const dKey = getMadridDateKey(new Date(nowMs - i * 86400000));
+            const mins = state.pomodoro.history?.[dKey] || 0;
+            const cell = document.createElement('div');
+            cell.className = 'heat-cell';
+            if (mins >= 90) cell.classList.add('lv-3');
+            else if (mins >= 45) cell.classList.add('lv-2');
+            else if (mins > 0) cell.classList.add('lv-1');
+            cell.title = `${dKey}: ${mins} min`;
+            heatEl.appendChild(cell);
+        }
+    }
+}
+
+function toggleFocusAudio() {
+    const btn = document.getElementById('btn-audio-toggle');
     if (isAudioPlaying) {
-        stopNoiseGenerator();
-        startNoiseGenerator();
+        try { noiseNode?.stop(); } catch (_) {}
+        noiseNode = null;
+        isAudioPlaying = false;
+        if (btn) btn.textContent = '🔇 Ruido Focus';
+        return;
     }
-}
 
-function startNoiseGenerator() {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return showToast('Web Audio API no soportada', 'error');
-
-    audioCtx = audioCtx || new AudioContextClass();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-
-    const type = document.getElementById('audio-sound-type')?.value || 'brown';
-    const vol = Number(document.getElementById('audio-volume')?.value || 40) / 100;
-
-    audioMasterGain = audioCtx.createGain();
-    audioMasterGain.gain.value = vol * 0.35;
-    audioMasterGain.connect(audioCtx.destination);
-
-    audioActiveNodes = [];
-
-    if (type.startsWith('binaural')) {
-        const beat = type === 'binaural-alpha' ? 10 : 6;
-        const oscL = audioCtx.createOscillator();
-        const oscR = audioCtx.createOscillator();
-        const merger = audioCtx.createChannelMerger(2);
-        oscL.frequency.value = 200;
-        oscR.frequency.value = 200 + beat;
-        oscL.connect(merger, 0, 0);
-        oscR.connect(merger, 0, 1);
-        merger.connect(audioMasterGain);
-        oscL.start();
-        oscR.start();
-        audioActiveNodes.push(oscL, oscR);
-    } else {
-        const bufferSize = audioCtx.sampleRate * 3;
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufferSize = audioCtx.sampleRate * 2;
         const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const output = buffer.getChannelData(0);
+        const data = buffer.getChannelData(0);
         let lastOut = 0;
-
         for (let i = 0; i < bufferSize; i++) {
             const white = Math.random() * 2 - 1;
-            if (type === 'brown') {
-                output[i] = (lastOut + 0.02 * white) / 1.02;
-                lastOut = output[i];
-                output[i] *= 3.2;
-            } else if (type === 'rain') {
-                const drop = Math.random() < 0.0025 ? (Math.random() * 0.9 - 0.45) : 0;
-                output[i] = (lastOut * 0.72 + white * 0.28) * 0.55 + drop;
-                lastOut = output[i];
-            } else {
-                output[i] = (lastOut + 0.12 * white) / 1.12;
-                lastOut = output[i];
-                output[i] *= 1.8;
-            }
+            data[i] = (lastOut + 0.02 * white) / 1.02;
+            lastOut = data[i];
+            data[i] *= 2.5;
         }
+        noiseNode = audioCtx.createBufferSource();
+        noiseNode.buffer = buffer;
+        noiseNode.loop = true;
 
-        const noiseSource = audioCtx.createBufferSource();
-        noiseSource.buffer = buffer;
-        noiseSource.loop = true;
-
-        if (type === 'rain') {
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'bandpass';
-            filter.frequency.value = 950;
-            filter.Q.value = 0.7;
-            noiseSource.connect(filter);
-            filter.connect(audioMasterGain);
-        } else {
-            noiseSource.connect(audioMasterGain);
-        }
-
-        noiseSource.start();
-        audioActiveNodes.push(noiseSource);
-    }
-
-    isAudioPlaying = true;
-    document.getElementById('btn-audio-toggle').textContent = '⏸ Pausar';
-    document.getElementById('audio-visualizer')?.classList.add('audio-playing');
-}
-
-function stopNoiseGenerator() {
-    audioActiveNodes.forEach(node => {
-        try {
-            node.stop();
-            node.disconnect();
-        } catch (_) {}
-    });
-    audioActiveNodes = [];
-    if (audioMasterGain) {
-        try {
-            audioMasterGain.disconnect();
-        } catch (_) {}
-        audioMasterGain = null;
-    }
-    isAudioPlaying = false;
-    const btn = document.getElementById('btn-audio-toggle');
-    if (btn) btn.textContent = '▶ Audio';
-    document.getElementById('audio-visualizer')?.classList.remove('audio-playing');
-}
-
-function updateAudioVolume(val) {
-    document.getElementById('audio-vol-text').textContent = `${val}%`;
-    if (isAudioPlaying && audioMasterGain && audioCtx) {
-        audioMasterGain.gain.setTargetAtTime((Number(val) / 100) * 0.35, audioCtx.currentTime, 0.03);
+        audioGain = audioCtx.createGain();
+        audioGain.gain.value = (Number(document.getElementById('audio-volume')?.value) || 25) / 300;
+        noiseNode.connect(audioGain);
+        audioGain.connect(audioCtx.destination);
+        noiseNode.start();
+        isAudioPlaying = true;
+        if (btn) btn.textContent = '🔊 Ruido Activo';
+    } catch (_) {
+        showToast('No se pudo iniciar el audio en este navegador', 'error');
     }
 }
 
-function playBellChime() {
-    try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) return;
-        const ctx = audioCtx || new AudioContextClass();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.9);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.9);
-    } catch (_) {}
-}
-
-/* --------------------------------------------------------------------------
-   SCRATCHPAD MARKDOWN + HISTORIAL + STICKY NOTE
-   -------------------------------------------------------------------------- */
-function setNotesTab(tab) {
-    currentNotesTab = tab;
-    ['general', 'comandos', 'clases'].forEach(t => {
-        document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab);
-    });
-    const area = document.getElementById('scratchpad');
-    if (area) area.value = appState.notes[tab] || '';
-    updateScratchpadMetrics();
-    if (isNotesPreviewMode) renderScratchpadPreview();
-}
-
-function updateScratchpadMetrics() {
-    const text = document.getElementById('scratchpad')?.value || '';
-    const lines = text ? text.split('\n').length : 0;
-    const el = document.getElementById('scratchpad-metrics');
-    if (el) el.textContent = `${lines} líneas • ${text.length} caracteres`;
-}
-
-function toggleScratchpadPreview() {
-    isNotesPreviewMode = !isNotesPreviewMode;
-    const area = document.getElementById('scratchpad');
-    const preview = document.getElementById('scratchpad-preview');
-    const btn = document.getElementById('btn-notes-preview');
-
-    if (isNotesPreviewMode) {
-        renderScratchpadPreview();
-        area?.classList.add('is-hidden');
-        preview?.classList.remove('is-hidden');
-        btn?.classList.add('active');
-    } else {
-        area?.classList.remove('is-hidden');
-        preview?.classList.add('is-hidden');
-        btn?.classList.remove('active');
+function updateFocusAudioVolume(val) {
+    if (audioGain) {
+        audioGain.gain.value = (Number(val) || 25) / 300;
     }
 }
 
-function renderScratchpadPreview() {
-    const preview = document.getElementById('scratchpad-preview');
-    const raw = document.getElementById('scratchpad')?.value || '';
-    if (!preview) return;
-
-    const codeBlocks = [];
-    const withPlaceholders = raw.replace(/```([\s\S]*?)```/g, (_, code) => {
-        const idx = codeBlocks.length;
-        codeBlocks.push(`<pre><code>${escapeHtml(code.replace(/^\n+|\n+$/g, ''))}</code></pre>`);
-        return `\u0000CODEBLOCK_${idx}\u0000`;
+/* ==========================================================
+   BLOC DE NOTAS, STICKY, CODE STUDIO, SQL, ACADEMY, DEVLAB Y BOOT
+   ========================================================== */
+function switchNoteTab(tabKey) {
+    const tab = ALLOWED_NOTE_TABS.includes(tabKey) ? tabKey : 'general';
+    state.ui.noteTab = tab;
+    document.querySelectorAll('.note-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.notetab === tab);
     });
-
-    const lines = withPlaceholders.split('\n');
-    const htmlParts = [];
-    let inList = false;
-
-    for (const line of lines) {
-        if (line.includes('\u0000CODEBLOCK_')) {
-            if (inList) {
-                htmlParts.push('</ul>');
-                inList = false;
-            }
-            htmlParts.push(line);
-            continue;
-        }
-
-        const listMatch = /^\s*[-*]\s+(.+)$/.exec(line);
-        if (listMatch) {
-            if (!inList) {
-                htmlParts.push('<ul>');
-                inList = true;
-            }
-            htmlParts.push(`<li>${formatInlineMarkdown(listMatch[1])}</li>`);
-            continue;
-        }
-
-        if (inList) {
-            htmlParts.push('</ul>');
-            inList = false;
-        }
-
-        if (/^###\s+/.test(line)) {
-            htmlParts.push(`<h3>${formatInlineMarkdown(line.replace(/^###\s+/, ''))}</h3>`);
-        } else if (/^##\s+/.test(line)) {
-            htmlParts.push(`<h2>${formatInlineMarkdown(line.replace(/^##\s+/, ''))}</h2>`);
-        } else if (/^#\s+/.test(line)) {
-            htmlParts.push(`<h1>${formatInlineMarkdown(line.replace(/^#\s+/, ''))}</h1>`);
-        } else if (/^>\s+/.test(line)) {
-            htmlParts.push(`<blockquote>${formatInlineMarkdown(line.replace(/^>\s+/, ''))}</blockquote>`);
-        } else if (line.trim() === '') {
-            htmlParts.push('<br>');
-        } else {
-            htmlParts.push(`<div>${formatInlineMarkdown(line)}</div>`);
-        }
-    }
-
-    if (inList) htmlParts.push('</ul>');
-
-    let finalHtml = htmlParts.join('');
-    codeBlocks.forEach((block, idx) => {
-        finalHtml = finalHtml.replace(`\u0000CODEBLOCK_${idx}\u0000`, block);
-    });
-
-    preview.innerHTML = finalHtml;
+    const area = document.getElementById('notes-area');
+    if (area) area.value = state.notes[tab] || '';
+    updateNoteWordCount();
+    saveState(false);
 }
 
-function formatInlineMarkdown(text) {
-    let escaped = escapeHtml(text);
-    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    escaped = escaped.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-        const safeUrl = normalizeExternalUrl(url);
-        return safeUrl
-            ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-            : label;
-    });
-    return escaped;
-}
-
-function wrapScratchpadSelection(prefix, suffix) {
-    const area = document.getElementById('scratchpad');
+function handleNoteInput() {
+    const tab = state.ui.noteTab || 'general';
+    const area = document.getElementById('notes-area');
     if (!area) return;
-    const start = area.selectionStart;
-    const end = area.selectionEnd;
-    const selected = area.value.slice(start, end) || 'texto';
-    const replacement = `${prefix}${selected}${suffix}`;
-    area.setRangeText(replacement, start, end, 'select');
-    appState.notes[currentNotesTab] = area.value;
-    updateScratchpadMetrics();
-    saveState();
-    area.focus();
+    state.notes[tab] = area.value;
+    updateNoteWordCount();
+    saveState(false);
 }
 
-function toggleScratchpadFind() {
-    toggleForm('scratchpad-find-bar');
+function updateNoteWordCount() {
+    const area = document.getElementById('notes-area');
+    const counter = document.getElementById('notes-word-count');
+    if (!area || !counter) return;
+    const text = area.value.trim();
+    const words = text ? text.split(/\s+/).length : 0;
+    counter.textContent = `${words} palabras · ${area.value.length} car.`;
 }
 
-function replaceInScratchpad(replaceAll) {
-    const findVal = document.getElementById('sp-find-text')?.value;
-    const repVal = document.getElementById('sp-replace-text')?.value ?? '';
-    const area = document.getElementById('scratchpad');
-    if (!findVal || !area) return;
-
-    area.value = replaceAll
-        ? area.value.split(findVal).join(repVal)
-        : area.value.replace(findVal, repVal);
-
-    appState.notes[currentNotesTab] = area.value;
-    updateScratchpadMetrics();
-    saveState();
-    showToast('Reemplazo aplicado', 'success');
-}
-
-function insertNoteTemplate(tpl) {
-    const templates = {
-        clase: `\n## Clase - ${getMadridDateKey()}\n- **Concepto clave:** \n- **Dudas:** \n`,
-        comando: `\n### Comando\n\`\`\`bash\n# Descripción\ncomando --opcion\n\`\`\`\n`,
-        practica: `\n## Análisis de Práctica\n- **Objetivo:** \n- **Requisitos:** \n- **Edge cases:** \n`,
-        readme: `# Nombre del Proyecto\n\n## Instalación\n\`\`\`bash\ngit clone ...\n\`\`\`\n`
-    };
-    if (!templates[tpl]) return;
-    const area = document.getElementById('scratchpad');
-    area.value += templates[tpl];
-    appState.notes[currentNotesTab] = area.value;
-    updateScratchpadMetrics();
-    saveState();
-}
-
-function insertNoteTimestamp() {
-    const area = document.getElementById('scratchpad');
-    const time = document.getElementById('time')?.textContent || '';
-    area.value += `\n[${getMadridDateKey()} ${time}] `;
-    appState.notes[currentNotesTab] = area.value;
-    saveState();
-}
-
-function insertNoteCodeBlock() {
-    const area = document.getElementById('scratchpad');
-    area.value += `\n\`\`\`js\n\n\`\`\`\n`;
-    appState.notes[currentNotesTab] = area.value;
-    saveState();
+function saveNoteRevision() {
+    const tab = state.ui.noteTab || 'general';
+    const content = state.notes[tab] || '';
+    if (!content.trim()) return;
+    state.noteRevisions.unshift({
+        id: generateId('rev'),
+        tab,
+        content,
+        createdAt: getEffectiveNowMs()
+    });
+    state.noteRevisions = state.noteRevisions.slice(0, MAX_NOTE_REVISIONS);
+    saveState(false);
+    showToast('Versión de nota guardada', 'success');
 }
 
 function openNoteHistoryModal() {
+    const list = document.getElementById('note-history-list');
+    if (list) {
+        list.innerHTML = '';
+        if (!state.noteRevisions.length) {
+            list.innerHTML = '<div class="mono-muted">No hay versiones guardadas.</div>';
+        } else {
+            state.noteRevisions.forEach(rev => {
+                const row = document.createElement('div');
+                row.className = 'grade-item-row';
+                const info = document.createElement('span');
+                info.textContent = `[${rev.tab}] ${new Date(rev.createdAt).toLocaleString('es-ES')} · ${rev.content.slice(0, 45)}...`;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn-cyan btn-sm';
+                btn.textContent = 'Restaurar';
+                btn.addEventListener('click', () => {
+                    switchNoteTab(rev.tab);
+                    state.notes[rev.tab] = rev.content;
+                    const area = document.getElementById('notes-area');
+                    if (area) area.value = rev.content;
+                    saveState(false);
+                    closeNoteHistoryModal();
+                    showToast('Nota restaurada', 'success');
+                });
+                row.append(info, btn);
+                list.appendChild(row);
+            });
+        }
+    }
     document.getElementById('note-history-modal').style.display = 'flex';
-    renderNoteHistoryList();
 }
 
 function closeNoteHistoryModal() {
     document.getElementById('note-history-modal').style.display = 'none';
 }
 
-function saveNoteRevisionManual() {
-    appState.noteRevisions = appState.noteRevisions || { general: [], comandos: [], clases: [] };
-    const list = appState.noteRevisions[currentNotesTab] || [];
-    const content = appState.notes[currentNotesTab] || '';
-    list.unshift({
-        id: generateId('rev'),
-        date: new Date().toLocaleString('es-ES'),
-        content
-    });
-    appState.noteRevisions[currentNotesTab] = list.slice(0, 15);
-    saveState();
-    renderNoteHistoryList();
-    showToast(`Versión guardada en pestaña "${currentNotesTab}"`, 'success');
-}
-
-function restoreNoteRevision(revId) {
-    const list = appState.noteRevisions?.[currentNotesTab] || [];
-    const rev = list.find(r => r.id === revId);
-    if (!rev) return;
-    appState.notes[currentNotesTab] = rev.content;
-    const area = document.getElementById('scratchpad');
-    if (area) area.value = rev.content;
-    updateScratchpadMetrics();
-    if (isNotesPreviewMode) renderScratchpadPreview();
-    saveState();
-    closeNoteHistoryModal();
-    showToast('Versión restaurada', 'success');
-}
-
-function renderNoteHistoryList() {
-    const container = document.getElementById('note-history-list');
-    if (!container) return;
-    const list = appState.noteRevisions?.[currentNotesTab] || [];
-    if (!list.length) {
-        container.innerHTML = `<div class="mono-muted">No hay versiones guardadas aún para "${escapeHtml(currentNotesTab)}".</div>`;
-        return;
+function toggleNoteMarkdownPreview() {
+    const area = document.getElementById('notes-area');
+    const prev = document.getElementById('notes-md-preview');
+    if (!area || !prev) return;
+    const showing = !prev.classList.contains('is-hidden');
+    if (showing) {
+        prev.classList.add('is-hidden');
+        area.classList.remove('is-hidden');
+    } else {
+        prev.innerHTML = escapeHtml(area.value).replace(/\n/g, '<br>');
+        area.classList.add('is-hidden');
+        prev.classList.remove('is-hidden');
     }
-    container.innerHTML = list.map(r => `
-        <div class="deadline-card-item">
-            <div class="deadline-card-top">
-                <span><strong>${escapeHtml(r.date)}</strong> · ${r.content.length} chars</span>
-                <button type="button" class="btn-cyan btn-sm" onclick="restoreNoteRevision('${r.id}')">Restaurar</button>
-            </div>
-            <div class="mono-muted">${escapeHtml(r.content.slice(0, 110))}...</div>
-        </div>
-    `).join('');
 }
 
-function toolCopy() {
-    copyElementValue('scratchpad');
-}
-
-function toolDownload() {
-    const text = document.getElementById('scratchpad')?.value || '';
-    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+function exportCurrentNoteMd() {
+    const tab = state.ui.noteTab || 'general';
+    const blob = new Blob([state.notes[tab] || ''], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `devworkspace-${currentNotesTab}-${getMadridDateKey()}.md`;
+    a.download = `nota-${tab}.md`;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    URL.revokeObjectURL(url);
 }
 
-function copyStickyNote() {
-    copyElementValue('sticky-note-input');
+function toggleStickyNote() {
+    const drawer = document.getElementById('sticky-drawer');
+    if (!drawer) return;
+    drawer.classList.toggle('is-hidden');
+    const area = document.getElementById('sticky-note-area');
+    if (area) area.value = state.stickyNote || '';
 }
 
-function clearStickyNote() {
-    appState.stickyNote = '';
-    const el = document.getElementById('sticky-note-input');
-    if (el) el.value = '';
-    saveState();
+function saveStickyNote() {
+    const area = document.getElementById('sticky-note-area');
+    if (!area) return;
+    state.stickyNote = area.value;
+    saveState(false);
 }
 
-/* --------------------------------------------------------------------------
-   WORKSPACE 2: LIVE CODE STUDIO (HTML / CSS / JS EN VIVO)
-   -------------------------------------------------------------------------- */
-function switchStudioEditorTab(tab) {
-    currentStudioEditorTab = tab;
-    ['html', 'css', 'js', 'saved'].forEach(t => {
-        document.getElementById(`ed-tab-${t}`)?.classList.toggle('active', t === tab);
-        document.getElementById(`ed-pane-${t}`)?.classList.toggle('active', t === tab);
+function toggleForm(formId) {
+    const el = document.getElementById(formId);
+    if (el) el.classList.toggle('is-hidden');
+}
+
+function switchStudioTab(tabKey) {
+    const tab = ALLOWED_STUDIO_TABS.includes(tabKey) ? tabKey : 'html';
+    state.ui.studioActiveTab = tab;
+
+    document.querySelectorAll('.studio-file-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sttab === tab);
     });
-    if (tab === 'saved') renderStudioSavedProjects();
+
+    ['html', 'css', 'js', 'python', 'java'].forEach(lang => {
+        const ed = document.getElementById(`studio-editor-${lang}`);
+        if (ed) ed.classList.toggle('active', tab === lang);
+    });
+
+    const savedPanel = document.getElementById('studio-saved-panel');
+    if (savedPanel) savedPanel.classList.toggle('is-hidden', tab !== 'saved');
+
     updateStudioEditorMetrics();
+    updateStudioOutputModeLabel();
+    if (tab !== 'saved') renderStudioPreview();
+    saveState(false);
+}
+
+function handleStudioEditorInput(lang) {
+    const ed = document.getElementById(`studio-editor-${lang}`);
+    if (!ed) return;
+    state.studio[lang] = ed.value;
+    updateStudioEditorMetrics();
+    saveState(false);
+    if (document.getElementById('studio-live-toggle')?.checked) {
+        renderStudioPreview();
+    }
+}
+
+function handleStudioTitleChange() {
+    const inp = document.getElementById('studio-project-title');
+    if (!inp) return;
+    state.studio.projectTitle = inp.value;
+    saveState(false);
 }
 
 function updateStudioEditorMetrics() {
-    const el = document.getElementById('studio-editor-metrics');
-    if (!el) return;
-    if (currentStudioEditorTab === 'saved') {
-        el.textContent = `${appState.studioProjects.length} proyectos`;
+    const tab = state.ui.studioActiveTab || 'html';
+    const metricsEl = document.getElementById('studio-editor-metrics');
+    if (!metricsEl) return;
+    if (tab === 'saved') {
+        metricsEl.textContent = `${state.studio.savedProjects.length} proyectos`;
         return;
     }
-    const text = document.getElementById(`code-${currentStudioEditorTab}`)?.value || '';
+    const text = state.studio[tab] || '';
     const lines = text ? text.split('\n').length : 0;
-    el.textContent = `${lines} líneas · ${text.length} chars`;
+    metricsEl.textContent = `${lines} líneas · ${text.length} car.`;
 }
 
-function formatStudioCode() {
-    if (currentStudioEditorTab === 'saved') return;
-    const area = document.getElementById(`code-${currentStudioEditorTab}`);
-    if (!area) return;
-    const lines = area.value.split('\n');
-    let indent = 0;
-    const formatted = lines.map(rawLine => {
-        const line = rawLine.trim();
-        if (!line) return '';
-        if (/^(\}|<\/|\]|\))/.test(line)) {
-            indent = Math.max(0, indent - 1);
-        }
-        const out = '  '.repeat(indent) + line;
-        if (/(\{|\[|\()\s*$/.test(line) || (/^<[a-zA-Z][^/]*>$/.test(line) && !/^<(meta|link|img|br|hr|input)\b/i.test(line))) {
-            indent++;
-        }
-        return out;
-    }).join('\n');
-
-    area.value = formatted;
-    syncStudioStateFromInputs();
-    updateStudioEditorMetrics();
-    if (document.getElementById('studio-autorun')?.checked) runStudioPreview();
-    showToast('Código formateado', 'success');
+function updateStudioOutputModeLabel() {
+    const lbl = document.getElementById('studio-output-mode-label');
+    if (!lbl) return;
+    const tab = state.ui.studioActiveTab || 'html';
+    if (tab === 'python') lbl.textContent = 'Salida Python 3 (Ejecución Real)';
+    else if (tab === 'java') lbl.textContent = 'Salida Java 17 (Compilación y Ejecución Real)';
+    else lbl.textContent = 'Vista Previa Web en Vivo';
 }
 
-function buildStudioSrcdoc(forExport = false) {
-    const title = appState.studioCurrent.title || 'Proyecto DevWorkspace';
-    const html = appState.studioCurrent.html || '';
-    const css = appState.studioCurrent.css || '';
-    const js = appState.studioCurrent.js || '';
-    const studioFont = appState.appearance.studioFont || '';
-
-    const fontTag = studioFont
-        ? `<link rel="stylesheet" href="${buildGoogleFontUrl(studioFont)}">\n<style>body { font-family: '${escapeHtml(studioFont)}', sans-serif; }</style>`
-        : '';
-
-    const consoleBridge = forExport ? '' : `
-<script>
-(function(){
-  const send = (level, args) => {
-    try {
-      parent.postMessage({
-        source: 'devworkspace-studio',
-        level,
-        msg: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
-      }, '*');
-    } catch(e) {}
-  };
-  ['log','warn','error'].forEach(fn => {
-    const orig = console[fn];
-    console[fn] = function(...args) {
-      send(fn, args);
-      orig.apply(console, args);
-    };
-  });
-  window.onerror = function(msg, src, line) {
-    send('error', [msg + ' (línea ' + line + ')']);
-  };
-})();
-</script>`;
-
-    return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(title)}</title>
-${fontTag}
-<style>
-${css}
-</style>
-</head>
-<body>
-${html}
-${consoleBridge}
-<script>
-${js}
-<\/script>
-</body>
-</html>`;
-}
-
-function runStudioPreview() {
-    syncStudioStateFromInputs();
-    const iframe = document.getElementById('studio-preview-iframe');
-    if (!iframe) return;
-    studioConsoleLogs = [];
-    renderStudioConsole();
-    iframe.srcdoc = buildStudioSrcdoc(false);
-}
-
-function syncStudioStateFromInputs() {
-    appState.studioCurrent.title = document.getElementById('studio-project-title')?.value || 'Mi Proyecto Web';
-    appState.studioCurrent.html = document.getElementById('code-html')?.value || '';
-    appState.studioCurrent.css = document.getElementById('code-css')?.value || '';
-    appState.studioCurrent.js = document.getElementById('code-js')?.value || '';
-}
-
-function setStudioViewport(widthVal) {
-    const iframe = document.getElementById('studio-preview-iframe');
-    if (iframe) iframe.style.width = widthVal;
-
-    document.getElementById('vp-desktop')?.classList.toggle('active', widthVal === '100%');
-    document.getElementById('vp-tablet')?.classList.toggle('active', widthVal === '768px');
-    document.getElementById('vp-mobile')?.classList.toggle('active', widthVal === '375px');
-}
-
-function toggleStudioFullscreen() {
-    document.getElementById('studio-workbench')?.classList.toggle('studio-fullscreen');
+function setStudioViewport(widthStr) {
+    state.ui.studioViewport = ALLOWED_VIEWPORTS.includes(widthStr) ? widthStr : '100%';
+    document.querySelectorAll('.vp-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.vp === state.ui.studioViewport);
+    });
+    const frame = document.getElementById('studio-preview-frame');
+    if (frame) frame.style.width = state.ui.studioViewport;
+    saveState(false);
 }
 
 function clearStudioConsole() {
     studioConsoleLogs = [];
-    renderStudioConsole();
+    const box = document.getElementById('studio-console-output');
+    if (box) box.innerHTML = '';
 }
 
-function renderStudioConsole() {
-    const out = document.getElementById('studio-console-output');
-    const count = document.getElementById('studio-console-count');
-    const filter = document.getElementById('studio-console-filter')?.value || 'all';
-
-    const filtered = filter === 'all'
-        ? studioConsoleLogs
-        : studioConsoleLogs.filter(item => item.level === filter);
-
-    if (count) count.textContent = `${filtered.length} logs`;
-    if (!out) return;
-    out.innerHTML = filtered.map(item => `
-        <div class="console-line-${item.level}">[${item.time}] [${item.level.toUpperCase()}] ${escapeHtml(item.msg)}</div>
-    `).join('');
-    out.scrollTop = out.scrollHeight;
+function appendStudioConsoleLine(level, msg) {
+    const box = document.getElementById('studio-console-output');
+    if (!box) return;
+    const line = document.createElement('div');
+    line.className = `console-line ${level === 'error' ? 'console-err' : level === 'warn' ? 'console-warn' : ''}`;
+    line.textContent = `[${level.toUpperCase()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
 }
 
-function loadStudioTemplate(tpl) {
-    const templates = {
-        blank: {
-            title: 'HTML5 Base',
-            html: '<main class="container">\n  <h1>Nuevo Proyecto HTML5</h1>\n  <p>Empieza a construir aquí.</p>\n</main>',
-            css: 'body { font-family: system-ui, sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc; }',
-            js: 'console.log("Plantilla cargada");'
-        },
-        cybercard: {
-            title: 'Tarjeta Cyberpunk Neon',
-            html: '<div class="cyber-card">\n  <h2>SYSTEM ONLINE</h2>\n  <p>Interfaz HUD lista para producción.</p>\n</div>',
-            css: 'body { background:#05070e; color:#e2e8f0; display:grid; place-items:center; min-height:100vh; font-family:monospace; }\n.cyber-card { border:1px solid #38bdf8; padding:24px; border-radius:10px; box-shadow:0 0 24px rgba(56,189,248,.3); }',
-            js: ''
-        },
-        flexgrid: {
-            title: 'Flexbox & Grid Demo',
-            html: '<section class="grid">\n  <div class="box">01</div>\n  <div class="box">02</div>\n  <div class="box">03</div>\n</section>',
-            css: 'body { background:#0b1120; color:#fff; font-family:sans-serif; padding:20px; }\n.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px,1fr)); gap:12px; }\n.box { background:#1e293b; border:1px solid #38bdf8; padding:30px; text-align:center; border-radius:8px; font-weight:bold; }',
-            js: ''
-        },
-        domlab: {
-            title: 'Laboratorio DOM JS',
-            html: '<input id="item-in" placeholder="Escribe algo...">\n<button id="add-btn">Añadir</button>\n<ul id="list"></ul>',
-            css: 'body { font-family:sans-serif; background:#090d16; color:#f1f5f9; padding:20px; }\ninput, button { padding:8px; margin-right:6px; }',
-            js: 'document.getElementById("add-btn").onclick = () => {\n  const val = document.getElementById("item-in").value;\n  if(!val) return;\n  const li = document.createElement("li");\n  li.textContent = val;\n  document.getElementById("list").appendChild(li);\n  console.log("Añadido:", val);\n};'
-        }
-    };
-    const chosen = templates[tpl];
-    if (!chosen) return;
-    document.getElementById('studio-project-title').value = chosen.title;
-    document.getElementById('code-html').value = chosen.html;
-    document.getElementById('code-css').value = chosen.css;
-    document.getElementById('code-js').value = chosen.js;
-    syncStudioStateFromInputs();
-    saveState();
-    runStudioPreview();
-    updateStudioEditorMetrics();
-}
+function renderStudioPreview() {
+    const tab = state.ui.studioActiveTab || 'html';
+    const frame = document.getElementById('studio-preview-frame');
+    const runnerOut = document.getElementById('studio-runner-output');
+    if (!frame || !runnerOut) return;
 
-function injectStudioCdn(cdn) {
-    const snippets = {
-        tailwind: '<script src="https://cdn.tailwindcss.com"><\/script>\n',
-        bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">\n',
-        alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>\n',
-        chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>\n'
-    };
-    if (!snippets[cdn]) return;
-    const htmlArea = document.getElementById('code-html');
-    htmlArea.value = snippets[cdn] + htmlArea.value;
-    syncStudioStateFromInputs();
-    saveState();
-    runStudioPreview();
-    showToast(`CDN ${cdn} inyectado en HTML`, 'success');
-}
-
-function inspectStudioDomStructure() {
-    const html = document.getElementById('code-html')?.value || '';
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const ids = [...doc.querySelectorAll('[id]')].map(el => `#${el.id}`);
-    const classes = [...new Set([...doc.querySelectorAll('[class]')].flatMap(el => [...el.classList]).map(c => `.${c}`))];
-    showToast(`IDs: ${ids.join(', ') || 'ninguno'} | Clases: ${classes.slice(0, 8).join(', ') || 'ninguna'}`, 'info');
-}
-
-function saveStudioProject() {
-    syncStudioStateFromInputs();
-    const proj = {
-        id: generateId('stp'),
-        title: appState.studioCurrent.title,
-        html: appState.studioCurrent.html,
-        css: appState.studioCurrent.css,
-        js: appState.studioCurrent.js,
-        updatedAt: new Date().toLocaleString('es-ES')
-    };
-    appState.studioProjects.unshift(proj);
-    saveState();
-    renderStudioSavedProjects();
-    showToast(`Proyecto "${proj.title}" guardado`, 'success');
-}
-
-function loadSavedStudioProject(id) {
-    const proj = appState.studioProjects.find(p => p.id === id);
-    if (!proj) return;
-    document.getElementById('studio-project-title').value = proj.title;
-    document.getElementById('code-html').value = proj.html;
-    document.getElementById('code-css').value = proj.css;
-    document.getElementById('code-js').value = proj.js;
-    syncStudioStateFromInputs();
-    saveState();
-    switchStudioEditorTab('html');
-    runStudioPreview();
-    showToast(`Proyecto "${proj.title}" cargado`, 'success');
-}
-
-function deleteSavedStudioProject(id) {
-    const index = appState.studioProjects.findIndex(p => p.id === id);
-    if (index === -1) return;
-    const [removed] = appState.studioProjects.splice(index, 1);
-    saveState();
-    renderStudioSavedProjects();
-    registerUndo(`Proyecto "${removed.title}" eliminado`, () => {
-        appState.studioProjects.splice(index, 0, removed);
-    });
-}
-
-function renderStudioSavedProjects() {
-    const container = document.getElementById('studio-saved-projects-list');
-    if (!container) return;
-    if (!appState.studioProjects.length) {
-        container.innerHTML = `<div class="mono-muted">No tienes proyectos guardados todavía. Pulsa "Guardar" en la barra superior.</div>`;
+    if (tab === 'python' || tab === 'java') {
+        frame.classList.add('is-hidden');
+        runnerOut.classList.remove('is-hidden');
         return;
     }
-    container.innerHTML = appState.studioProjects.map(p => `
-        <div class="deadline-card-item">
-            <div class="deadline-card-top">
-                <div>
-                    <strong>${escapeHtml(p.title)}</strong>
-                    <div class="mono-muted">Guardado: ${escapeHtml(p.updatedAt)}</div>
-                </div>
-                <div class="filter-pills-row">
-                    <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject('${p.id}')">Abrir</button>
-                    <button type="button" class="btn-icon" onclick="deleteSavedStudioProject('${p.id}')">🗑️</button>
-                </div>
-            </div>
-        </div>
-    `).join('');
+
+    runnerOut.classList.add('is-hidden');
+    frame.classList.remove('is-hidden');
+
+    const fontName = state.ui.studioFont || '';
+    const fontHead = fontName
+        ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName).replace(/%20/g, '+')}:wght@400;600;700&display=swap"><style>body{font-family:'${fontName}',sans-serif;}</style>`
+        : '';
+
+    const bridgeScript = `<script>
+        ['log','warn','error'].forEach(fn => {
+            const orig = console[fn];
+            console[fn] = (...args) => {
+                orig.apply(console, args);
+                parent.postMessage({ source: 'dw-studio-console', level: fn, message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+            };
+        });
+        window.onerror = (msg, _, line) => parent.postMessage({ source: 'dw-studio-console', level: 'error', message: msg + ' (línea ' + line + ')' }, '*');
+    <\/script>`;
+
+    frame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">${fontHead}<style>${state.studio.css || ''}</style>${bridgeScript}</head><body>${state.studio.html || ''}<script>${state.studio.js || ''}<\/script></body></html>`;
+}
+
+async function runStudioCode() {
+    const tab = state.ui.studioActiveTab || 'html';
+    if (tab !== 'python' && tab !== 'java') {
+        renderStudioPreview();
+        showToast('Vista previa web actualizada');
+        return;
+    }
+
+    const runnerOut = document.getElementById('studio-runner-output');
+    const frame = document.getElementById('studio-preview-frame');
+    if (!runnerOut) return;
+    frame?.classList.add('is-hidden');
+    runnerOut.classList.remove('is-hidden');
+
+    const isPython = tab === 'python';
+    const language = isPython ? 'python' : 'java';
+    const version = isPython ? '3.10.0' : '15.0.2';
+    const fileName = isPython ? 'main.py' : 'Main.java';
+    const code = state.studio[tab] || '';
+
+    runnerOut.textContent = `⏳ Ejecutando ${isPython ? 'Python 3' : 'Java'} en entorno aislado...\n`;
+    appendStudioConsoleLine('log', `Enviando ${fileName} al motor de ejecución...`);
+
+    try {
+        const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                language,
+                version,
+                files: [{ name: fileName, content: code }]
+            })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const compileOut = data.compile?.output || '';
+        const runOut = data.run?.output || '';
+        const exitCode = data.run?.code ?? data.compile?.code ?? 0;
+
+        runnerOut.textContent = `${compileOut ? `[COMPILACIÓN]\n${compileOut}\n` : ''}${runOut || '(Sin salida por consola)'}\n\n--- Exit code: ${exitCode} ---`;
+        appendStudioConsoleLine(exitCode === 0 ? 'log' : 'error', `${fileName} finalizado con código ${exitCode}`);
+    } catch (err) {
+        runnerOut.textContent = `❌ No se pudo conectar con el servidor de ejecución remota (${err.message}).\nVerifica tu conexión a Internet para ejecutar Python/Java en vivo.`;
+        appendStudioConsoleLine('error', `Error de ejecución ${language}: ${err.message}`);
+    }
+}
+
+function loadStudioTemplate(tplKey) {
+    const tpl = STUDIO_TEMPLATES[tplKey];
+    if (!tpl) return;
+    if (tpl.python) {
+        state.studio.python = tpl.python;
+        const ed = document.getElementById('studio-editor-python');
+        if (ed) ed.value = tpl.python;
+        switchStudioTab('python');
+    } else if (tpl.java) {
+        state.studio.java = tpl.java;
+        const ed = document.getElementById('studio-editor-java');
+        if (ed) ed.value = tpl.java;
+        switchStudioTab('java');
+    } else {
+        state.studio.html = tpl.html || '';
+        state.studio.css = tpl.css || '';
+        state.studio.js = tpl.js || '';
+        if (document.getElementById('studio-editor-html')) document.getElementById('studio-editor-html').value = state.studio.html;
+        if (document.getElementById('studio-editor-css')) document.getElementById('studio-editor-css').value = state.studio.css;
+        if (document.getElementById('studio-editor-js')) document.getElementById('studio-editor-js').value = state.studio.js;
+        renderStudioPreview();
+    }
+    saveState(false);
+    showToast(`Plantilla "${tplKey}" cargada`, 'success');
+}
+
+function injectCdnIntoStudio(cdnKey) {
+    const snippet = CDN_SNIPPETS[cdnKey];
+    if (!snippet) return;
+    state.studio.html = `${snippet}\n${state.studio.html || ''}`;
+    const ed = document.getElementById('studio-editor-html');
+    if (ed) ed.value = state.studio.html;
+    renderStudioPreview();
+    saveState(false);
+    showToast(`CDN ${cdnKey} inyectado en HTML`, 'success');
+}
+
+function formatStudioCode() {
+    const tab = state.ui.studioActiveTab || 'html';
+    const ed = document.getElementById(`studio-editor-${tab}`);
+    if (!ed) return;
+    ed.value = ed.value
+        .split('\n')
+        .map(line => line.replace(/\s+$/, ''))
+        .join('\n')
+        .trim() + '\n';
+    state.studio[tab] = ed.value;
+    saveState(false);
+    showToast('Espacios limpiados');
+}
+
+function saveStudioProjectToLibrary() {
+    const title = (state.studio.projectTitle || 'Proyecto sin título').trim();
+    state.studio.savedProjects.unshift({
+        id: generateId('prj'),
+        title,
+        html: state.studio.html,
+        css: state.studio.css,
+        js: state.studio.js,
+        python: state.studio.python,
+        java: state.studio.java,
+        savedAt: getEffectiveNowMs()
+    });
+    state.studio.savedProjects = state.studio.savedProjects.slice(0, MAX_STUDIO_PROJECTS);
+    saveState(false);
+    renderSavedStudioProjects();
+    showToast(`Proyecto "${title}" guardado en biblioteca`, 'success');
+}
+
+function renderSavedStudioProjects() {
+    const list = document.getElementById('studio-saved-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const items = state.studio.savedProjects || [];
+    if (!items.length) {
+        list.innerHTML = '<div class="mono-muted">Aún no hay proyectos guardados en la biblioteca.</div>';
+        return;
+    }
+    items.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `${p.title} (${new Date(p.savedAt).toLocaleDateString('es-ES')})`;
+
+        const acts = document.createElement('div');
+        acts.className = 'filter-pills-row';
+        const loadBtn = document.createElement('button');
+        loadBtn.type = 'button';
+        loadBtn.className = 'btn-cyan btn-sm';
+        loadBtn.textContent = 'Abrir';
+        loadBtn.addEventListener('click', () => {
+            state.studio.projectTitle = p.title;
+            state.studio.html = p.html || '';
+            state.studio.css = p.css || '';
+            state.studio.js = p.js || '';
+            state.studio.python = p.python || STUDIO_TEMPLATES.python.python;
+            state.studio.java = p.java || STUDIO_TEMPLATES.java.java;
+            syncStudioEditorsFromState();
+            switchStudioTab('html');
+            showToast(`Proyecto "${p.title}" cargado`, 'success');
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-icon';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => {
+            state.studio.savedProjects = state.studio.savedProjects.filter(x => x.id !== p.id);
+            saveState(false);
+            renderSavedStudioProjects();
+        });
+
+        acts.append(loadBtn, delBtn);
+        row.append(info, acts);
+        list.appendChild(row);
+    });
 }
 
 function exportStudioSingleHtml() {
-    syncStudioStateFromInputs();
-    const fullHtml = buildStudioSrcdoc(true);
-    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escapeHtml(state.studio.projectTitle || 'Export')}</title><style>${state.studio.css || ''}</style></head><body>${state.studio.html || ''}<script>${state.studio.js || ''}<\/script></body></html>`;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const slug = (appState.studioCurrent.title || 'proyecto').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    a.download = `${slug}.html`;
+    a.download = `${(state.studio.projectTitle || 'proyecto').toLowerCase().replace(/\s+/g, '-')}.html`;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast('Archivo .html autocontenido descargado', 'success');
+    URL.revokeObjectURL(url);
 }
 
-function importStudioHtmlFile(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        const content = String(e.target?.result || '');
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(content, 'text/html');
-        const styles = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n');
-        const scripts = [...doc.querySelectorAll('script:not([src])')].map(s => s.textContent).join('\n');
-        doc.querySelectorAll('style, script:not([src])').forEach(el => el.remove());
-
-        document.getElementById('studio-project-title').value = file.name.replace(/\.html?$/i, '');
-        document.getElementById('code-html').value = doc.body.innerHTML.trim();
-        document.getElementById('code-css').value = styles.trim();
-        document.getElementById('code-js').value = scripts.trim();
-        syncStudioStateFromInputs();
-        saveState();
-        runStudioPreview();
-        updateStudioEditorMetrics();
-        showToast(`Archivo "${file.name}" importado`, 'success');
-        event.target.value = '';
-    };
-    reader.readAsText(file);
+function exportStudioMultiFiles() {
+    const tab = state.ui.studioActiveTab || 'html';
+    if (tab === 'python' || tab === 'java') {
+        const ext = tab === 'python' ? 'py' : 'java';
+        const fname = tab === 'python' ? 'main.py' : 'Main.java';
+        const blob = new Blob([state.studio[tab] || ''], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fname || `codigo.${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+    }
+    const bundle = `/* === index.html === */\n${state.studio.html}\n\n/* === styles.css === */\n${state.studio.css}\n\n/* === app.js === */\n${state.studio.js}`;
+    const blob = new Blob([bundle], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'proyecto-web-bundle.txt';
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
-/* --------------------------------------------------------------------------
-   ACADEMIA: KANBAN (CON DRAG & DROP), NOTAS PONDERADAS Y STUDY HUB
-   -------------------------------------------------------------------------- */
-function toggleExamCramFilter() {
-    examCramOnly = !examCramOnly;
-    document.getElementById('btn-exam-cram-mode')?.classList.toggle('active', examCramOnly);
-    renderKanban();
+function syncStudioEditorsFromState() {
+    if (document.getElementById('studio-project-title')) document.getElementById('studio-project-title').value = state.studio.projectTitle || '';
+    if (document.getElementById('studio-editor-html')) document.getElementById('studio-editor-html').value = state.studio.html || '';
+    if (document.getElementById('studio-editor-css')) document.getElementById('studio-editor-css').value = state.studio.css || '';
+    if (document.getElementById('studio-editor-js')) document.getElementById('studio-editor-js').value = state.studio.js || '';
+    if (document.getElementById('studio-editor-python')) document.getElementById('studio-editor-python').value = state.studio.python || '';
+    if (document.getElementById('studio-editor-java')) document.getElementById('studio-editor-java').value = state.studio.java || '';
 }
 
-function addKanbanTask() {
-    const title = document.getElementById('kanban-new-title')?.value.trim();
-    const subject = document.getElementById('kanban-new-subject')?.value.trim() || 'DAM';
-    const pomos = Number(document.getElementById('kanban-new-pomos')?.value || 2);
-    const priority = document.getElementById('kanban-new-prio')?.value || 'medium';
-
-    if (!title) return showToast('Escribe el nombre del tema', 'error');
-
-    appState.kanban.push({ id: generateId('kb'), title, subject, status: 'todo', priority, pomos });
-    document.getElementById('kanban-new-title').value = '';
-    saveState();
-    renderKanban();
-}
-
-function moveKanbanTask(id, nextStatus) {
-    const item = appState.kanban.find(k => k.id === id);
-    if (!item || item.status === nextStatus) return;
-    item.status = nextStatus;
-    saveState();
-    renderKanban();
-}
-
-function deleteKanbanTask(id) {
-    const index = appState.kanban.findIndex(k => k.id === id);
-    if (index === -1) return;
-    const [removed] = appState.kanban.splice(index, 1);
-    saveState();
-    renderKanban();
-    registerUndo(`Tema "${removed.title}" eliminado`, () => {
-        appState.kanban.splice(index, 0, removed);
-    });
-}
-
-function initKanbanDragAndDrop() {
-    document.querySelectorAll('.kanban-col[data-kanban-col]').forEach(col => {
-        col.addEventListener('dragover', e => {
-            e.preventDefault();
-            col.classList.add('kanban-drop-hover');
+/* ==========================================================
+   BASE DE DATOS LOCAL & SQL
+   ========================================================== */
+function renderDbWorkspace() {
+    const tables = state.database?.tables || {};
+    const names = Object.keys(tables);
+    const tabsBox = document.getElementById('db-tables-tabs');
+    if (tabsBox) {
+        tabsBox.innerHTML = '';
+        names.forEach(name => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `pill-btn ${state.ui.activeDbTable === name ? 'active' : ''}`;
+            btn.textContent = name;
+            btn.addEventListener('click', () => {
+                state.ui.activeDbTable = name;
+                saveState(false);
+                renderDbWorkspace();
+            });
+            tabsBox.appendChild(btn);
         });
-        col.addEventListener('dragleave', () => {
-            col.classList.remove('kanban-drop-hover');
-        });
-        col.addEventListener('drop', e => {
-            e.preventDefault();
-            col.classList.remove('kanban-drop-hover');
-            const targetStatus = col.dataset.kanbanCol;
-            const id = e.dataTransfer?.getData('text/plain') || draggedKanbanId;
-            if (id && targetStatus) {
-                moveKanbanTask(id, targetStatus);
-            }
-            draggedKanbanId = null;
-        });
-    });
-}
-
-function handleKanbanDragStart(event, id) {
-    draggedKanbanId = id;
-    event.currentTarget?.classList.add('dragging');
-    if (event.dataTransfer) {
-        event.dataTransfer.setData('text/plain', id);
-        event.dataTransfer.effectAllowed = 'move';
-    }
-}
-
-function handleKanbanDragEnd(event) {
-    event.currentTarget?.classList.remove('dragging');
-    document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('kanban-drop-hover'));
-}
-
-function renderKanban() {
-    const cols = { todo: [], doing: [], done: [] };
-    appState.kanban.forEach(item => {
-        if (examCramOnly && item.priority !== 'high') return;
-        if (cols[item.status]) cols[item.status].push(item);
-    });
-
-    ['todo', 'doing', 'done'].forEach(status => {
-        const listEl = document.getElementById(`kanban-list-${status}`);
-        const countEl = document.getElementById(`kanban-count-${status}`);
-        if (countEl) countEl.textContent = cols[status].length;
-        if (!listEl) return;
-
-        listEl.innerHTML = cols[status].map(k => `
-            <div class="kanban-card" draggable="true" ondragstart="handleKanbanDragStart(event, '${k.id}')" ondragend="handleKanbanDragEnd(event)">
-                <div class="kanban-card-header">
-                    <span class="kanban-subject-tag">${escapeHtml(k.subject)}</span>
-                    <span>${k.priority === 'high' ? '🔴' : k.priority === 'medium' ? '🟠' : '🔵'}</span>
-                </div>
-                <div>${escapeHtml(k.title)}</div>
-                <div class="kanban-card-footer">
-                    <span>🍅 ${k.pomos}</span>
-                    <div>
-                        ${status !== 'todo' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','todo')" title="Por estudiar">⬅️</button>` : ''}
-                        ${status !== 'doing' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','doing')" title="En curso">▶️</button>` : ''}
-                        ${status !== 'done' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','done')" title="Dominado">✅</button>` : ''}
-                        <button type="button" class="btn-icon" onclick="deleteKanbanTask('${k.id}')" title="Eliminar">🗑️</button>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-    });
-}
-
-/* Calculadora de Calificaciones */
-function addGradeSubject() {
-    const name = document.getElementById('new-grade-subj-name')?.value.trim();
-    const target = Number(document.getElementById('new-grade-subj-target')?.value || 5);
-    const credits = Number(document.getElementById('new-grade-subj-credits')?.value || 6);
-    if (!name) return showToast('Escribe el nombre de la asignatura', 'error');
-
-    appState.grades.push({ id: generateId('gr'), name, target, credits, items: [] });
-    document.getElementById('new-grade-subj-name').value = '';
-    saveState();
-    renderGrades();
-}
-
-function addGradeItem(subjId) {
-    const subj = appState.grades.find(g => g.id === subjId);
-    if (!subj) return;
-    const title = document.getElementById(`gi-title-${subjId}`)?.value.trim() || 'Prueba';
-    const score = Number(document.getElementById(`gi-score-${subjId}`)?.value);
-    const weight = Number(document.getElementById(`gi-weight-${subjId}`)?.value);
-
-    if (isNaN(score) || score < 0 || score > 10 || isNaN(weight) || weight <= 0) {
-        return showToast('Nota (0-10) y peso (%) válidos requeridos', 'error');
-    }
-    subj.items.push({ id: generateId('gi'), title, score, weight });
-    saveState();
-    renderGrades();
-}
-
-function deleteGradeItem(subjId, itemId) {
-    const subj = appState.grades.find(g => g.id === subjId);
-    if (!subj) return;
-    subj.items = subj.items.filter(it => it.id !== itemId);
-    saveState();
-    renderGrades();
-}
-
-function deleteGradeSubject(subjId) {
-    const index = appState.grades.findIndex(g => g.id === subjId);
-    if (index === -1) return;
-    const [removed] = appState.grades.splice(index, 1);
-    saveState();
-    renderGrades();
-    registerUndo(`Asignatura "${removed.name}" eliminada`, () => {
-        appState.grades.splice(index, 0, removed);
-    });
-}
-
-function renderGrades() {
-    const container = document.getElementById('grades-subjects-container');
-    if (!container) return;
-
-    let weightedCourseSum = 0;
-    let totalCredits = 0;
-
-    container.innerHTML = appState.grades.map(subj => {
-        const totalWeight = subj.items.reduce((acc, it) => acc + it.weight, 0);
-        const earnedPoints = subj.items.reduce((acc, it) => acc + (it.score * (it.weight / 100)), 0);
-        const currentAvg = totalWeight > 0 ? (earnedPoints / (totalWeight / 100)) : 0;
-
-        if (totalWeight > 0) {
-            weightedCourseSum += currentAvg * subj.credits;
-            totalCredits += subj.credits;
-        }
-
-        const remainingWeight = Math.max(0, 100 - totalWeight);
-        let simulatorText = `100% evaluado · Nota final: ${earnedPoints.toFixed(2)}`;
-        if (remainingWeight > 0) {
-            const needed = ((subj.target - earnedPoints) / (remainingWeight / 100));
-            simulatorText = needed <= 0
-                ? `🎉 Objetivo (${subj.target}) ya asegurado con el ${totalWeight}% evaluado`
-                : `🎯 Necesitas un ${needed.toFixed(2)} en el ${remainingWeight}% restante para llegar a ${subj.target}`;
-        }
-
-        return `
-            <div class="grade-subject-card">
-                <div class="grade-subj-header">
-                    <span><strong>${escapeHtml(subj.name)}</strong> (${subj.credits}h · Obj: ${subj.target})</span>
-                    <div class="filter-pills-row">
-                        <span class="grade-subj-score ${currentAvg >= subj.target ? 'score-pass' : 'score-fail'}">${currentAvg.toFixed(2)}</span>
-                        <button type="button" class="btn-icon" onclick="deleteGradeSubject('${subj.id}')">🗑️</button>
-                    </div>
-                </div>
-                <div class="grade-progress-bar-bg"><div class="grade-progress-bar-fill" style="width:${Math.min(100, totalWeight)}%"></div></div>
-                <div class="grade-needed-banner">${simulatorText}</div>
-                <div class="grade-items-list">
-                    ${subj.items.map(it => `
-                        <div class="grade-item-row">
-                            <span>${escapeHtml(it.title)}: <strong>${it.score}</strong> (${it.weight}%)</span>
-                            <button type="button" class="btn-icon" onclick="deleteGradeItem('${subj.id}', '${it.id}')" title="Eliminar prueba">✕</button>
-                        </div>
-                    `).join('')}
-                </div>
-                <div class="form-inline-row">
-                    <input type="text" id="gi-title-${subj.id}" placeholder="Examen / Práctica">
-                    <input type="number" id="gi-score-${subj.id}" placeholder="Nota" step="0.1" min="0" max="10" class="w-75">
-                    <input type="number" id="gi-weight-${subj.id}" placeholder="%" min="1" max="100" class="w-65">
-                    <button type="button" class="btn-green btn-sm" onclick="addGradeItem('${subj.id}')">+</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    const badge = document.getElementById('global-course-avg-badge');
-    if (badge) {
-        badge.textContent = totalCredits > 0 ? `Media: ${(weightedCourseSum / totalCredits).toFixed(2)}` : 'Media: --';
-    }
-}
-
-/* Study Hub: Flashcards, Bug Log y Dudas */
-function setStudyHubTab(tab) {
-    ['flashcards', 'bugs', 'doubts'].forEach(t => {
-        document.getElementById(`hub-tab-${t}`)?.classList.toggle('active', t === tab);
-        document.getElementById(`hub-view-${t}`)?.classList.toggle('is-hidden', t !== tab);
-    });
-}
-
-function addFlashcard() {
-    const subject = document.getElementById('fc-new-subj')?.value.trim() || 'General';
-    const question = document.getElementById('fc-new-q')?.value.trim();
-    const answer = document.getElementById('fc-new-a')?.value.trim();
-    if (!question || !answer) return showToast('Completa pregunta y respuesta', 'error');
-
-    appState.flashcards.push({ id: generateId('fc'), subject, question, answer, mastered: false });
-    document.getElementById('fc-new-q').value = '';
-    document.getElementById('fc-new-a').value = '';
-    saveState();
-    renderFlashcards();
-}
-
-function getFilteredFlashcards() {
-    const subjFilter = document.getElementById('fc-filter-subject')?.value || 'all';
-    const unmasteredOnly = Boolean(document.getElementById('fc-unmastered-only')?.checked);
-    return appState.flashcards.filter(c => {
-        if (subjFilter !== 'all' && c.subject !== subjFilter) return false;
-        if (unmasteredOnly && c.mastered) return false;
-        return true;
-    });
-}
-
-function renderFlashcards() {
-    const select = document.getElementById('fc-filter-subject');
-    if (select) {
-        const current = select.value;
-        const subjects = [...new Set(appState.flashcards.map(f => f.subject))];
-        select.innerHTML = `<option value="all">Todas las asignaturas</option>` +
-            subjects.map(s => `<option value="${escapeHtml(s)}" ${s === current ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
     }
 
-    const deck = getFilteredFlashcards();
-    const statsEl = document.getElementById('fc-deck-stats');
-    const stage = document.getElementById('flashcard-stage');
-    if (!stage) return;
+    const active = tables[state.ui.activeDbTable] ? state.ui.activeDbTable : names[0];
+    state.ui.activeDbTable = active || '';
+    const titleEl = document.getElementById('db-active-table-title');
+    if (titleEl) titleEl.textContent = active ? `Tabla: ${active}` : 'Sin tabla seleccionada';
 
-    if (!deck.length) {
-        if (statsEl) statsEl.textContent = '0/0';
-        stage.innerHTML = `<div class="mono-muted">No hay tarjetas en este filtro.</div>`;
+    const grid = document.getElementById('db-table-grid-container');
+    if (!grid) return;
+    if (!active || !tables[active]) {
+        grid.innerHTML = '<div class="mono-muted">Crea una tabla para empezar.</div>';
         return;
     }
 
-    currentFlashcardIndex = currentFlashcardIndex % deck.length;
-    const card = deck[currentFlashcardIndex];
-    const masteredCount = deck.filter(c => c.mastered).length;
-    if (statsEl) statsEl.textContent = `${currentFlashcardIndex + 1}/${deck.length} (✅ ${masteredCount})`;
+    const tbl = tables[active];
+    const ths = tbl.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+    const trs = (tbl.rows || []).map((r, rIdx) => {
+        const tds = tbl.columns.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('');
+        return `<tr>${tds}<td><button type="button" class="btn-icon" data-db-del="${rIdx}">🗑️</button></td></tr>`;
+    }).join('');
 
-    stage.innerHTML = currentFlashcardFlipped
-        ? `<div class="fc-hint">[${escapeHtml(card.subject)}] Respuesta:</div><div class="fc-answer-text">${escapeHtml(card.answer)}</div>`
-        : `<div class="fc-hint">[${escapeHtml(card.subject)}] ${card.mastered ? '✅ Dominada' : '🔄 Pendiente'} · Clic para voltear</div><div class="fc-question-text">${escapeHtml(card.question)}</div>`;
+    grid.innerHTML = `<table class="sch-table"><thead><tr>${ths}<th>Acción</th></tr></thead><tbody>${trs || `<tr><td colspan="${tbl.columns.length + 1}" class="mono-muted">Tabla vacía</td></tr>`}</tbody></table>`;
+    grid.querySelectorAll('[data-db-del]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = Number(btn.dataset.dbDel);
+            tbl.rows.splice(idx, 1);
+            saveState(false);
+            renderDbWorkspace();
+        });
+    });
 }
 
-function flipCurrentFlashcard() {
-    currentFlashcardFlipped = !currentFlashcardFlipped;
+function createDbTable() {
+    const name = (document.getElementById('db-new-table-name')?.value || '').trim().replace(/\s+/g, '_');
+    const colsRaw = (document.getElementById('db-new-table-cols')?.value || '').trim();
+    if (!name || !colsRaw) {
+        showToast('Indica nombre de tabla y columnas', 'error');
+        return;
+    }
+    const columns = colsRaw.split(',').map(c => c.trim()).filter(Boolean);
+    if (!columns.length) return;
+    state.database.tables[name] = { columns, rows: [] };
+    state.ui.activeDbTable = name;
+    document.getElementById('db-new-table-name').value = '';
+    document.getElementById('db-new-table-cols').value = '';
+    saveState(false);
+    renderDbWorkspace();
+    showToast(`Tabla "${name}" creada`, 'success');
+}
+
+function addDbRowPrompt() {
+    const active = state.ui.activeDbTable;
+    const tbl = state.database?.tables?.[active];
+    if (!tbl) return;
+    const row = {};
+    for (const col of tbl.columns) {
+        const val = prompt(`Valor para "${col}":`, '');
+        if (val === null) return;
+        row[col] = val;
+    }
+    tbl.rows.push(row);
+    saveState(false);
+    renderDbWorkspace();
+}
+
+function deleteCurrentDbTable() {
+    const active = state.ui.activeDbTable;
+    if (!active || !state.database?.tables?.[active]) return;
+    delete state.database.tables[active];
+    state.ui.activeDbTable = Object.keys(state.database.tables)[0] || '';
+    saveState(false);
+    renderDbWorkspace();
+}
+
+function insertSqlTemplate(kind) {
+    const box = document.getElementById('db-sql-input');
+    const tbl = state.ui.activeDbTable || 'alumnos';
+    if (!box) return;
+    if (kind === 'select') box.value = `SELECT * FROM ${tbl};`;
+    else if (kind === 'insert') box.value = `INSERT INTO ${tbl} (id, nombre, curso) VALUES (1, 'Marcos', '1DAM');`;
+    else if (kind === 'update') box.value = `UPDATE ${tbl} SET curso = '2DAM' WHERE id = 1;`;
+    else if (kind === 'delete') box.value = `DELETE FROM ${tbl} WHERE id = 1;`;
+}
+
+function executeLocalSql() {
+    const sql = (document.getElementById('db-sql-input')?.value || '').trim().replace(/;$/, '');
+    const out = document.getElementById('db-sql-result');
+    if (!sql || !out) return;
+
+    const selectMatch = sql.match(/^SELECT\s+\*\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*'?([^']*)'?)?$/i);
+    if (selectMatch) {
+        const [, tblName, whereCol, whereVal] = selectMatch;
+        const tbl = state.database?.tables?.[tblName];
+        if (!tbl) {
+            out.innerHTML = `<div class="mono-muted">Error: tabla "${escapeHtml(tblName)}" no existe.</div>`;
+            return;
+        }
+        const rows = whereCol ? tbl.rows.filter(r => String(r[whereCol]) === whereVal) : tbl.rows;
+        const ths = tbl.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+        const trs = rows.map(r => `<tr>${tbl.columns.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('')}</tr>`).join('');
+        out.innerHTML = `<table class="sch-table"><thead><tr>${ths}</tr></thead><tbody>${trs || `<tr><td colspan="${tbl.columns.length}" class="mono-muted">0 filas</td></tr>`}</tbody></table>`;
+        return;
+    }
+
+    const insertMatch = sql.match(/^INSERT\s+INTO\s+([a-zA-Z0-9_]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)$/i);
+    if (insertMatch) {
+        const [, tblName, colsStr, valsStr] = insertMatch;
+        const tbl = state.database?.tables?.[tblName];
+        if (!tbl) {
+            out.innerHTML = `<div class="mono-muted">Error: tabla "${escapeHtml(tblName)}" no existe.</div>`;
+            return;
+        }
+        const cols = colsStr.split(',').map(s => s.trim());
+        const vals = valsStr.split(',').map(s => s.trim().replace(/^'|'$/g, ''));
+        const row = {};
+        cols.forEach((c, i) => { row[c] = vals[i] ?? ''; });
+        tbl.rows.push(row);
+        saveState(false);
+        renderDbWorkspace();
+        out.innerHTML = '<div class="mono-muted">✅ 1 fila insertada correctamente.</div>';
+        return;
+    }
+
+    const delMatch = sql.match(/^DELETE\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*'?([^']*)'?)?$/i);
+    if (delMatch) {
+        const [, tblName, whereCol, whereVal] = delMatch;
+        const tbl = state.database?.tables?.[tblName];
+        if (!tbl) {
+            out.innerHTML = `<div class="mono-muted">Error: tabla "${escapeHtml(tblName)}" no existe.</div>`;
+            return;
+        }
+        const before = tbl.rows.length;
+        tbl.rows = whereCol ? tbl.rows.filter(r => String(r[whereCol]) !== whereVal) : [];
+        saveState(false);
+        renderDbWorkspace();
+        out.innerHTML = `<div class="mono-muted">✅ ${before - tbl.rows.length} fila(s) eliminada(s).</div>`;
+        return;
+    }
+
+    out.innerHTML = '<div class="mono-muted">Sintaxis soportada: SELECT * FROM tabla [WHERE col=val], INSERT INTO tabla (cols) VALUES (vals), DELETE FROM tabla [WHERE col=val].</div>';
+}
+
+function exportDbJson() {
+    const blob = new Blob([JSON.stringify(state.database, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'devworkspace-db.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+/* ==========================================================
+   ACADEMIA DAM (KANBAN, NOTAS, FLASHCARDS, BUGS, DUDAS, PROYECTOS)
+   ========================================================== */
+function addKanbanTask() {
+    const subject = (document.getElementById('kb-subject')?.value || '').trim();
+    const title = (document.getElementById('kb-title')?.value || '').trim();
+    if (!title) return;
+    state.kanban.push({ id: generateId('kb'), subject, title, status: 'todo' });
+    document.getElementById('kb-title').value = '';
+    toggleForm('form-add-kanban');
+    saveState(false);
+    renderKanban();
+}
+
+function renderKanban() {
+    ALLOWED_KANBAN_COLS.forEach(col => {
+        const box = document.getElementById(`kb-col-${col}`);
+        if (!box) return;
+        box.innerHTML = '';
+        (state.kanban || []).filter(item => item.status === col).forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'kanban-card';
+            card.innerHTML = `<div class="kb-subj">${escapeHtml(item.subject || 'DAM')}</div><div>${escapeHtml(item.title)}</div>`;
+            const bar = document.createElement('div');
+            bar.className = 'filter-pills-row';
+            if (col !== 'todo') {
+                const prev = document.createElement('button');
+                prev.type = 'button';
+                prev.className = 'btn-icon';
+                prev.textContent = '⬅️';
+                prev.addEventListener('click', () => { item.status = col === 'done' ? 'doing' : 'todo'; saveState(false); renderKanban(); });
+                bar.appendChild(prev);
+            }
+            if (col !== 'done') {
+                const next = document.createElement('button');
+                next.type = 'button';
+                next.className = 'btn-icon';
+                next.textContent = '➡️';
+                next.addEventListener('click', () => { item.status = col === 'todo' ? 'doing' : 'done'; saveState(false); renderKanban(); });
+                bar.appendChild(next);
+            }
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'btn-icon';
+            del.textContent = '🗑️';
+            del.addEventListener('click', () => { state.kanban = state.kanban.filter(x => x.id !== item.id); saveState(false); renderKanban(); });
+            bar.appendChild(del);
+            card.appendChild(bar);
+            box.appendChild(card);
+        });
+    });
+}
+
+function addGrade() {
+    const subject = (document.getElementById('grd-subject')?.value || '').trim();
+    const title = (document.getElementById('grd-title')?.value || '').trim();
+    const score = Number(document.getElementById('grd-score')?.value);
+    const weight = Number(document.getElementById('grd-weight')?.value) || 100;
+    if (!subject || !title || !Number.isFinite(score)) return;
+    state.grades.push({ id: generateId('grd'), subject, title, score, weight });
+    document.getElementById('grd-title').value = '';
+    document.getElementById('grd-score').value = '';
+    toggleForm('form-add-grade');
+    saveState(false);
+    renderGrades();
+}
+
+function renderGrades() {
+    const list = document.getElementById('grades-list');
+    const avgBadge = document.getElementById('grades-avg-badge');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const items = state.grades || [];
+    if (!items.length) {
+        if (avgBadge) avgBadge.textContent = 'Media: --';
+        list.innerHTML = '<div class="mono-muted">Sin calificaciones registradas.</div>';
+        return;
+    }
+
+    let weightedSum = 0;
+    let totalWeight = 0;
+    items.forEach(g => {
+        weightedSum += g.score * (g.weight || 1);
+        totalWeight += (g.weight || 1);
+
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `${g.subject} · ${g.title}: ${g.score.toFixed(2)} (${g.weight}%)`;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => { state.grades = state.grades.filter(x => x.id !== g.id); saveState(false); renderGrades(); });
+        row.append(info, del);
+        list.appendChild(row);
+    });
+
+    if (avgBadge) {
+        avgBadge.textContent = `Media: ${(weightedSum / Math.max(1, totalWeight)).toFixed(2)}`;
+    }
+}
+
+function switchStudyHubTab(tabKey) {
+    state.ui.studyHubTab = tabKey;
+    document.querySelectorAll('.study-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.studytab === tabKey);
+    });
+    document.getElementById('study-panel-flashcards')?.classList.toggle('is-hidden', tabKey !== 'flashcards');
+    document.getElementById('study-panel-bugs')?.classList.toggle('is-hidden', tabKey !== 'bugs');
+    document.getElementById('study-panel-doubts')?.classList.toggle('is-hidden', tabKey !== 'doubts');
+    saveState(false);
+}
+
+function addFlashcard() {
+    const subject = (document.getElementById('fc-subject')?.value || '').trim();
+    const front = (document.getElementById('fc-front')?.value || '').trim();
+    const back = (document.getElementById('fc-back')?.value || '').trim();
+    if (!front || !back) return;
+    state.flashcards.push({ id: generateId('fc'), subject, front, back });
+    document.getElementById('fc-front').value = '';
+    document.getElementById('fc-back').value = '';
+    toggleForm('form-add-fc');
+    saveState(false);
+    renderFlashcards();
+}
+
+function renderFlashcards() {
+    const filterSubj = document.getElementById('fc-filter-subject')?.value || 'all';
+    const deck = (state.flashcards || []).filter(f => filterSubj === 'all' || f.subject === filterSubj);
+    const subjBadge = document.getElementById('fc-card-subject');
+    const counter = document.getElementById('fc-counter');
+    const content = document.getElementById('fc-card-content');
+
+    if (!deck.length) {
+        if (subjBadge) subjBadge.textContent = 'Sin tarjetas';
+        if (counter) counter.textContent = '0 / 0';
+        if (content) content.textContent = 'Añade tarjetas de estudio arriba';
+        return;
+    }
+
+    if (currentFlashcardIndex >= deck.length) currentFlashcardIndex = 0;
+    if (currentFlashcardIndex < 0) currentFlashcardIndex = deck.length - 1;
+    const card = deck[currentFlashcardIndex];
+
+    if (subjBadge) subjBadge.textContent = card.subject || 'DAM';
+    if (counter) counter.textContent = `${currentFlashcardIndex + 1} / ${deck.length}`;
+    if (content) content.textContent = isFlashcardFlipped ? card.back : card.front;
+}
+
+function flipFlashcard() {
+    isFlashcardFlipped = !isFlashcardFlipped;
     renderFlashcards();
 }
 
 function nextFlashcard() {
+    isFlashcardFlipped = false;
     currentFlashcardIndex++;
-    currentFlashcardFlipped = false;
     renderFlashcards();
 }
 
-function markFlashcardStatus(mastered) {
-    const deck = getFilteredFlashcards();
-    if (!deck.length) return;
-    const card = deck[currentFlashcardIndex % deck.length];
-    card.mastered = mastered;
-    saveState();
-    nextFlashcard();
+function prevFlashcard() {
+    isFlashcardFlipped = false;
+    currentFlashcardIndex--;
+    renderFlashcards();
 }
 
 function deleteCurrentFlashcard() {
-    const deck = getFilteredFlashcards();
-    if (!deck.length) return;
-    const card = deck[currentFlashcardIndex % deck.length];
-    const index = appState.flashcards.findIndex(f => f.id === card.id);
-    if (index === -1) return;
-    const [removed] = appState.flashcards.splice(index, 1);
-    currentFlashcardFlipped = false;
-    saveState();
+    const filterSubj = document.getElementById('fc-filter-subject')?.value || 'all';
+    const deck = (state.flashcards || []).filter(f => filterSubj === 'all' || f.subject === filterSubj);
+    const current = deck[currentFlashcardIndex];
+    if (!current) return;
+    state.flashcards = state.flashcards.filter(f => f.id !== current.id);
+    isFlashcardFlipped = false;
+    saveState(false);
     renderFlashcards();
-    registerUndo('Flashcard eliminada', () => {
-        appState.flashcards.splice(index, 0, removed);
-    });
 }
 
 function addBugLog() {
-    const subject = document.getElementById('bug-new-subj')?.value.trim() || 'Dev';
-    const error = document.getElementById('bug-new-error')?.value.trim();
-    const cause = document.getElementById('bug-new-cause')?.value.trim() || '-';
-    const fix = document.getElementById('bug-new-fix')?.value.trim() || '-';
-    if (!error) return showToast('Describe el error encontrado', 'error');
-
-    appState.bugLogs.unshift({ id: generateId('bug'), subject, error, cause, fix, date: getMadridDateKey() });
-    document.getElementById('bug-new-error').value = '';
-    document.getElementById('bug-new-cause').value = '';
-    document.getElementById('bug-new-fix').value = '';
-    saveState();
-    renderBugLogs();
-}
-
-function deleteBugLog(id) {
-    appState.bugLogs = appState.bugLogs.filter(b => b.id !== id);
-    saveState();
+    const title = (document.getElementById('bug-title')?.value || '').trim();
+    const fix = (document.getElementById('bug-fix')?.value || '').trim();
+    if (!title) return;
+    state.bugs.unshift({ id: generateId('bug'), title, fix });
+    document.getElementById('bug-title').value = '';
+    document.getElementById('bug-fix').value = '';
+    toggleForm('form-add-bug');
+    saveState(false);
     renderBugLogs();
 }
 
 function renderBugLogs() {
-    const container = document.getElementById('bug-log-list');
-    if (!container) return;
-    const query = (document.getElementById('bug-search-input')?.value || '').toLowerCase();
-    const filtered = appState.bugLogs.filter(b =>
-        b.error.toLowerCase().includes(query) || b.fix.toLowerCase().includes(query) || b.subject.toLowerCase().includes(query)
-    );
-    if (!filtered.length) {
-        container.innerHTML = `<div class="mono-muted">Sin registros de errores.</div>`;
-        return;
-    }
-    container.innerHTML = filtered.map(b => `
-        <div class="hub-item-card">
-            <div class="deadline-card-top">
-                <span><strong>[${escapeHtml(b.subject)}]</strong> ${escapeHtml(b.error)}</span>
-                <button type="button" class="btn-icon" onclick="deleteBugLog('${b.id}')" title="Eliminar">🗑️</button>
-            </div>
-            <div class="mono-muted">Causa: ${escapeHtml(b.cause)} · Solución: <span style="color:var(--accent-green)">${escapeHtml(b.fix)}</span></div>
-        </div>
-    `).join('');
+    const list = document.getElementById('bug-logs-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (state.bugs || []).forEach(b => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `🐞 ${b.title}${b.fix ? ` → ✅ ${b.fix}` : ''}`;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => { state.bugs = state.bugs.filter(x => x.id !== b.id); saveState(false); renderBugLogs(); });
+        row.append(info, del);
+        list.appendChild(row);
+    });
 }
 
 function addClassDoubt() {
-    const subj = document.getElementById('doubt-new-subj')?.value.trim() || 'Clase';
-    const text = document.getElementById('doubt-new-text')?.value.trim();
+    const subject = (document.getElementById('doubt-subject')?.value || '').trim();
+    const text = (document.getElementById('doubt-text')?.value || '').trim();
     if (!text) return;
-
-    appState.doubts.unshift({ id: generateId('dbt'), subj, text, resolved: false });
-    document.getElementById('doubt-new-text').value = '';
-    saveState();
-    renderDoubts();
+    state.doubts.unshift({ id: generateId('dbt'), subject, text, resolved: false });
+    document.getElementById('doubt-text').value = '';
+    toggleForm('form-add-doubt');
+    saveState(false);
+    renderClassDoubts();
 }
 
-function toggleDoubtResolved(id) {
-    const d = appState.doubts.find(x => x.id === id);
-    if (!d) return;
-    d.resolved = !d.resolved;
-    saveState();
-    renderDoubts();
-}
-
-function deleteClassDoubt(id) {
-    appState.doubts = appState.doubts.filter(x => x.id !== id);
-    saveState();
-    renderDoubts();
-}
-
-function renderDoubts() {
-    const container = document.getElementById('doubts-list');
-    if (!container) return;
-    if (!appState.doubts.length) {
-        container.innerHTML = `<div class="mono-muted">No hay dudas pendientes.</div>`;
-        return;
-    }
-    container.innerHTML = appState.doubts.map(d => `
-        <div class="hub-item-card">
-            <div class="deadline-card-top">
-                <span style="${d.resolved ? 'text-decoration:line-through;opacity:0.6' : ''}"><strong>[${escapeHtml(d.subj)}]</strong> ${escapeHtml(d.text)}</span>
-                <div class="filter-pills-row">
-                    <button type="button" class="btn-icon" onclick="toggleDoubtResolved('${d.id}')" title="Marcar resuelta">${d.resolved ? '↩️' : '✅'}</button>
-                    <button type="button" class="btn-icon" onclick="deleteClassDoubt('${d.id}')" title="Eliminar">🗑️</button>
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function exportStudyHubMarkdown() {
-    const md = [
-        '# Study Hub Export',
-        '## Flashcards',
-        ...appState.flashcards.map(f => `- **${f.subject}**: ${f.question} -> *${f.answer}*`),
-        '\n## Bug Log',
-        ...appState.bugLogs.map(b => `- [${b.subject}] **${b.error}** -> ${b.fix}`)
-    ].join('\n');
-    copyTextToClipboard(md, 'Study Hub copiado en Markdown');
-}
-
-/* Planificador hasta Examen y Proyectos */
-function calculateStudyPlan() {
-    const examDateStr = document.getElementById('planner-exam-date')?.value;
-    const topics = Number(document.getElementById('planner-topics-count')?.value || 1);
-    const minsPerTopic = Number(document.getElementById('planner-mins-topic')?.value || 45);
-    const out = document.getElementById('study-planner-result');
-    if (!examDateStr || !out) return showToast('Selecciona la fecha del examen', 'error');
-
-    const diffDays = Math.max(1, Math.ceil((new Date(examDateStr) - Date.now()) / 86400000));
-    const totalMins = topics * minsPerTopic;
-    const minsPerDay = Math.ceil(totalMins / diffDays);
-    const pomosPerDay = Math.ceil(minsPerDay / 25);
-
-    out.textContent = `📅 Quedan ${diffDays} días · Total: ${(totalMins / 60).toFixed(1)}h · Ritmo recomendado: ${minsPerDay} min/día (~${pomosPerDay} pomodoros/día).`;
-}
-
-function addTeamProject() {
-    const name = document.getElementById('proj-new-name')?.value.trim();
-    const rawRepo = document.getElementById('proj-new-repo')?.value.trim() || '';
-    const repo = rawRepo ? normalizeExternalUrl(rawRepo) : '';
-    const working = document.getElementById('proj-new-working')?.value.trim() || '-';
-    const pending = document.getElementById('proj-new-pending')?.value.trim() || '-';
-
-    if (!name) return showToast('Escribe el nombre del proyecto', 'error');
-    if (rawRepo && !repo) return showToast('URL de repositorio inválida', 'error');
-
-    appState.teamProjects.unshift({ id: generateId('prj'), name, repo, working, pending });
-    document.getElementById('proj-new-name').value = '';
-    document.getElementById('proj-new-repo').value = '';
-    document.getElementById('proj-new-working').value = '';
-    document.getElementById('proj-new-pending').value = '';
-    saveState();
-    renderTeamProjects();
-}
-
-function deleteTeamProject(id) {
-    const index = appState.teamProjects.findIndex(p => p.id === id);
-    if (index === -1) return;
-    const [removed] = appState.teamProjects.splice(index, 1);
-    saveState();
-    renderTeamProjects();
-    registerUndo(`Proyecto "${removed.name}" eliminado`, () => {
-        appState.teamProjects.splice(index, 0, removed);
+function renderClassDoubts() {
+    const list = document.getElementById('class-doubts-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (state.doubts || []).forEach(d => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `[${d.subject || 'DAM'}] ${d.text}`;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => { state.doubts = state.doubts.filter(x => x.id !== d.id); saveState(false); renderClassDoubts(); });
+        row.append(info, del);
+        list.appendChild(row);
     });
 }
 
-function renderTeamProjects() {
-    const container = document.getElementById('team-projects-list');
-    if (!container) return;
-    if (!appState.teamProjects.length) {
-        container.innerHTML = `<div class="mono-muted">Sin proyectos registrados.</div>`;
-        return;
-    }
-    container.innerHTML = appState.teamProjects.map(p => {
-        const safeRepo = normalizeExternalUrl(p.repo);
-        return `
-            <div class="hub-item-card">
-                <div class="deadline-card-top">
-                    <strong>${escapeHtml(p.name)}</strong>
-                    <div class="filter-pills-row">
-                        ${safeRepo ? `<a href="${escapeHtml(safeRepo)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">Repo ↗</a>` : ''}
-                        <button type="button" class="btn-icon" onclick="deleteTeamProject('${p.id}')">🗑️</button>
-                    </div>
-                </div>
-                <div class="mono-muted">✅ Funciona: ${escapeHtml(p.working)}</div>
-                <div class="mono-muted">🚧 Pendiente: ${escapeHtml(p.pending)}</div>
-            </div>
-        `;
-    }).join('');
+function addProject() {
+    const title = (document.getElementById('prj-title')?.value || '').trim();
+    const stack = (document.getElementById('prj-stack')?.value || '').trim();
+    const progress = Math.min(100, Math.max(0, Number(document.getElementById('prj-progress')?.value) || 0));
+    const url = sanitizeUrl(document.getElementById('prj-url')?.value || '');
+    if (!title) return;
+    state.projects.unshift({ id: generateId('p'), title, stack, progress, url });
+    document.getElementById('prj-title').value = '';
+    document.getElementById('prj-stack').value = '';
+    document.getElementById('prj-url').value = '';
+    toggleForm('form-add-project');
+    saveState(false);
+    renderProjects();
 }
 
-/* --------------------------------------------------------------------------
-   WORKSPACE 4: DEV & SYSADMIN TOOLBOX + SERVIDORES + SNIPPETS
-   -------------------------------------------------------------------------- */
-function setToolboxTab(tab) {
-    ['format', 'encode', 'regex', 'net', 'sys', 'gen'].forEach(t => {
-        document.getElementById(`tb-tab-${t}`)?.classList.toggle('active', t === tab);
-        document.getElementById(`tb-view-${t}`)?.classList.toggle('is-hidden', t !== tab);
+function renderProjects() {
+    const list = document.getElementById('projects-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (state.projects || []).forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `🚀 ${p.title} (${p.stack || 'Stack'}) · ${p.progress}%`;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => { state.projects = state.projects.filter(x => x.id !== p.id); saveState(false); renderProjects(); });
+        row.append(info, del);
+        list.appendChild(row);
     });
 }
 
-function tbFormatJson(minify) {
-    const input = document.getElementById('tb-json-input');
-    const status = document.getElementById('tb-json-status');
-    try {
-        const parsed = JSON.parse(input.value);
-        input.value = JSON.stringify(parsed, null, minify ? 0 : 2);
-        status.textContent = minify ? '✅ JSON minificado correctamente' : '✅ JSON válido formateado';
-    } catch (err) {
-        status.textContent = `❌ Error JSON: ${err.message}`;
-    }
-}
-
-function tbJsonToCsv() {
-    const input = document.getElementById('tb-json-input');
-    const status = document.getElementById('tb-json-status');
-    try {
-        const arr = JSON.parse(input.value);
-        if (!Array.isArray(arr) || !arr.length) throw new Error('Se requiere un array de objetos JSON');
-        const headers = Object.keys(arr[0]);
-        const rows = arr.map(obj => headers.map(h => JSON.stringify(obj[h] ?? '')).join(','));
-        input.value = [headers.join(','), ...rows].join('\n');
-        status.textContent = '✅ Convertido a CSV';
-    } catch (err) {
-        status.textContent = `❌ ${err.message}`;
-    }
-}
-
-function tbCsvToJson() {
-    const input = document.getElementById('tb-json-input');
-    const status = document.getElementById('tb-json-status');
-    try {
-        const lines = input.value.trim().split('\n');
-        if (lines.length < 2) throw new Error('CSV insuficiente');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-        const result = lines.slice(1).map(line => {
-            const cols = line.split(',');
-            return Object.fromEntries(headers.map((h, i) => [h, (cols[i] || '').trim().replace(/^"|"$/g, '')]));
-        });
-        input.value = JSON.stringify(result, null, 2);
-        status.textContent = '✅ Convertido a JSON';
-    } catch (err) {
-        status.textContent = `❌ ${err.message}`;
-    }
-}
-
-function tbFormatSql() {
-    const input = document.getElementById('tb-json-input');
-    const keywords = ['SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'GROUP BY', 'ORDER BY', 'LIMIT', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE FROM'];
-    let sql = input.value.replace(/\s+/g, ' ').trim();
-    keywords.forEach(kw => {
-        const rx = new RegExp(`\\b${kw}\\b`, 'gi');
-        sql = sql.replace(rx, `\n${kw}`);
+/* ==========================================================
+   DEVLAB (TOOLBOX, SERVIDORES, SNIPPETS, BOOKMARKS) Y MODALES
+   ========================================================== */
+function switchToolboxTab(tabKey) {
+    state.ui.toolboxTab = tabKey;
+    document.querySelectorAll('.tb-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tbtab === tabKey);
     });
-    input.value = sql.trim();
-    document.getElementById('tb-json-status').textContent = '✅ SQL formateado';
+    ['format', 'encode', 'net', 'gen'].forEach(t => {
+        document.getElementById(`tb-panel-${t}`)?.classList.toggle('is-hidden', t !== tabKey);
+    });
 }
 
-function tbEncodeAction(action) {
-    const val = document.getElementById('tb-encode-input')?.value || '';
-    const out = document.getElementById('tb-encode-output');
+function formatJsonTool() {
+    const area = document.getElementById('json-input-area');
+    if (!area) return;
     try {
-        if (action === 'b64e') out.textContent = utf8ToBase64(val);
-        if (action === 'b64d') out.textContent = base64ToUtf8(val);
-        if (action === 'urle') out.textContent = encodeURIComponent(val);
-        if (action === 'urld') out.textContent = decodeURIComponent(val);
+        area.value = JSON.stringify(JSON.parse(area.value), null, 2);
     } catch (err) {
-        out.textContent = `Error: ${err.message}`;
+        showToast(`JSON inválido: ${err.message}`, 'error');
     }
 }
 
-function tbDecodeJwt() {
-    const token = (document.getElementById('tb-encode-input')?.value || '').trim();
-    const out = document.getElementById('tb-encode-output');
+function minifyJsonTool() {
+    const area = document.getElementById('json-input-area');
+    if (!area) return;
     try {
-        const parts = token.split('.');
-        if (parts.length < 2) throw new Error('Token JWT inválido');
-        const decodePart = p => JSON.parse(base64ToUtf8(p.replace(/-/g, '+').replace(/_/g, '/')));
-        out.textContent = JSON.stringify({ header: decodePart(parts[0]), payload: decodePart(parts[1]) }, null, 2);
+        area.value = JSON.stringify(JSON.parse(area.value));
     } catch (err) {
-        out.textContent = `❌ JWT inválido: ${err.message}`;
+        showToast(`JSON inválido: ${err.message}`, 'error');
     }
 }
 
-async function tbComputeHashes() {
-    const text = document.getElementById('tb-encode-input')?.value || '';
-    const out = document.getElementById('tb-encode-output');
-    if (!crypto?.subtle) {
-        out.textContent = '❌ Web Crypto API no disponible';
-        return;
-    }
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-    out.textContent = `SHA-256:\n${hex}`;
+function encodeBase64Tool() {
+    const area = document.getElementById('encode-input-area');
+    if (!area) return;
+    area.value = btoa(unescape(encodeURIComponent(area.value)));
 }
 
-function runRegexTester() {
-    const pattern = document.getElementById('tb-regex-pattern')?.value || '';
-    const flags = document.getElementById('tb-regex-flags')?.value || 'g';
-    const text = document.getElementById('tb-regex-text')?.value || '';
-    const resEl = document.getElementById('tb-regex-result');
+function decodeBase64Tool() {
+    const area = document.getElementById('encode-input-area');
+    if (!area) return;
     try {
-        const rx = new RegExp(pattern, flags);
-        const matches = [...text.matchAll(rx)].map(m => m[0]);
-        resEl.textContent = matches.length ? `✅ ${matches.length} coincidencias: ${matches.join(' | ')}` : '⚠️ 0 coincidencias';
-    } catch (err) {
-        resEl.textContent = `❌ Regex inválida: ${err.message}`;
+        area.value = decodeURIComponent(escape(atob(area.value.trim())));
+    } catch (_) {
+        showToast('Base64 inválido', 'error');
     }
 }
 
-function runSimpleDiff() {
-    const a = (document.getElementById('tb-regex-text')?.value || '').split('\n');
-    const b = (document.getElementById('tb-diff-b')?.value || '').split('\n');
-    const out = document.getElementById('tb-diff-output');
-    const max = Math.max(a.length, b.length);
-    const diffs = [];
-    for (let i = 0; i < max; i++) {
-        if ((a[i] || '') !== (b[i] || '')) {
-            diffs.push(`@@ Línea ${i + 1} @@\n- ${a[i] ?? '(vacío)'}\n+ ${b[i] ?? '(vacío)'}`);
-        }
+function encodeUrlTool() {
+    const area = document.getElementById('encode-input-area');
+    if (area) area.value = encodeURIComponent(area.value);
+}
+
+function decodeUrlTool() {
+    const area = document.getElementById('encode-input-area');
+    if (!area) return;
+    try {
+        area.value = decodeURIComponent(area.value);
+    } catch (_) {
+        showToast('URL codificada inválida', 'error');
     }
-    out.textContent = diffs.length ? diffs.join('\n\n') : '✅ Ambos bloques son idénticos';
+}
+
+function decodeJwtTool() {
+    const area = document.getElementById('encode-input-area');
+    if (!area) return;
+    try {
+        const parts = area.value.trim().split('.');
+        if (parts.length < 2) throw new Error('Formato JWT incorrecto');
+        const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        area.value = JSON.stringify({ header, payload }, null, 2);
+    } catch (err) {
+        showToast(`Error JWT: ${err.message}`, 'error');
+    }
+}
+
+function convertNumberBases(sourceBase) {
+    const dec = document.getElementById('num-dec');
+    const hex = document.getElementById('num-hex');
+    const bin = document.getElementById('num-bin');
+    const raw = sourceBase === 10 ? dec?.value : sourceBase === 16 ? hex?.value : bin?.value;
+    const val = parseBaseValue(raw, sourceBase);
+    if (val === null) return;
+    if (sourceBase !== 10 && dec) dec.value = val.toString(10);
+    if (sourceBase !== 16 && hex) hex.value = val.toString(16).toUpperCase();
+    if (sourceBase !== 2 && bin) bin.value = val.toString(2);
 }
 
 function calculateSubnet() {
-    const raw = (document.getElementById('tb-ip-input')?.value || '').trim();
-    const out = document.getElementById('tb-subnet-output');
+    const cidr = document.getElementById('subnet-cidr-input')?.value || '';
+    const out = document.getElementById('subnet-output');
+    if (!out) return;
+    const res = calcSubnetCore(cidr);
+    if (!res) {
+        out.textContent = 'CIDR inválido (ej. 192.168.1.0/24)';
+        return;
+    }
+    out.textContent = `Red: ${res.network} | Broadcast: ${res.broadcast} | Máscara: ${res.mask} | Hosts útiles: ${res.usableHosts}`;
+}
+
+function copyBoilerplate(key) {
+    const txt = BOILERPLATES[key];
+    if (!txt) return;
+    navigator.clipboard?.writeText(txt);
+    showToast(`Plantilla ${key} copiada`, 'success');
+}
+
+function testRegexTool() {
+    const pat = document.getElementById('regex-pattern')?.value || '';
+    const flags = document.getElementById('regex-flags')?.value || 'g';
+    const text = document.getElementById('regex-test-text')?.value || '';
+    const out = document.getElementById('regex-output');
     if (!out) return;
     try {
-        const info = computeSubnetInfo(raw);
-        out.textContent = [
-            `Red:        ${info.network}/${info.cidr}`,
-            `Máscara:    ${info.mask}`,
-            `Broadcast:  ${info.broadcast}`,
-            `Rango Host: ${info.firstHost} - ${info.lastHost}`,
-            `Hosts Út.:  ${info.hosts}`
-        ].join('\n');
-    } catch (error) {
-        if (!(error instanceof TypeError)) throw error;
-        out.textContent = error.message;
+        const rx = new RegExp(pat, flags);
+        const matches = [...text.matchAll(rx)].map(m => m[0]);
+        out.textContent = matches.length ? `Coincidencias (${matches.length}): ${matches.join(', ')}` : 'Sin coincidencias';
+    } catch (err) {
+        out.textContent = `Regex inválida: ${err.message}`;
     }
 }
 
-function convertNumberBase(fromBase, rawVal) {
-    const parsed = parseBaseValue(fromBase, rawVal);
-    const ids = ['dec', 'bin', 'hex', 'oct'];
-    if (!parsed.valid || parsed.value === null) {
-        ids.filter(b => b !== fromBase).forEach(b => {
-            const el = document.getElementById(`base-${b}`);
-            if (el) el.value = '';
-        });
-        return;
-    }
-    const num = parsed.value;
-    document.getElementById('base-dec').value = num.toString(10);
-    document.getElementById('base-bin').value = num.toString(2);
-    document.getElementById('base-hex').value = num.toString(16).toUpperCase();
-    document.getElementById('base-oct').value = num.toString(8);
-}
-
-function updateChmodCalc() {
-    const calc = p => (document.getElementById(`ch-${p}r`)?.checked ? 4 : 0) +
-        (document.getElementById(`ch-${p}w`)?.checked ? 2 : 0) +
-        (document.getElementById(`ch-${p}x`)?.checked ? 1 : 0);
-    const sym = p => (document.getElementById(`ch-${p}r`)?.checked ? 'r' : '-') +
-        (document.getElementById(`ch-${p}w`)?.checked ? 'w' : '-') +
-        (document.getElementById(`ch-${p}x`)?.checked ? 'x' : '-');
-
-    const oct = `${calc('u')}${calc('g')}${calc('o')}`;
-    document.getElementById('chmod-octal').textContent = oct;
-    document.getElementById('chmod-symbolic').textContent = `${sym('u')}${sym('g')}${sym('o')}`;
-}
-
-function copyChmodCmd() {
-    const oct = document.getElementById('chmod-octal')?.textContent || '755';
-    copyTextToClipboard(`chmod ${oct} archivo`, `Copiado: chmod ${oct} archivo`);
-}
-
-function explainCronExpr() {
-    const raw = (document.getElementById('cron-expr-input')?.value || '').trim();
-    const out = document.getElementById('cron-explanation');
-    const presets = {
-        '@yearly': 'Una vez al año (1 de enero a las 00:00)',
-        '@monthly': 'El día 1 de cada mes a las 00:00',
-        '@weekly': 'Cada domingo a las 00:00',
-        '@daily': 'Todos los días a las 00:00',
-        '@hourly': 'Al minuto 0 de cada hora'
-    };
-    if (presets[raw]) {
-        out.textContent = `⏱️ ${presets[raw]}`;
-        return;
-    }
-    const parts = raw.split(/\s+/);
-    if (parts.length !== 5) {
-        out.textContent = '⚠️ Formato cron estándar: minuto hora día_mes mes día_semana';
-        return;
-    }
-    const describeField = (val, unit) => {
-        if (val === '*') return `cada ${unit}`;
-        if (val.startsWith('*/')) return `cada ${val.slice(2)} ${unit}s`;
-        return `${unit} ${val}`;
-    };
-    out.textContent = `⏱️ Ejecutar en ${describeField(parts[0], 'minuto')}, ${describeField(parts[1], 'hora')}, día del mes (${parts[2]}), mes (${parts[3]}), día semana (${parts[4]}).`;
-}
-
-function generateMockUsers(count) {
-    const names = ['Marcos', 'Elena', 'Carlos', 'Lucía', 'Javier', 'Sofía', 'Diego'];
-    const users = Array.from({ length: count }, (_, i) => ({
-        id: i + 1,
-        username: `${names[i % names.length].toLowerCase()}_${100 + i}`,
-        email: `user${i + 1}@devworkspace.local`,
-        role: i === 0 ? 'admin' : 'developer',
-        active: true
-    }));
-    document.getElementById('tb-gen-output').value = JSON.stringify(users, null, 2);
-}
-
-function generateUuidsAndDni() {
-    const uuid = crypto.randomUUID ? crypto.randomUUID() : generateId('uuid');
-    const num = Math.floor(10000000 + Math.random() * 89999999);
-    const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
-    const dni = `${num}${letters[num % 23]}`;
-    document.getElementById('tb-gen-output').value = `UUID v4: ${uuid}\nDNI Prueba: ${dni}`;
+function generateUuidTool() {
+    const out = document.getElementById('gen-output-box');
+    if (!out) return;
+    const val = crypto.randomUUID();
+    out.textContent = val;
+    navigator.clipboard?.writeText(val);
+    showToast('UUID v4 generado y copiado', 'success');
 }
 
 function generateSecurePassword() {
+    const out = document.getElementById('gen-output-box');
+    if (!out) return;
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-';
-    const array = new Uint32Array(16);
-    crypto.getRandomValues(array);
-    const pwd = [...array].map(n => chars[n % chars.length]).join('');
-    document.getElementById('tb-gen-output').value = pwd;
+    const arr = new Uint32Array(20);
+    crypto.getRandomValues(arr);
+    const pwd = [...arr].map(x => chars[x % chars.length]).join('');
+    out.textContent = pwd;
+    navigator.clipboard?.writeText(pwd);
+    showToast('Contraseña de 20 caracteres copiada', 'success');
 }
 
-function loadBoilerplate(type) {
-    const files = {
-        dockerfile: `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --only=production\nCOPY . .\nEXPOSE 3000\nCMD ["node", "server.js"]`,
-        compose: `services:\n  app:\n    build: .\n    ports:\n      - "3000:3000"\n    restart: unless-stopped`
-    };
-    document.getElementById('tb-gen-output').value = files[type] || '';
+async function generateSha256Tool() {
+    const inp = document.getElementById('hash-input-text')?.value || '';
+    const out = document.getElementById('gen-output-box');
+    if (!out) return;
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inp));
+    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    out.textContent = hex;
 }
 
-/* Servidores & Homelab */
 function addServer() {
-    const name = document.getElementById('srv-name')?.value.trim();
-    const ip = document.getElementById('srv-ip')?.value.trim();
-    const port = document.getElementById('srv-port')?.value.trim() || '22';
-    const creds = document.getElementById('srv-creds')?.value.trim() || 'root';
-    const logs = document.getElementById('srv-logs')?.value.trim() || '/var/log';
-
-    if (!name || !ip) return showToast('Nombre e IP son obligatorios', 'error');
-
-    appState.servers.push({ id: generateId('srv'), name, ip, port, creds, logs });
+    const name = (document.getElementById('srv-name')?.value || '').trim();
+    const host = (document.getElementById('srv-host')?.value || '').trim();
+    const role = (document.getElementById('srv-role')?.value || '').trim();
+    const url = sanitizeUrl(document.getElementById('srv-url')?.value || '');
+    if (!name || !host) return;
+    state.servers.push({ id: generateId('srv'), name, host, role, url });
     document.getElementById('srv-name').value = '';
-    document.getElementById('srv-ip').value = '';
-    saveState();
+    document.getElementById('srv-host').value = '';
+    document.getElementById('srv-role').value = '';
+    document.getElementById('srv-url').value = '';
+    toggleForm('form-add-server');
+    saveState(false);
     renderServers();
-}
-
-function deleteServer(id) {
-    const index = appState.servers.findIndex(s => s.id === id);
-    if (index === -1) return;
-    const [removed] = appState.servers.splice(index, 1);
-    saveState();
-    renderServers();
-    registerUndo(`Servidor "${removed.name}" eliminado`, () => {
-        appState.servers.splice(index, 0, removed);
-    });
-}
-
-function exportServersJson() {
-    copyTextToClipboard(JSON.stringify(appState.servers, null, 2), 'Inventario de servidores copiado en JSON');
 }
 
 function renderServers() {
     const list = document.getElementById('servers-list');
     if (!list) return;
-    const q = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
-    const filtered = appState.servers.filter(s =>
-        s.name.toLowerCase().includes(q) || s.ip.toLowerCase().includes(q) || s.logs.toLowerCase().includes(q)
-    );
-    if (!filtered.length) {
-        list.innerHTML = `<li class="mono-muted">Sin hosts registrados.</li>`;
-        return;
-    }
-    list.innerHTML = filtered.map(s => {
-        const sshCmd = `ssh ${s.creds}@${s.ip} -p ${s.port}`;
-        return `
-            <li>
-                <div>
-                    <strong>${escapeHtml(s.name)}</strong> · <span class="snippet-cmd-text">${escapeHtml(s.creds)}@${escapeHtml(s.ip)}:${escapeHtml(s.port)}</span>
-                    <div class="mono-muted">Logs: ${escapeHtml(s.logs)}</div>
-                </div>
-                <div class="filter-pills-row">
-                    <button type="button" class="btn-cyan btn-sm" onclick="copyTextToClipboard('${escapeHtml(sshCmd)}', 'SSH copiado')" title="Copiar comando SSH">SSH</button>
-                    <button type="button" class="btn-ghost btn-sm" onclick="copyTextToClipboard('${escapeHtml(s.logs)}', 'Ruta de logs copiada')" title="Copiar ruta logs">📂</button>
-                    <button type="button" class="btn-icon" onclick="deleteServer('${s.id}')" title="Eliminar">🗑️</button>
-                </div>
-            </li>
-        `;
-    }).join('');
-}
-
-function addInfraChangelog() {
-    const input = document.getElementById('infra-changelog-input');
-    const text = input?.value.trim();
-    if (!text) return;
-    appState.infraChangelog.unshift({ id: generateId('chg'), date: getMadridDateKey(), text });
-    input.value = '';
-    saveState();
-    renderInfraChangelog();
-}
-
-function renderInfraChangelog() {
-    const list = document.getElementById('infra-changelog-list');
-    if (!list) return;
-    list.innerHTML = appState.infraChangelog.map(item => `
-        <div class="mono-muted">[${escapeHtml(item.date)}] ${escapeHtml(item.text)}</div>
-    `).join('');
-}
-
-/* Snippets & Bookmarks */
-const BUILTIN_SNIPPETS = [
-    { title: 'Conectar por SSH', cat: 'Linux', cmd: 'ssh {{USER}}@{{IP}} -p {{PORT}}' },
-    { title: 'Copiar archivo vía SCP', cat: 'Linux', cmd: 'scp -P {{PORT}} archivo.tar.gz {{USER}}@{{IP}}:/tmp/' },
-    { title: 'Ver contenedores activos', cat: 'Docker', cmd: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
-    { title: 'Logs en vivo de contenedor', cat: 'Docker', cmd: 'docker logs -f --tail 100 nombre_contenedor' },
-    { title: 'Actualizar y levantar Compose', cat: 'Docker', cmd: 'docker compose pull && docker compose up -d' },
-    { title: 'Comprobar puertos abiertos', cat: 'Redes', cmd: 'ss -tulpn' }
-];
-
-function addCustomSnippet() {
-    const title = document.getElementById('snip-new-title')?.value.trim();
-    const cat = document.getElementById('snip-new-cat')?.value.trim() || 'Custom';
-    const cmd = document.getElementById('snip-new-cmd')?.value.trim();
-    if (!title || !cmd) return showToast('Completa descripción y comando', 'error');
-
-    appState.customSnippets.unshift({ id: generateId('snip'), title, cat, cmd });
-    document.getElementById('snip-new-title').value = '';
-    document.getElementById('snip-new-cmd').value = '';
-    saveState();
-    renderSnippets();
-}
-
-function deleteCustomSnippet(id) {
-    const index = appState.customSnippets.findIndex(s => s.id === id);
-    if (index === -1) return;
-    const [removed] = appState.customSnippets.splice(index, 1);
-    saveState();
-    renderSnippets();
-    registerUndo(`Snippet "${removed.title}" eliminado`, () => {
-        appState.customSnippets.splice(index, 0, removed);
+    list.innerHTML = '';
+    (state.servers || []).forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `🖥️ ${s.name} (${s.host})${s.role ? ` · ${s.role}` : ''}`;
+        const acts = document.createElement('div');
+        acts.className = 'filter-pills-row';
+        if (s.url) {
+            const link = document.createElement('a');
+            link.href = s.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'btn-cyan btn-sm';
+            link.textContent = 'Abrir';
+            acts.appendChild(link);
+        }
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '🗑️';
+        del.addEventListener('click', () => { state.servers = state.servers.filter(x => x.id !== s.id); saveState(false); renderServers(); });
+        acts.appendChild(del);
+        row.append(info, acts);
+        list.appendChild(row);
     });
 }
 
+function addSnippet() {
+    const title = (document.getElementById('snp-title')?.value || '').trim();
+    const tag = (document.getElementById('snp-tag')?.value || '').trim();
+    const code = (document.getElementById('snp-code')?.value || '').trim();
+    if (!title || !code) return;
+    state.snippets.unshift({ id: generateId('snp'), title, tag, code });
+    document.getElementById('snp-title').value = '';
+    document.getElementById('snp-tag').value = '';
+    document.getElementById('snp-code').value = '';
+    toggleForm('form-add-snippet');
+    saveState(false);
+    renderSnippets();
+}
+
 function renderSnippets() {
-    const container = document.getElementById('snippet-list-container');
-    if (!container) return;
-    const user = document.getElementById('cli-var-user')?.value || 'root';
-    const ip = document.getElementById('cli-var-ip')?.value || '192.168.1.10';
-    const port = document.getElementById('cli-var-port')?.value || '22';
-    const query = (document.getElementById('snippet-search')?.value || '').toLowerCase();
-
-    const all = [...appState.customSnippets, ...BUILTIN_SNIPPETS].filter(s =>
-        s.title.toLowerCase().includes(query) || s.cat.toLowerCase().includes(query) || s.cmd.toLowerCase().includes(query)
-    );
-
-    container.innerHTML = all.map(s => {
-        const resolved = s.cmd
-            .replace(/\{\{USER\}\}/g, user)
-            .replace(/\{\{IP\}\}/g, ip)
-            .replace(/\{\{PORT\}\}/g, port);
-        return `
-            <div class="snippet-box">
-                <div>
-                    <div class="mono-muted">[${escapeHtml(s.cat)}] ${escapeHtml(s.title)}</div>
-                    <div class="snippet-cmd-text">${escapeHtml(resolved)}</div>
-                </div>
-                <div class="filter-pills-row">
-                    <button type="button" class="btn-cyan btn-sm" onclick="copyTextToClipboard('${escapeHtml(resolved)}', 'Comando copiado')">Copiar</button>
-                    ${s.id ? `<button type="button" class="btn-icon" onclick="deleteCustomSnippet('${s.id}')" title="Eliminar snippet">🗑️</button>` : ''}
-                </div>
-            </div>
-        `;
-    }).join('');
+    const list = document.getElementById('snippets-list');
+    const q = (document.getElementById('snippet-search-input')?.value || '').toLowerCase();
+    if (!list) return;
+    list.innerHTML = '';
+    (state.snippets || [])
+        .filter(s => !q || s.title.toLowerCase().includes(q) || (s.tag || '').toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
+        .forEach(s => {
+            const row = document.createElement('div');
+            row.className = 'grade-item-row';
+            const info = document.createElement('span');
+            info.textContent = `⚡ ${s.title}${s.tag ? ` [${s.tag}]` : ''}: ${s.code}`;
+            const acts = document.createElement('div');
+            acts.className = 'filter-pills-row';
+            const cp = document.createElement('button');
+            cp.type = 'button';
+            cp.className = 'btn-cyan btn-sm';
+            cp.textContent = 'Copiar';
+            cp.addEventListener('click', () => { navigator.clipboard?.writeText(s.code); showToast('Comando copiado', 'success'); });
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'btn-icon';
+            del.textContent = '🗑️';
+            del.addEventListener('click', () => { state.snippets = state.snippets.filter(x => x.id !== s.id); saveState(false); renderSnippets(); });
+            acts.append(cp, del);
+            row.append(info, acts);
+            list.appendChild(row);
+        });
 }
 
 function addBookmark() {
-    const name = document.getElementById('bm-name')?.value.trim();
-    const rawUrl = document.getElementById('bm-url')?.value.trim();
-    const url = normalizeExternalUrl(rawUrl);
-    if (!name || !url) return showToast('Introduce nombre y URL válida (http/https)', 'error');
-
-    appState.bookmarks.push({ id: generateId('bm'), name, url });
+    const name = (document.getElementById('bm-name')?.value || '').trim();
+    const url = sanitizeUrl(document.getElementById('bm-url')?.value || '');
+    if (!name || !url) {
+        showToast('Nombre o URL inválida', 'error');
+        return;
+    }
+    state.bookmarks.push({ id: generateId('bm'), name, url });
     document.getElementById('bm-name').value = '';
     document.getElementById('bm-url').value = '';
-    saveState();
-    renderBookmarks();
-}
-
-function deleteBookmark(id) {
-    appState.bookmarks = appState.bookmarks.filter(b => b.id !== id);
-    saveState();
+    toggleForm('form-add-bookmark');
+    saveState(false);
     renderBookmarks();
 }
 
 function renderBookmarks() {
     const list = document.getElementById('bookmarks-list');
     if (!list) return;
-    list.innerHTML = appState.bookmarks.map(b => {
-        const safeUrl = normalizeExternalUrl(b.url);
-        if (!safeUrl) return '';
-        return `
-            <li>
-                <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">🔗 ${escapeHtml(b.name)}</a>
-                <button type="button" class="btn-icon" onclick="deleteBookmark('${b.id}')">🗑️</button>
-            </li>
-        `;
-    }).join('');
+    list.innerHTML = '';
+    (state.bookmarks || []).forEach(b => {
+        const chip = document.createElement('div');
+        chip.className = 'pill-btn';
+        const link = document.createElement('a');
+        link.href = b.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = `🔗 ${b.name}`;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon';
+        del.textContent = '×';
+        del.addEventListener('click', () => { state.bookmarks = state.bookmarks.filter(x => x.id !== b.id); saveState(false); renderBookmarks(); });
+        chip.append(link, del);
+        list.appendChild(chip);
+    });
 }
 
-/* --------------------------------------------------------------------------
-   MODALES: BUSCADOR GLOBAL, EDICIÓN RÁPIDA, SNAPSHOTS, RESUMEN Y ATAJOS
-   -------------------------------------------------------------------------- */
+function createBackupSnapshot() {
+    state.snapshots.unshift({
+        id: generateId('snap'),
+        createdAt: getEffectiveNowMs(),
+        data: JSON.stringify(buildCompactVaultSnapshot())
+    });
+    state.snapshots = state.snapshots.slice(0, MAX_SNAPSHOTS);
+    saveState(false);
+    renderSnapshotsList();
+    showToast('Snapshot local creado', 'success');
+}
+
+function renderSnapshotsList() {
+    const list = document.getElementById('snapshots-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (state.snapshots || []).forEach(snap => {
+        const row = document.createElement('div');
+        row.className = 'grade-item-row';
+        const info = document.createElement('span');
+        info.textContent = `📸 ${new Date(snap.createdAt).toLocaleString('es-ES')}`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-cyan btn-sm';
+        btn.textContent = 'Restaurar';
+        btn.addEventListener('click', () => {
+            const parsed = JSON.parse(snap.data);
+            const drv = { ...state.drive };
+            state = normalizeStateShape(parsed);
+            state.drive = drv;
+            saveState(false);
+            applyAllVisualSettings();
+            renderAll();
+            showToast('Snapshot restaurado', 'success');
+        });
+        row.append(info, btn);
+        list.appendChild(row);
+    });
+}
+
 function openGlobalSearch() {
-    const modal = document.getElementById('global-search-modal');
-    modal.style.display = 'flex';
-    const input = document.getElementById('global-search-input');
-    input.value = '';
-    input.focus();
-    filterGlobalSearch();
+    document.getElementById('global-search-modal').style.display = 'flex';
+    const inp = document.getElementById('global-search-input');
+    if (inp) {
+        inp.value = '';
+        inp.focus();
+    }
+    handleGlobalSearchInput();
 }
 
 function closeGlobalSearch() {
     document.getElementById('global-search-modal').style.display = 'none';
 }
 
-function filterGlobalSearch() {
-    const q = (document.getElementById('global-search-input')?.value || '').toLowerCase();
-    const resultsEl = document.getElementById('global-search-results');
-    if (!resultsEl) return;
+function handleGlobalSearchInput() {
+    const q = (document.getElementById('global-search-input')?.value || '').trim().toLowerCase();
+    const box = document.getElementById('global-search-results');
+    if (!box) return;
+    box.innerHTML = '';
 
     const items = [];
-    appState.tasks.forEach(t => items.push({ type: 'Tarea', title: t.text, ws: 'cockpit' }));
-    appState.deliveries.forEach(d => items.push({ type: 'Entrega', title: `${d.title} (${d.subject})`, ws: 'cockpit' }));
-    appState.kanban.forEach(k => items.push({ type: 'Kanban', title: `${k.title} (${k.subject})`, ws: 'academy' }));
-    appState.flashcards.forEach(f => items.push({ type: 'Flashcard', title: f.question, ws: 'academy' }));
-    appState.studioProjects.forEach(p => items.push({ type: 'Studio', title: p.title, ws: 'studio' }));
-    appState.servers.forEach(s => items.push({ type: 'Servidor', title: `${s.name} (${s.ip})`, ws: 'devlab' }));
+    (state.tasks || []).forEach(t => items.push({ label: `✅ Tarea: ${t.text}`, action: () => switchWorkspace('cockpit') }));
+    (state.deliveries || []).forEach(d => items.push({ label: `📅 Entrega: ${d.subject} - ${d.title}`, action: () => switchWorkspace('cockpit') }));
+    (state.snippets || []).forEach(s => items.push({ label: `⚡ Snippet: ${s.title}`, action: () => switchWorkspace('devlab') }));
+    (state.catalogSubjects || []).forEach(s => items.push({ label: `📚 Asignatura: ${s.name}`, action: () => switchWorkspace('academy') }));
 
-    const matches = items.filter(it => it.title.toLowerCase().includes(q) || it.type.toLowerCase().includes(q)).slice(0, 15);
-    resultsEl.innerHTML = matches.map((m, idx) => `
-        <li class="search-result-item ${idx === 0 ? 'selected' : ''}" onclick="switchWorkspace('${m.ws}'); closeGlobalSearch();">
-            <span><strong>[${m.type}]</strong> ${escapeHtml(m.title)}</span>
-            <span class="badge-version">${m.ws.toUpperCase()}</span>
-        </li>
-    `).join('');
-}
-
-function handleGlobalSearchKeydown(event) {
-    if (event.key === 'Escape') closeGlobalSearch();
-    if (event.key === 'Enter') {
-        document.querySelector('#global-search-results .search-result-item')?.click();
-    }
-}
-
-/* Modal genérico de edición */
-function openEditItemModal(title, fields, onSave) {
-    activeEditContext = { fields, onSave };
-    document.getElementById('edit-item-title').textContent = `✏️ ${title}`;
-    const container = document.getElementById('edit-item-fields');
-    container.innerHTML = fields.map(f => {
-        if (f.type === 'select') {
-            return `
-                <label class="mono-muted" style="text-align:left">${escapeHtml(f.label)}
-                    <select id="edit-field-${f.key}" class="w-full mt-4">
-                        ${f.options.map(opt => `<option value="${escapeHtml(opt.value)}" ${opt.value === f.value ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`).join('')}
-                    </select>
-                </label>
-            `;
-        }
-        return `
-            <label class="mono-muted" style="text-align:left">${escapeHtml(f.label)}
-                <input type="${escapeHtml(f.type || 'text')}" id="edit-field-${f.key}" value="${escapeHtml(f.value || '')}" class="w-full mt-4">
-            </label>
-        `;
-    }).join('');
-    document.getElementById('edit-item-modal').style.display = 'flex';
-}
-
-function closeEditItemModal() {
-    document.getElementById('edit-item-modal').style.display = 'none';
-    activeEditContext = null;
-}
-
-function saveEditItemModal() {
-    if (!activeEditContext) return;
-    const values = {};
-    activeEditContext.fields.forEach(f => {
-        values[f.key] = document.getElementById(`edit-field-${f.key}`)?.value ?? '';
+    globalSearchMatches = items.filter(it => !q || it.label.toLowerCase().includes(q)).slice(0, 15);
+    globalSearchMatches.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'grade-item-row';
+        div.style.cursor = 'pointer';
+        div.textContent = m.label;
+        div.addEventListener('click', () => { m.action(); closeGlobalSearch(); });
+        box.appendChild(div);
     });
-    const ok = activeEditContext.onSave(values);
-    if (ok === false) return;
-    saveState();
-    renderAll();
-    closeEditItemModal();
-    showToast('Cambios guardados', 'success');
 }
 
-function openSnapshotsModal() {
-    document.getElementById('snapshots-modal').style.display = 'flex';
-    renderSnapshotsList();
-}
-
-function closeSnapshotsModal() {
-    document.getElementById('snapshots-modal').style.display = 'none';
-}
-
-function createManualSnapshot(labelPrefix = 'Snapshot') {
-    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    snaps.unshift({
-        id: generateId('snap'),
-        date: `${labelPrefix} · ${new Date().toLocaleString('es-ES')}`,
-        data: JSON.stringify(appState)
-    });
-    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps.slice(0, 12)));
-    renderSnapshotsList();
-    showToast('Snapshot local creado', 'success');
-}
-
-function restoreSnapshot(id) {
-    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    const found = snaps.find(s => s.id === id);
-    if (!found) return;
-    createManualSnapshot('Auto antes de restaurar');
-    appState = mergeState(cloneState(defaultState), JSON.parse(found.data));
-    saveState();
-    renderAll();
-    closeSnapshotsModal();
-    showToast('Snapshot restaurado', 'success');
-}
-
-function renderSnapshotsList() {
-    const container = document.getElementById('snapshots-list-container');
-    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    if (!snaps.length) {
-        container.innerHTML = `<div class="mono-muted">No hay snapshots guardados aún.</div>`;
-        return;
+function handleGlobalSearchKey(e) {
+    if (e.key === 'Escape') closeGlobalSearch();
+    if (e.key === 'Enter' && globalSearchMatches[0]) {
+        globalSearchMatches[0].action();
+        closeGlobalSearch();
     }
-    container.innerHTML = snaps.map(s => `
-        <div class="deadline-card-item">
-            <div class="deadline-card-top">
-                <span>📸 ${escapeHtml(s.date)}</span>
-                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot('${s.id}')">Restaurar</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function generateDailySummaryModal() {
-    const todayKey = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
-    const focusMins = appState.studyStats.dailyLog[todayKey] || 0;
-    const doneTasks = appState.tasks.filter(t => t.done).map(t => `- [x] ${t.text}`);
-    const pendingTasks = appState.tasks.filter(t => !t.done).map(t => `- [ ] ${t.text}`);
-
-    const summary = [
-        `# Resumen de Jornada — ${todayKey}`,
-        `- **Tiempo de foco hoy:** ${focusMins} min`,
-        `- **Tareas completadas:** ${doneTasks.length}`,
-        `- **Tareas pendientes:** ${pendingTasks.length}`,
-        `\n## Completadas`,
-        ...(doneTasks.length ? doneTasks : ['- Ninguna todavía']),
-        `\n## Pendientes`,
-        ...(pendingTasks.length ? pendingTasks : ['- ¡Todo al día!'])
-    ].join('\n');
-
-    document.getElementById('daily-summary-output').value = summary;
-    document.getElementById('daily-summary-modal').style.display = 'flex';
-}
-
-function closeDailySummaryModal() {
-    document.getElementById('daily-summary-modal').style.display = 'none';
 }
 
 function openShortcutsModal() {
@@ -3314,657 +3378,122 @@ function closeShortcutsModal() {
     document.getElementById('shortcuts-modal').style.display = 'none';
 }
 
-function closeAllOpenModals() {
-    [
-        'global-search-modal',
-        'schedule-modal',
-        'auth-modal',
-        'snapshots-modal',
-        'note-history-modal',
-        'edit-item-modal',
-        'daily-summary-modal',
-        'shortcuts-modal'
-    ].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
+function toggleWeatherBadge() {
+    state.ui.weatherEnabled = !state.ui.weatherEnabled;
+    const lbl = document.getElementById('weather-text');
+    if (lbl) lbl.textContent = state.ui.weatherEnabled ? 'Clima: Activo' : 'Clima: OFF';
+    saveState(false);
+}
+
+function requestDesktopNotifications() {
+    if (typeof Notification === 'undefined') {
+        showToast('Notificaciones no soportadas en este navegador', 'error');
+        return;
+    }
+    Notification.requestPermission().then(perm => {
+        showToast(perm === 'granted' ? 'Alertas activadas' : 'Permiso de alertas denegado');
     });
 }
 
-/* Exportar / Importar / Vaciar */
-function exportData() {
-    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `devworkspace-backup-${getMadridDateKey()}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function importData(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const parsed = JSON.parse(String(e.target?.result || '{}'));
-            createManualSnapshot('Auto antes de importar');
-            appState = mergeState(cloneState(defaultState), parsed);
-            saveState();
-            renderAll();
-            showToast('Backup importado correctamente', 'success');
-        } catch (_) {
-            showToast('Archivo JSON inválido', 'error');
-        } finally {
-            event.target.value = '';
-        }
-    };
-    reader.readAsText(file);
-}
-
-function resetWorkspacePrompt() {
-    if (!confirm('¿Seguro que quieres vaciar todo el workspace local?')) return;
-    createManualSnapshot('Auto antes de vaciar');
-    appState = cloneState(defaultState);
-    saveState();
-    renderAll();
-    showToast('Workspace restaurado a valores iniciales', 'info');
-}
-
-/* --------------------------------------------------------------------------
-   FIREBASE CLOUD SYNC OPCIONAL (INICIALIZACIÓN ÚNICA Y TIMESTAMPS)
-   -------------------------------------------------------------------------- */
-async function getFirebaseModules() {
-    if (!firebaseModulesPromise) {
-        firebaseModulesPromise = Promise.all([
-            import(`${FIREBASE_SDK_BASE}/firebase-app.js`),
-            import(`${FIREBASE_SDK_BASE}/firebase-auth.js`),
-            import(`${FIREBASE_SDK_BASE}/firebase-firestore.js`)
-        ]).then(([appMod, authMod, fsMod]) => ({
-            ...appMod,
-            ...authMod,
-            ...fsMod
-        }));
+function triggerPwaInstall() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt = null;
+    } else {
+        showToast('Usa "Instalar aplicación" en el menú de tu navegador');
     }
-    return firebaseModulesPromise;
-}
-
-async function initFirebaseIfConfigured() {
-    const cfg = window.DEVWORKSPACE_FIREBASE_CONFIG;
-    if (!cfg || !cfg.apiKey || cfg.apiKey.includes('TU_API_KEY')) return;
-    try {
-        const fb = await getFirebaseModules();
-        firebaseApp = fb.initializeApp(cfg);
-        firebaseAuth = fb.getAuth(firebaseApp);
-        firebaseDb = fb.getFirestore(firebaseApp);
-
-        fb.onAuthStateChanged(firebaseAuth, async user => {
-            currentCloudUser = user;
-            const loginBtn = document.getElementById('btn-cloud-login');
-            const widget = document.getElementById('user-profile-widget');
-
-            if (user) {
-                loginBtn?.classList.add('is-hidden');
-                widget?.classList.remove('is-hidden');
-                document.getElementById('user-name').textContent = user.email.split('@')[0];
-                await pullCloudState(user.uid);
-            } else {
-                loginBtn?.classList.remove('is-hidden');
-                widget?.classList.add('is-hidden');
-                pendingCloudUpload = false;
-            }
-        });
-    } catch (_) {
-        updateSyncStatus('error');
-    }
-}
-
-const scheduleCloudSync = createDebouncer(() => {
-    if (currentCloudUser) pushCloudState(currentCloudUser.uid);
-}, SYNC_DEBOUNCE_MS);
-
-function forceCloudSyncNow() {
-    if (!currentCloudUser) {
-        openAuthModal();
-        return;
-    }
-    scheduleCloudSync.cancel();
-    pushCloudState(currentCloudUser.uid);
-}
-
-async function pushCloudState(uid) {
-    if (!firebaseDb) return;
-    updateSyncStatus('saving');
-    try {
-        const { doc, setDoc } = await getFirebaseModules();
-        appState.meta = appState.meta || {};
-        if (!appState.meta.updatedAt) appState.meta.updatedAt = Date.now();
-        await setDoc(doc(firebaseDb, 'workspaces', uid), {
-            state: appState,
-            updatedAt: appState.meta.updatedAt
-        });
-        pendingCloudUpload = false;
-        lastCloudSyncTimestamp = Date.now();
-        updateSyncStatus('ok');
-    } catch (_) {
-        updateSyncStatus('error');
-    }
-}
-
-async function pullCloudState(uid) {
-    if (!firebaseDb) return;
-    updateSyncStatus('saving');
-    try {
-        const { doc, getDoc } = await getFirebaseModules();
-        const snap = await getDoc(doc(firebaseDb, 'workspaces', uid));
-        if (snap.exists() && snap.data().state) {
-            const remoteData = snap.data();
-            const remoteUpdatedAt = Number(remoteData.updatedAt || remoteData.state?.meta?.updatedAt || 0);
-            const localUpdatedAt = Number(appState.meta?.updatedAt || 0);
-
-            if (remoteUpdatedAt >= localUpdatedAt) {
-                isApplyingRemoteState = true;
-                try {
-                    appState = mergeState(cloneState(defaultState), remoteData.state);
-                    saveState({ skipTimestamp: true, skipCloud: true });
-                    renderAll();
-                } finally {
-                    isApplyingRemoteState = false;
-                }
-            } else {
-                await pushCloudState(uid);
-                return;
-            }
-        } else {
-            await pushCloudState(uid);
-            return;
-        }
-        pendingCloudUpload = false;
-        lastCloudSyncTimestamp = Date.now();
-        updateSyncStatus('ok');
-    } catch (_) {
-        updateSyncStatus('error');
-    }
-}
-
-function updateSyncStatus(status) {
-    const badge = document.getElementById('cloud-sync-indicator');
-    const lastEl = document.getElementById('cloud-last-sync');
-    if (badge) {
-        badge.className = 'sync-badge';
-        if (status === 'saving') {
-            badge.classList.add('sync-saving');
-            badge.textContent = 'Sincronizando...';
-        } else if (status === 'error') {
-            badge.classList.add('sync-error');
-            badge.textContent = 'Error Sync';
-        } else {
-            badge.textContent = 'Cloud OK';
-        }
-    }
-    if (lastEl) {
-        if (!navigator.onLine) {
-            lastEl.textContent = 'Sin conexión (cola local)';
-        } else if (status === 'saving' || pendingCloudUpload) {
-            lastEl.textContent = 'Pendiente de subir...';
-        } else if (lastCloudSyncTimestamp > 0) {
-            const timeStr = new Date(lastCloudSyncTimestamp).toLocaleTimeString('es-ES', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            lastEl.textContent = `Sync ${timeStr}`;
-        }
-    }
-}
-
-function openAuthModal() {
-    document.getElementById('auth-modal').style.display = 'flex';
-}
-
-function closeAuthModal() {
-    document.getElementById('auth-modal').style.display = 'none';
-}
-
-function continueAsGuest() {
-    closeAuthModal();
-    showToast('Trabajando en modo local', 'info');
-}
-
-function toggleAuthMode() {
-    isRegisterMode = !isRegisterMode;
-    document.getElementById('auth-main-btn').textContent = isRegisterMode ? '📝 Crear Cuenta' : '🔑 Iniciar Sesión';
-}
-
-async function handleEmailAuth() {
-    if (!firebaseAuth) return showToast('Configura tu firebaseConfig primero', 'error');
-    const email = document.getElementById('auth-email')?.value.trim();
-    const pass = document.getElementById('auth-password')?.value;
-    if (!email || !pass) return showToast('Introduce correo y contraseña', 'error');
-    try {
-        const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = await getFirebaseModules();
-        if (isRegisterMode) {
-            await createUserWithEmailAndPassword(firebaseAuth, email, pass);
-            showToast('Cuenta creada y conectada', 'success');
-        } else {
-            await signInWithEmailAndPassword(firebaseAuth, email, pass);
-            showToast('Sesión iniciada', 'success');
-        }
-        closeAuthModal();
-    } catch (err) {
-        showToast(`Error Auth: ${err.message}`, 'error');
-    }
-}
-
-async function sendPasswordReset() {
-    if (!firebaseAuth) return showToast('Firebase no configurado', 'error');
-    const email = document.getElementById('auth-email')?.value.trim();
-    if (!email) return showToast('Escribe tu correo electrónico arriba primero', 'error');
-    try {
-        const { sendPasswordResetEmail } = await getFirebaseModules();
-        await sendPasswordResetEmail(firebaseAuth, email);
-        showToast('Enlace de restablecimiento enviado a tu correo', 'success');
-    } catch (err) {
-        showToast(`Error: ${err.message}`, 'error');
-    }
-}
-
-async function logoutUser() {
-    if (!firebaseAuth) return;
-    const { signOut } = await getFirebaseModules();
-    await signOut(firebaseAuth);
-    showToast('Sesión cerrada', 'info');
-}
-
-/* PWA Install Prompt & Service Worker Update */
-window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    document.getElementById('app-install-button')?.classList.remove('is-hidden');
-});
-
-async function installApp() {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    document.getElementById('app-install-button')?.classList.add('is-hidden');
 }
 
 function applyServiceWorkerUpdate() {
-    if (waitingServiceWorker) {
-        waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+    if (pendingServiceWorker) {
+        pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+        window.location.reload();
     }
 }
 
-/* --------------------------------------------------------------------------
-   RENDERIZADO GLOBAL E INICIALIZACIÓN
-   -------------------------------------------------------------------------- */
 function renderAll() {
-    applyTheme(appState.theme);
-    applyDensityMode();
-    applyAllAppearance();
-    renderScheduleWidget();
+    populateSubjectSelects();
+    renderCatalogSubjects();
+    renderSchedule();
     renderDeliveries();
     renderTasks();
-    renderPomodoroTaskSelect();
-    updateStudyStats();
-    setNotesTab(currentNotesTab);
-
-    const stickyEl = document.getElementById('sticky-note-input');
-    if (stickyEl && document.activeElement !== stickyEl) {
-        stickyEl.value = appState.stickyNote || '';
-    }
-
-    const titleEl = document.getElementById('studio-project-title');
-    const htmlEl = document.getElementById('code-html');
-    const cssEl = document.getElementById('code-css');
-    const jsEl = document.getElementById('code-js');
-
-    if (titleEl && document.activeElement !== titleEl) titleEl.value = appState.studioCurrent.title || 'Mi Proyecto Web';
-    if (htmlEl && document.activeElement !== htmlEl) htmlEl.value = appState.studioCurrent.html || '';
-    if (cssEl && document.activeElement !== cssEl) cssEl.value = appState.studioCurrent.css || '';
-    if (jsEl && document.activeElement !== jsEl) jsEl.value = appState.studioCurrent.js || '';
-
-    renderStudioSavedProjects();
+    refreshPomodoroTaskSelector();
+    renderPomodoroStats();
+    updatePomodoroDisplay();
+    switchNoteTab(state.ui.noteTab || 'general');
+    syncStudioEditorsFromState();
+    renderSavedStudioProjects();
+    switchStudioTab(state.ui.studioActiveTab || 'html');
+    renderDbWorkspace();
     renderKanban();
     renderGrades();
     renderFlashcards();
     renderBugLogs();
-    renderDoubts();
-    renderTeamProjects();
+    renderClassDoubts();
+    renderProjects();
     renderServers();
-    renderInfraChangelog();
     renderSnippets();
     renderBookmarks();
-    updateChmodCalc();
-    explainCronExpr();
-    fetchLocalWeather();
-    switchWorkspace(appState.activeWorkspace || 'cockpit');
+    renderSnapshotsList();
+    renderGoogleFontFavorites();
+    renderCustomThemesList();
+    updateStorageQuotaBadge();
 }
 
-function updateConnectionStatus() {
-    const badge = document.getElementById('connection-status');
-    if (!badge) return;
-    const online = navigator.onLine;
-    badge.textContent = online ? '🟢 En línea' : '🟡 Sin conexión (Offline)';
-    badge.classList.toggle('connection-online', online);
-    badge.classList.toggle('connection-offline', !online);
-    if (online && currentCloudUser && pendingCloudUpload) {
-        pushCloudState(currentCloudUser.uid);
-    } else if (!online && currentCloudUser) {
-        updateSyncStatus('ok');
+function initApp() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            state = normalizeStateShape(JSON.parse(raw));
+        }
+    } catch (_) {
+        state = createDefaultState();
     }
-}
 
-/* --------------------------------------------------------------------------
-   EVENT LISTENERS GLOBALES
-   -------------------------------------------------------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
-    loadLocalState();
+    currentDeliveryFilter = state.ui.deliveryFilter || 'all';
+    applyAllVisualSettings();
     renderAll();
-    initKanbanDragAndDrop();
 
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./service-worker.js')
-            .then(reg => {
-                if (reg.waiting) {
-                    waitingServiceWorker = reg.waiting;
-                    document.getElementById('sw-update-banner')?.classList.remove('is-hidden');
-                }
-                reg.addEventListener('updatefound', () => {
-                    const newWorker = reg.installing;
-                    if (!newWorker) return;
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            waitingServiceWorker = newWorker;
-                            document.getElementById('sw-update-banner')?.classList.remove('is-hidden');
-                        }
-                    });
-                });
-            })
-            .catch(() => {});
-
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            refreshing = true;
-            window.location.reload();
-        });
-    }
-
+    updateClockDisplay();
     syncRealTimeNetwork();
-    setInterval(() => {
-        updateClockDisplay();
-        renderScheduleWidget();
-        checkDueDeliveryNotifications();
-    }, 1000);
+    if (clockTickInterval) clearInterval(clockTickInterval);
+    clockTickInterval = setInterval(updateClockDisplay, 1000);
 
-    /* Listeners en vivo de Scratchpad & Sticky */
-    document.getElementById('scratchpad')?.addEventListener('input', e => {
-        appState.notes[currentNotesTab] = e.target.value;
-        updateScratchpadMetrics();
-        saveState();
-    });
-
-    document.getElementById('sticky-note-input')?.addEventListener('input', e => {
-        appState.stickyNote = e.target.value;
-        saveState();
-    });
-
-    /* Listeners en vivo de Live Code Studio */
-    const scheduleStudioAutoRun = createDebouncer(() => {
-        if (document.getElementById('studio-autorun')?.checked) {
-            runStudioPreview();
-        }
-    }, 350);
-
-    ['code-html', 'code-css', 'code-js', 'studio-project-title'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', () => {
-            syncStudioStateFromInputs();
-            updateStudioEditorMetrics();
-            saveState();
-            scheduleStudioAutoRun();
-        });
-    });
-
-    /* Soporte de tecla Tab en editores de código */
-    ['code-html', 'code-css', 'code-js'].forEach(id => {
-        document.getElementById(id)?.addEventListener('keydown', e => {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                const el = e.target;
-                const start = el.selectionStart;
-                const end = el.selectionEnd;
-                el.value = el.value.substring(0, start) + '  ' + el.value.substring(end);
-                el.selectionStart = el.selectionEnd = start + 2;
-                syncStudioStateFromInputs();
-                saveState();
-            }
-        });
-    });
-
-    /* Mensajes de consola desde el iframe del Studio */
-    window.addEventListener('message', event => {
-        const iframe = document.getElementById('studio-preview-iframe');
-        if (!iframe || event.source !== iframe.contentWindow) return;
-        if (event.origin !== STUDIO_IFRAME_ORIGIN && event.origin !== window.location.origin) return;
-        if (event.data && event.data.source === 'devworkspace-studio') {
-            const level = ['log', 'warn', 'error'].includes(event.data.level) ? event.data.level : 'log';
-            const time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            studioConsoleLogs.push({ level, msg: event.data.msg, time });
-            renderStudioConsole();
+    window.addEventListener('message', ev => {
+        if (ev.data?.source === 'dw-studio-console') {
+            appendStudioConsoleLine(ev.data.level || 'log', ev.data.message || '');
         }
     });
 
-    /* Selector de tema */
-    document.getElementById('theme-select')?.addEventListener('change', e => applyTheme(e.target.value));
-
-    /* Atajos de teclado globales */
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') {
-            closeAllOpenModals();
-            return;
-        }
+    window.addEventListener('keydown', e => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
             e.preventDefault();
             openGlobalSearch();
-        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        } else if (e.altKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
             e.preventDefault();
-            switchWorkspace('cockpit');
-            document.getElementById('task-text')?.focus();
-        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-            e.preventDefault();
-            if (pomoInterval) stopPomodoro();
-            else startCustomPomodoro('focus');
-        } else if (e.altKey && e.key.toLowerCase() === 'z') {
-            e.preventDefault();
-            toggleZenMode();
-        } else if (e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
-            e.preventDefault();
-            const map = { '1': 'cockpit', '2': 'studio', '3': 'academy', '4': 'devlab', '5': 'fonts' };
-            switchWorkspace(map[e.key]);
-        } else if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-            openShortcutsModal();
+            switchWorkspace(ALLOWED_WORKSPACES[Number(e.key) - 1]);
         }
     });
 
-    window.addEventListener('online', updateConnectionStatus);
-    window.addEventListener('offline', updateConnectionStatus);
-    updateConnectionStatus();
+    window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        document.getElementById('btn-pwa-install')?.classList.remove('is-hidden');
+    });
 
-    initFirebaseIfConfigured();
-});
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            reg.addEventListener('updatefound', () => {
+                const nw = reg.installing;
+                nw?.addEventListener('statechange', () => {
+                    if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                        pendingServiceWorker = nw;
+                        document.getElementById('pwa-update-banner')?.classList.remove('is-hidden');
+                    }
+                });
+            });
+        }).catch(() => {});
+    }
+}
 
-/* Exponer API pública para manejadores inline del HTML */
-Object.assign(window, {
-    switchWorkspace,
-    applyWorkspacePreset,
-    toggleZenMode,
-    togglePresentationMode,
-    toggleDensityMode,
-    toggleWeatherWidget,
-    generateDailySummaryModal,
-    closeDailySummaryModal,
-    openGlobalSearch,
-    closeGlobalSearch,
-    filterGlobalSearch,
-    handleGlobalSearchKeydown,
-    openShortcutsModal,
-    closeShortcutsModal,
-    openSnapshotsModal,
-    closeSnapshotsModal,
-    createManualSnapshot,
-    restoreSnapshot,
-    syncRealTimeNetwork,
-    toggleScheduleViewMode,
-    openScheduleModal,
-    closeScheduleModal,
-    addScheduleClass,
-    deleteScheduleClass,
-    clearSchedule,
-    exportScheduleJson,
-    importScheduleJson,
-    toggleForm,
-    enableDeadlineNotifications,
-    setDeliveriesFilter,
-    addDelivery,
-    toggleDeliveryDone,
-    deleteDelivery,
-    editDeliveryPrompt,
-    exportTasksMarkdown,
-    setTaskFilter,
-    setTaskBlockFilter,
-    setTaskSort,
-    addTask,
-    toggleTaskDone,
-    deleteTask,
-    editTaskPrompt,
-    addTaskSubtask,
-    toggleTaskSubtask,
-    deleteTaskSubtask,
-    setPomodoroLinkedTask,
-    startCustomPomodoro,
-    stopPomodoro,
-    toggleNoiseGenerator,
-    handleAudioTypeChange,
-    updateAudioVolume,
-    toggleScratchpadPreview,
-    toggleScratchpadFind,
-    openNoteHistoryModal,
-    closeNoteHistoryModal,
-    saveNoteRevisionManual,
-    restoreNoteRevision,
-    setNotesTab,
-    wrapScratchpadSelection,
-    insertNoteTemplate,
-    insertNoteTimestamp,
-    insertNoteCodeBlock,
-    toolCopy,
-    toolDownload,
-    replaceInScratchpad,
-    copyStickyNote,
-    clearStickyNote,
-    loadStudioTemplate,
-    injectStudioCdn,
-    applyFontToStudioPreview,
-    runStudioPreview,
-    formatStudioCode,
-    saveStudioProject,
-    exportStudioSingleHtml,
-    importStudioHtmlFile,
-    toggleStudioFullscreen,
-    switchStudioEditorTab,
-    inspectStudioDomStructure,
-    setStudioViewport,
-    clearStudioConsole,
-    renderStudioConsole,
-    loadSavedStudioProject,
-    deleteSavedStudioProject,
-    toggleExamCramFilter,
-    addKanbanTask,
-    moveKanbanTask,
-    deleteKanbanTask,
-    handleKanbanDragStart,
-    handleKanbanDragEnd,
-    addGradeSubject,
-    addGradeItem,
-    deleteGradeItem,
-    deleteGradeSubject,
-    exportStudyHubMarkdown,
-    setStudyHubTab,
-    renderFlashcards,
-    addFlashcard,
-    flipCurrentFlashcard,
-    nextFlashcard,
-    markFlashcardStatus,
-    deleteCurrentFlashcard,
-    renderBugLogs,
-    addBugLog,
-    deleteBugLog,
-    addClassDoubt,
-    toggleDoubtResolved,
-    deleteClassDoubt,
-    calculateStudyPlan,
-    addTeamProject,
-    deleteTeamProject,
-    setToolboxTab,
-    tbFormatJson,
-    tbJsonToCsv,
-    tbCsvToJson,
-    tbFormatSql,
-    copyElementValue,
-    tbEncodeAction,
-    tbDecodeJwt,
-    tbComputeHashes,
-    runRegexTester,
-    runSimpleDiff,
-    calculateSubnet,
-    convertNumberBase,
-    updateChmodCalc,
-    copyChmodCmd,
-    explainCronExpr,
-    generateMockUsers,
-    generateUuidsAndDni,
-    generateSecurePassword,
-    loadBoilerplate,
-    renderServers,
-    addServer,
-    deleteServer,
-    exportServersJson,
-    copyTextToClipboard,
-    addInfraChangelog,
-    renderSnippets,
-    addCustomSnippet,
-    deleteCustomSnippet,
-    addBookmark,
-    deleteBookmark,
-    loadGoogleFontByName,
-    saveGoogleFontFavorite,
-    quickLoadGoogleFont,
-    removeGoogleFontFavorite,
-    updateFontPlaygroundStyle,
-    applyLoadedFontToUi,
-    applyLoadedFontToStudio,
-    updateAppearanceSettings,
-    previewCustomThemeColors,
-    activateCustomTheme,
-    exportCustomThemeJson,
-    importCustomThemeJson,
-    resetAppearanceDefaults,
-    openAuthModal,
-    closeAuthModal,
-    handleEmailAuth,
-    toggleAuthMode,
-    sendPasswordReset,
-    continueAsGuest,
-    logoutUser,
-    forceCloudSyncNow,
-    closeEditItemModal,
-    saveEditItemModal,
-    resetWorkspacePrompt,
-    exportData,
-    importData,
-    installApp,
-    applyServiceWorkerUpdate
-});
+window.addEventListener('DOMContentLoaded', initApp);
