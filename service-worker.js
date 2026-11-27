@@ -1,4 +1,4 @@
-const CACHE_NAME = 'devworkspace-v7-shell-v9';
+const CACHE_NAME = 'devworkspace-v7-shell-v7';
 const APP_SHELL = [
     './',
     './index.html',
@@ -36,10 +36,8 @@ self.addEventListener('message', event => {
 
 self.addEventListener('fetch', event => {
     const request = event.request;
-    if (request.method !== 'GET') return;
-
     const url = new URL(request.url);
-    if (url.origin !== self.location.origin) return;
+    if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
     if (request.mode === 'navigate') {
         event.respondWith(
@@ -59,97 +57,13 @@ self.addEventListener('fetch', event => {
     event.respondWith(
         caches.match(request).then(cached => {
             if (cached) return cached;
-            return fetch(request)
-                .then(response => {
-                    if (response && response.ok && response.type === 'basic') {
-                        const copy = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-                    }
-                    return response;
-                })
-                .catch(() => cached);
-        })
-    );
-});
-
-self.addEventListener('notificationclick', event => {
-    event.notification.close();
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
-            const existing = clients.find(client => 'focus' in client);
-            return existing ? existing.focus() : self.clients.openWindow('./');
-        })
-    );
-});const CACHE_NAME = 'devworkspace-v7-shell-v9';
-const APP_SHELL = [
-    './',
-    './index.html',
-    './style.css',
-    './app.js',
-    './core.js',
-    './manifest.json',
-    './icon.svg'
-];
-
-self.addEventListener('install', event => {
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(APP_SHELL))
-            .then(() => self.skipWaiting())
-    );
-});
-
-self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys()
-            .then(keys => Promise.all(
-                keys.filter(key => key.startsWith('devworkspace-') && key !== CACHE_NAME)
-                    .map(key => caches.delete(key))
-            ))
-            .then(() => self.clients.claim())
-    );
-});
-
-self.addEventListener('message', event => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
-    }
-});
-
-self.addEventListener('fetch', event => {
-    const request = event.request;
-    if (request.method !== 'GET') return;
-
-    const url = new URL(request.url);
-    if (url.origin !== self.location.origin) return;
-
-    if (request.mode === 'navigate') {
-        event.respondWith(
-            fetch(request)
-                .then(response => {
-                    if (response && response.ok) {
-                        const copy = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
-                    }
-                    return response;
-                })
-                .catch(async () => (await caches.match(request)) || caches.match('./index.html'))
-        );
-        return;
-    }
-
-    event.respondWith(
-        caches.match(request).then(cached => {
-            if (cached) return cached;
-            return fetch(request)
-                .then(response => {
-                    if (response && response.ok && response.type === 'basic') {
-                        const copy = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-                    }
-                    return response;
-                })
-                .catch(() => cached);
+            return fetch(request).then(response => {
+                if (response && response.ok && response.type === 'basic') {
+                    const copy = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+                }
+                return response;
+            });
         })
     );
 });

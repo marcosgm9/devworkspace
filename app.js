@@ -3,264 +3,178 @@ import {
     createDebouncer,
     getMadridDateKey,
     getMadridClock,
-    calculateSubnet,
+    calculateSubnet as computeSubnetInfo,
     getNextRepeatDate,
     normalizeExternalUrl,
-    parseBaseValue,
-    packDrivePayload,
-    unpackDrivePayload,
-    parseScheduleImportText
+    parseBaseValue
 } from './core.js';
 
-const STORAGE_KEY = 'devworkspace_v7_2_state';
-const SNAPSHOTS_KEY = 'devworkspace_v7_2_snapshots';
-const VAULT_SALT = 'devworkspace-v7-2-vault-guard';
-const DRIVE_FILE_NAME = 'devworkspace_vault.dwpk';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const DEFAULT_GOOGLE_CLIENT_ID = (window.DEVWORKSPACE_GOOGLE_CONFIG && window.DEVWORKSPACE_GOOGLE_CONFIG.clientId) || '';
+/* ==========================================================================
+   DEVWORKSPACE v7.1 - STUDIO EDITION ENGINE
+   Arquitectura modular, limpia y compatible con LocalStorage + Firebase
+   ========================================================================== */
 
-const DEFAULT_CUSTOM_COLORS = {
-    bg: '#050711',
-    card: '#0b111e',
-    border: '#1e293b',
-    text: '#f1f5f9',
-    cyan: '#00f0ff',
-    violet: '#b84dff'
-};
+const STORAGE_KEY = 'devworkspace_v7_state';
+const SNAPSHOTS_KEY = 'devworkspace_v7_snapshots';
+const CUSTOM_THEME_VARS = ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'];
+const STUDIO_IFRAME_ORIGIN = 'null';
+const SYNC_DEBOUNCE_MS = 1200;
+const FIREBASE_SDK_BASE = 'https://www.gstatic.com/firebasejs/10.12.2';
 
-const STUDIO_TEMPLATES = {
-    blank: {
-        title: 'HTML5 Base Limpio',
-        html: '<main class="box">\n  <h1>Hola Mundo</h1>\n  <p>Listo para probar código en vivo.</p>\n  <button id="btn">Probar</button>\n</main>',
-        css: 'body { font-family: system-ui, sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc; }\n.box { max-width: 640px; margin: 0 auto; }\nbutton { padding: 0.5rem 1rem; cursor: pointer; }',
-        js: 'document.getElementById("btn")?.addEventListener("click", () => {\n  console.log("Botón pulsado");\n});'
+/* --------------------------------------------------------------------------
+   ESTADO GLOBAL INICIAL
+   -------------------------------------------------------------------------- */
+const defaultState = {
+    meta: {
+        updatedAt: 0
     },
-    cybercard: {
-        title: 'Tarjeta Cyberpunk',
-        html: '<article class="cyber-card">\n  <span class="tag">SYS.ONLINE</span>\n  <h2>DevWorkspace Studio</h2>\n  <p>Entorno rápido para prototipos web y utilidades.</p>\n</article>',
-        css: 'body { display: grid; place-items: center; min-height: 100vh; margin: 0; background: #050711; font-family: system-ui, sans-serif; }\n.cyber-card { border: 1px solid #00f0ff; background: #0b111e; color: #f1f5f9; padding: 1.5rem; border-radius: 10px; max-width: 360px; box-shadow: 0 0 24px rgba(0,240,255,0.2); }\n.tag { color: #b84dff; font-family: monospace; font-size: 0.75rem; }',
-        js: 'console.log("Tarjeta cargada");'
+    activeWorkspace: 'cockpit',
+    density: 'airy',
+    theme: 'cyberpunk',
+    customTheme: {
+        name: 'Mi Tema',
+        bg: '#060813',
+        card: '#0d131f',
+        border: '#1e293b',
+        text: '#f1f5f9',
+        cyan: '#38bdf8',
+        violet: '#a855f7'
     },
-    flexgrid: {
-        title: 'Grid Layout',
-        html: '<div class="grid">\n  <div class="cell">Panel 1</div>\n  <div class="cell">Panel 2</div>\n  <div class="cell">Panel 3</div>\n  <div class="cell">Panel 4</div>\n</div>',
-        css: 'body { margin: 0; padding: 1rem; background: #0b111e; font-family: system-ui, sans-serif; }\n.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }\n.cell { background: #131d33; color: #e2e8f0; padding: 24px; border-radius: 8px; border: 1px solid #263554; text-align: center; }',
-        js: ''
+    appearance: {
+        fontSans: 'Inter',
+        fontMono: 'JetBrains Mono',
+        studioFont: '',
+        uiScale: '1',
+        favoriteFonts: ['Inter', 'JetBrains Mono', 'Fira Code', 'Space Grotesk', 'Orbitron']
     },
-    domlab: {
-        title: 'Práctica JS DOM',
-        html: '<div class="lab">\n  <input id="item-input" placeholder="Nuevo elemento...">\n  <button id="add-btn">Añadir</button>\n  <ul id="list"></ul>\n</div>',
-        css: 'body { font-family: system-ui, sans-serif; padding: 1.5rem; background: #0f172a; color: #f8fafc; }\ninput, button { padding: 0.45rem 0.7rem; }',
-        js: 'const input = document.getElementById("item-input");\nconst list = document.getElementById("list");\ndocument.getElementById("add-btn")?.addEventListener("click", () => {\n  const val = input.value.trim();\n  if (!val) return;\n  const li = document.createElement("li");\n  li.textContent = val;\n  list.appendChild(li);\n  input.value = "";\n});'
+    weather: {
+        enabled: false,
+        lat: 38.68,
+        lon: -6.41,
+        label: 'Almendralejo'
     },
-    python: {
-        title: 'Script Python 3',
-        html: '',
-        css: '',
-        js: '',
-        python: 'def saludar(nombre):\n    return f"Hola, {nombre}!"\n\nfor i in range(1, 4):\n    print(f"[{i}] {saludar(\'DAM\')}")'
-    },
-    java: {
-        title: 'Clase Java Main',
-        html: '',
-        css: '',
-        js: '',
-        java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("DevWorkspace Java listo");\n    }\n}'
-    }
-};
-
-const STUDIO_CDNS = {
-    tailwind: '<script src="https://cdn.tailwindcss.com"></script>',
-    bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">',
-    alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>',
-    chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-};
-
-function createDefaultState() {
-    return {
-        theme: 'cyberpunk',
-        uiScale: 1,
-        customColors: { ...DEFAULT_CUSTOM_COLORS },
-        customThemeName: 'Mi Tema',
-        customThemeFontUi: '',
-        customThemeFontMono: '',
-        savedCustomThemes: [],
-        googleFonts: {
-            loadedFont: 'JetBrains Mono',
-            favorites: ['JetBrains Mono', 'Inter', 'Fira Code', 'Space Grotesk', 'IBM Plex Mono'],
-            uiFont: '',
-            monoFont: '',
-            studioFont: ''
-        },
-        density: 'airy',
-        zenMode: false,
-        presentationMode: false,
-        workspacePreset: 'default',
-        activeWorkspace: 'cockpit',
-        hiddenCards: {},
-        weatherEnabled: false,
-        weatherData: null,
-        manualClock: { enabled: false, offsetMs: 0 },
-        scheduleViewMode: 'current',
-        schedule: [
-            { day: 1, start: '08:15', end: '09:10', subject: 'Programación', room: 'Aula 1', teacher: 'Prof. García' },
-            { day: 1, start: '09:10', end: '10:05', subject: 'Base de Datos', room: 'Aula 1', teacher: 'Prof. López' },
-            { day: 2, start: '08:15', end: '10:05', subject: 'Entornos de Desarrollo', room: 'Aula 2', teacher: 'Prof. Ruiz' }
-        ],
-        subjectsCatalog: [
-            { id: 'subj-prog', name: 'Programación', teacher: 'Prof. García', room: 'Aula 1' },
-            { id: 'subj-bd', name: 'Base de Datos', teacher: 'Prof. López', room: 'Aula 1' },
-            { id: 'subj-ed', name: 'Entornos de Desarrollo', teacher: 'Prof. Ruiz', room: 'Aula 2' }
-        ],
-        deliveries: [],
-        deliveryFilter: 'all',
-        examCramMode: false,
-        tasks: [],
-        taskFilter: 'all',
-        taskBlockFilter: 'all',
-        taskSort: 'created',
-        pomodoro: {
-            mode: 'focus',
-            focusMinutes: 25,
-            breakMinutes: 5,
-            secondsLeft: 25 * 60,
-            running: false,
-            linkedTaskId: '',
-            todayMinutes: 0,
-            totalMinutes: 0,
-            lastStudyDate: getMadridDateKey(),
-            streakDays: 0,
-            historyByDate: {}
-        },
-        focusAudio: {
-            playing: false,
-            volume: 25
-        },
-        notes: {
-            activeTab: 'general',
-            tabs: {
-                general: '',
-                comandos: '',
-                clases: ''
-            },
-            sticky: '',
-            stickyOpen: false,
-            revisions: []
-        },
-        studio: {
-            activeTab: 'html',
-            title: 'Proyecto sin título',
-            html: STUDIO_TEMPLATES.cybercard.html,
-            css: STUDIO_TEMPLATES.cybercard.css,
-            js: STUDIO_TEMPLATES.cybercard.js,
-            python: STUDIO_TEMPLATES.python.python,
-            java: STUDIO_TEMPLATES.java.java,
-            autoRun: true,
-            viewport: '100%',
-            savedProjects: []
-        },
-        database: {
-            activeTable: 'alumnos',
-            tables: {
-                alumnos: {
-                    columns: ['id', 'nombre', 'ciclo', 'nota'],
-                    rows: [
-                        { id: '1', nombre: 'Marcos', ciclo: 'DAM', nota: '9.2' },
-                        { id: '2', nombre: 'Lucía', ciclo: 'DAM', nota: '8.7' }
-                    ]
-                }
-            }
-        },
-        kanban: [],
-        grades: [],
-        flashcards: [],
-        flashcardIndex: 0,
-        flashcardFlipped: false,
-        bugLogs: [],
-        classDoubts: [],
-        projects: [],
-        servers: [],
-        snippets: [
-            { id: 'snp-1', title: 'Docker PS activos', tag: 'docker', code: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
-            { id: 'snp-2', title: 'Git estado corto', tag: 'git', code: 'git status -sb' }
-        ],
-        bookmarks: [
-            { id: 'bm-1', name: 'MDN Web Docs', url: 'https://developer.mozilla.org' },
-            { id: 'bm-2', name: 'GitHub', url: 'https://github.com' }
-        ],
-        drive: {
-            clientId: DEFAULT_GOOGLE_CLIENT_ID,
-            user: null,
-            fileId: '',
-            lastSync: ''
+    schedule: [],
+    deliveries: [],
+    tasks: [],
+    kanban: [
+        { id: 'kb-1', title: 'Configurar entornos y SDK', subject: 'DAM', status: 'done', priority: 'low', pomos: 1 },
+        { id: 'kb-2', title: 'Repasar Consultas SQL y Joins', subject: 'Bases de Datos', status: 'doing', priority: 'high', pomos: 3 },
+        { id: 'kb-3', title: 'Arquitectura REST & JSON', subject: 'Acceso a Datos', status: 'todo', priority: 'medium', pomos: 2 }
+    ],
+    grades: [
+        {
+            id: 'gr-1',
+            name: 'Acceso a Datos',
+            target: 5.0,
+            credits: 6,
+            items: [
+                { id: 'gi-1', title: 'Práctica Ficheros XML/JSON', score: 8.5, weight: 30 },
+                { id: 'gi-2', title: 'Examen Parcial 1', score: 7.0, weight: 40 }
+            ]
         }
-    };
-}
+    ],
+    flashcards: [
+        { id: 'fc-1', subject: 'Redes', question: '¿Qué puerto usa SSH por defecto y qué protocolo de transporte emplea?', answer: 'Puerto 22 sobre TCP.', mastered: false },
+        { id: 'fc-2', subject: 'Bases de Datos', question: '¿Qué significan las siglas ACID en transacciones?', answer: 'Atomicidad, Consistencia, Aislamiento y Durabilidad.', mastered: false }
+    ],
+    bugLogs: [],
+    doubts: [],
+    teamProjects: [],
+    notes: {
+        general: '# Bienvenido a DevWorkspace v7.1 Studio\n\n- Usa **Live Code Studio** para probar HTML, CSS y JS en vivo.\n- Personaliza fuentes desde **Fonts & Temas**.',
+        comandos: '# Comandos frecuentes\n\n```bash\ndocker ps -a\nsystemctl status nginx\n```',
+        clases: '# Apuntes de clase\n\n> Usa el botón **Preview MD** para visualizar tus notas formateadas.'
+    },
+    noteRevisions: {
+        general: [],
+        comandos: [],
+        clases: []
+    },
+    stickyNote: '',
+    servers: [],
+    infraChangelog: [],
+    customSnippets: [],
+    bookmarks: [
+        { id: 'bm-1', name: 'MDN Web Docs', url: 'https://developer.mozilla.org/es/' },
+        { id: 'bm-2', name: 'Google Fonts', url: 'https://fonts.google.com/' },
+        { id: 'bm-3', name: 'DevDocs', url: 'https://devdocs.io/' }
+    ],
+    studioCurrent: {
+        title: 'Mi Proyecto Web',
+        html: '<div class="hero-card">\n  <span class="tag">LIVE STUDIO v7.1</span>\n  <h1>Hola, DevWorkspace</h1>\n  <p>Edita el código HTML, CSS o JS a la izquierda y mira el resultado al instante.</p>\n  <button id="demo-btn">Probar Interacción</button>\n</div>',
+        css: '* { box-sizing: border-box; margin: 0; padding: 0; }\nbody {\n  min-height: 100vh;\n  display: grid;\n  place-items: center;\n  background: #060813;\n  color: #f1f5f9;\n  font-family: system-ui, sans-serif;\n  padding: 20px;\n}\n.hero-card {\n  background: #0d131f;\n  border: 1px solid #38bdf8;\n  border-radius: 14px;\n  padding: 28px;\n  max-width: 440px;\n  text-align: center;\n  box-shadow: 0 0 28px rgba(56, 189, 248, 0.22);\n}\n.tag {\n  display: inline-block;\n  font-size: 11px;\n  letter-spacing: 1px;\n  color: #38bdf8;\n  border: 1px solid rgba(56, 189, 248, 0.4);\n  padding: 3px 8px;\n  border-radius: 6px;\n  margin-bottom: 12px;\n}\nh1 { margin-bottom: 10px; font-size: 1.6rem; }\np { color: #94a3b8; line-height: 1.5; margin-bottom: 18px; }\nbutton {\n  background: #38bdf8;\n  color: #040711;\n  border: none;\n  padding: 10px 18px;\n  border-radius: 8px;\n  font-weight: 700;\n  cursor: pointer;\n}\nbutton:hover { opacity: 0.9; }',
+        js: 'const btn = document.getElementById("demo-btn");\nlet clicks = 0;\nbtn?.addEventListener("click", () => {\n  clicks++;\n  console.log(`Botón pulsado ${clicks} veces`);\n  btn.textContent = `Pulsado (${clicks})`;\n});'
+    },
+    studioProjects: [],
+    studyStats: {
+        totalMinutes: 0,
+        dailyLog: {}
+    }
+};
 
-let state = loadInitialState();
-let pomodoroInterval = null;
-let driveAccessToken = '';
-let driveTokenClient = null;
-let pendingDriveAction = null;
-let deferredPwaPrompt = null;
+let appState = cloneState(defaultState);
+
+/* Variables de runtime (no persistentes) */
+let currentTaskFilter = 'all';
+let currentTaskBlockFilter = 'all';
+let currentTaskSort = 'created';
+let currentDeliveriesFilter = 'all';
+let currentNotesTab = 'general';
+let isNotesPreviewMode = false;
+let scheduleShowTable = false;
+let examCramOnly = false;
+let currentFlashcardIndex = 0;
+let currentFlashcardFlipped = false;
+let linkedPomodoroTaskId = '';
+
+/* Reloj real y Pomodoro */
+let clockOffsetMs = 0;
+let pomoInterval = null;
+let pomoRemainingSec = 25 * 60;
+let pomoMode = 'focus';
+let pomoInitialMins = 25;
+
+/* Web Audio */
+let audioCtx = null;
+let audioMasterGain = null;
+let audioActiveNodes = [];
+let isAudioPlaying = false;
+
+/* Live Code Studio */
+let studioConsoleLogs = [];
+let currentStudioEditorTab = 'html';
+let lastPreviewedGoogleFont = 'JetBrains Mono';
+let draggedKanbanId = null;
+
+/* Firebase & PWA */
+let firebaseModulesPromise = null;
+let firebaseApp = null;
+let firebaseAuth = null;
+let firebaseDb = null;
+let currentCloudUser = null;
+let isRegisterMode = false;
+let deferredInstallPrompt = null;
 let waitingServiceWorker = null;
+let pendingCloudUpload = false;
+let lastCloudSyncTimestamp = 0;
+let isApplyingRemoteState = false;
 
-function loadInitialState() {
-    const base = createDefaultState();
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return base;
-        const parsed = JSON.parse(raw);
-        return mergeState(base, parsed);
-    } catch (_) {
-        return base;
+/* Undo y Edición */
+let lastUndoAction = null;
+let activeEditContext = null;
+
+/* --------------------------------------------------------------------------
+   UTILIDADES BASE, CODIFICACIÓN Y ALMACENAMIENTO
+   -------------------------------------------------------------------------- */
+function cloneState(obj) {
+    if (typeof structuredClone === 'function') {
+        return structuredClone(obj);
     }
+    return JSON.parse(JSON.stringify(obj));
 }
 
-const debouncedSave = createDebouncer(() => {
-    persistStateNow();
-}, 250);
-
-function persistStateNow() {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        updateStorageQuotaBadge();
-    } catch (err) {
-        console.error('Error guardando estado local:', err);
-        showToast('Error al guardar en almacenamiento local', 'error');
-    }
-}
-
-function saveState(immediate = false) {
-    if (immediate) {
-        debouncedSave.cancel();
-        persistStateNow();
-    } else {
-        debouncedSave();
-    }
-}
-
-function updateStorageQuotaBadge() {
-    const badge = document.getElementById('storage-quota-badge');
-    if (!badge) return;
-    const bytes = new Blob([JSON.stringify(state)]).size;
-    badge.textContent = `Vault: ${(bytes / 1024).toFixed(1)} KB`;
-}
-
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.remove();
-    }, 3400);
-}
-
-function escapeHtml(value) {
-    return String(value ?? '')
+function escapeHtml(str) {
+    return String(str ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -268,408 +182,251 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
-function toggleForm(id) {
-    const el = document.getElementById(id);
+function generateId(prefix = 'id') {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function utf8ToBase64(text) {
+    const bytes = new TextEncoder().encode(String(text));
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+function base64ToUtf8(b64) {
+    const binary = atob(String(b64).trim());
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+}
+
+function copyTextToClipboard(text, okMsg = 'Copiado al portapapeles') {
+    if (!navigator.clipboard) {
+        showToast('Portapapeles no disponible en este contexto', 'error');
+        return;
+    }
+    navigator.clipboard.writeText(String(text))
+        .then(() => showToast(okMsg, 'success'))
+        .catch(() => showToast('No se pudo copiar al portapapeles', 'error'));
+}
+
+function copyElementValue(elId) {
+    const el = document.getElementById(elId);
     if (!el) return;
-    el.classList.toggle('is-hidden');
+    const val = 'value' in el ? el.value : el.textContent;
+    copyTextToClipboard(val);
 }
 
-/* ==========================================================
-   GOOGLE DRIVE & VAULT (.DWPK)
-   ========================================================== */
-function setDriveSyncStatus(label, mode = 'ok') {
-    const badge = document.getElementById('cloud-sync-indicator');
-    const last = document.getElementById('cloud-last-sync');
-    if (badge) {
-        badge.textContent = label;
-        badge.classList.remove('sync-saving', 'sync-error');
-        if (mode === 'saving') badge.classList.add('sync-saving');
-        if (mode === 'error') badge.classList.add('sync-error');
-    }
-    if (last && state.drive.lastSync) {
-        last.textContent = `Sync: ${state.drive.lastSync}`;
-    }
-}
+function showToast(message, type = 'info', actionLabel = '', onAction = null) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
 
-function renderDriveProfileUI() {
-    const widget = document.getElementById('user-profile-widget');
-    const loginBtn = document.getElementById('btn-cloud-login');
-    const userName = document.getElementById('user-name');
-    const clientIdInput = document.getElementById('gdrive-client-id');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type === 'success' ? 'toast-success' : type === 'error' ? 'toast-error' : ''}`;
 
-    if (clientIdInput && state.drive.clientId) {
-        clientIdInput.value = state.drive.clientId;
-    }
+    const textSpan = document.createElement('span');
+    textSpan.textContent = message;
+    toast.appendChild(textSpan);
 
-    if (state.drive.user) {
-        widget?.classList.remove('is-hidden');
-        loginBtn?.classList.add('is-hidden');
-        if (userName) userName.textContent = state.drive.user.name || state.drive.user.email || 'Conectado';
-        setDriveSyncStatus(driveAccessToken ? 'Drive Listo' : 'Sesión guardada', 'ok');
-    } else {
-        widget?.classList.add('is-hidden');
-        loginBtn?.classList.remove('is-hidden');
-    }
-}
-
-function openDriveModal() {
-    const modal = document.getElementById('drive-modal');
-    const input = document.getElementById('gdrive-client-id');
-    if (input) input.value = state.drive.clientId || DEFAULT_GOOGLE_CLIENT_ID || '';
-    if (modal) modal.style.display = 'flex';
-}
-
-function closeDriveModal() {
-    const modal = document.getElementById('drive-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function ensureGoogleTokenClient(clientId) {
-    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-        throw new Error('Google Identity Services aún no ha cargado');
-    }
-    driveTokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: DRIVE_SCOPE,
-        callback: async (resp) => {
-            if (resp.error) {
-                setDriveSyncStatus('Error OAuth', 'error');
-                showToast(`Error de autenticación: ${resp.error}`, 'error');
-                pendingDriveAction = null;
-                return;
-            }
-            driveAccessToken = resp.access_token;
-            try {
-                const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { Authorization: `Bearer ${driveAccessToken}` }
-                });
-                if (infoRes.ok) {
-                    const info = await infoRes.json();
-                    state.drive.user = { name: info.name || info.email || 'Usuario Google', email: info.email || '' };
-                } else {
-                    state.drive.user = { name: 'Usuario Google', email: '' };
-                }
-            } catch (_) {
-                state.drive.user = { name: 'Usuario Google', email: '' };
-            }
-            saveState(true);
-            renderDriveProfileUI();
-            showToast('Conectado a Google Drive', 'success');
-
-            const action = pendingDriveAction;
-            pendingDriveAction = null;
-            if (action === 'push') {
-                await forceDriveSyncNow();
-            } else if (action === 'pull') {
-                await pullFromGoogleDrive(true);
-            }
-        }
-    });
-}
-
-function connectGoogleDrive(afterAction = null) {
-    const input = document.getElementById('gdrive-client-id');
-    const clientId = (input?.value || state.drive.clientId || DEFAULT_GOOGLE_CLIENT_ID || '').trim();
-    if (!clientId) {
-        showToast('Introduce un Google OAuth Client ID válido', 'error');
-        return;
-    }
-    state.drive.clientId = clientId;
-    saveState(true);
-
-    try {
-        pendingDriveAction = afterAction;
-        ensureGoogleTokenClient(clientId);
-        driveTokenClient.requestAccessToken({ prompt: driveAccessToken ? '' : 'consent' });
-    } catch (err) {
-        showToast(err.message || 'No se pudo iniciar Google Drive', 'error');
-    }
-}
-
-async function findDriveVaultFileId() {
-    const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)`, {
-        headers: { Authorization: `Bearer ${driveAccessToken}` }
-    });
-    if (!res.ok) {
-        if (res.status === 401) driveAccessToken = '';
-        throw new Error(`Error buscando archivo en Drive (${res.status})`);
-    }
-    const data = await res.json();
-    const fileId = data.files && data.files[0] ? data.files[0].id : '';
-    if (fileId) {
-        state.drive.fileId = fileId;
-        saveState(true);
-    }
-    return fileId;
-}
-
-async function forceDriveSyncNow() {
-    if (!driveAccessToken) {
-        connectGoogleDrive('push');
-        return;
-    }
-    try {
-        setDriveSyncStatus('Guardando...', 'saving');
-        saveState(true);
-        const packed = await packDrivePayload(state, VAULT_SALT);
-        const fileId = state.drive.fileId || await findDriveVaultFileId();
-
-        const boundary = '-------DevWorkspaceBoundary72';
-        const metadata = { name: DRIVE_FILE_NAME, mimeType: 'text/plain' };
-        const body =
-            `--${boundary}\r\n` +
-            `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
-            `${JSON.stringify(metadata)}\r\n` +
-            `--${boundary}\r\n` +
-            `Content-Type: text/plain; charset=UTF-8\r\n\r\n` +
-            `${packed}\r\n` +
-            `--${boundary}--`;
-
-        const url = fileId
-            ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-        const method = fileId ? 'PATCH' : 'POST';
-
-        const res = await fetch(url, {
-            method,
-            headers: {
-                Authorization: `Bearer ${driveAccessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            },
-            body
-        });
-
-        if (!res.ok) {
-            if (res.status === 401) driveAccessToken = '';
-            throw new Error(`Error al subir a Drive (${res.status})`);
-        }
-
-        const saved = await res.json();
-        if (saved.id) state.drive.fileId = saved.id;
-        state.drive.lastSync = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        saveState(true);
-        renderDriveProfileUI();
-        showToast('Copia guardada en Google Drive', 'success');
-    } catch (err) {
-        setDriveSyncStatus('Error Drive', 'error');
-        showToast(err.message || 'No se pudo guardar en Drive', 'error');
-    }
-}
-
-async function pullFromGoogleDrive(showFeedback = false) {
-    if (!driveAccessToken) {
-        connectGoogleDrive('pull');
-        return;
-    }
-    try {
-        setDriveSyncStatus('Importando...', 'saving');
-        const fileId = await findDriveVaultFileId();
-        if (!fileId) {
-            setDriveSyncStatus('Drive Vacío', 'ok');
-            if (showFeedback) showToast('No se encontró devworkspace_vault.dwpk en tu Drive', 'info');
-            return;
-        }
-
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-            headers: { Authorization: `Bearer ${driveAccessToken}` }
-        });
-        if (!res.ok) {
-            if (res.status === 401) driveAccessToken = '';
-            throw new Error(`Error descargando archivo de Drive (${res.status})`);
-        }
-
-        const packedText = await res.text();
-        const unpacked = await unpackDrivePayload(packedText, VAULT_SALT);
-        const keepDrive = {
-            clientId: state.drive.clientId,
-            user: state.drive.user,
-            fileId,
-            lastSync: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+    if (actionLabel && typeof onAction === 'function') {
+        const actionBtn = document.createElement('button');
+        actionBtn.type = 'button';
+        actionBtn.className = 'btn-cyan btn-sm';
+        actionBtn.textContent = actionLabel;
+        actionBtn.onclick = () => {
+            onAction();
+            toast.remove();
         };
-        state = mergeState(createDefaultState(), unpacked);
-        state.drive = keepDrive;
-        saveState(true);
+        toast.appendChild(actionBtn);
+    }
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 250);
+    }, actionLabel ? 5500 : 3200);
+}
+
+function registerUndo(label, restoreFn) {
+    lastUndoAction = { label, restoreFn };
+    showToast(label, 'info', '↩️ Deshacer', () => {
+        if (!lastUndoAction) return;
+        const fn = lastUndoAction.restoreFn;
+        lastUndoAction = null;
+        fn();
+        saveState();
         renderAll();
-        if (showFeedback) showToast('Datos importados desde Google Drive', 'success');
-    } catch (err) {
-        setDriveSyncStatus('Error Import', 'error');
-        if (showFeedback) showToast(err.message || 'Error al importar desde Drive', 'error');
+        showToast('Acción deshecha', 'success');
+    });
+}
+
+function toggleForm(formId) {
+    const el = document.getElementById(formId);
+    if (!el) return;
+    const isVisible = el.style.display === 'block';
+    el.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) {
+        const firstInput = el.querySelector('input, select, textarea');
+        if (firstInput) firstInput.focus();
     }
 }
 
-function logoutDriveUser() {
-    driveAccessToken = '';
-    state.drive.user = null;
-    saveState(true);
-    renderDriveProfileUI();
-    showToast('Sesión de Google Drive cerrada', 'info');
-}
-
-async function exportProtectedVaultFile() {
+function saveState(options = {}) {
+    const { skipTimestamp = false, skipCloud = false } = options;
     try {
-        saveState(true);
-        const packed = await packDrivePayload(state, VAULT_SALT);
-        const blob = new Blob([packed], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${DRIVE_FILE_NAME}_${getMadridDateKey()}.dwpk`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('Archivo .dwpk descargado', 'success');
-    } catch (err) {
-        showToast(`Error exportando .dwpk: ${err.message}`, 'error');
+        if (!skipTimestamp && !isApplyingRemoteState) {
+            appState.meta = appState.meta || {};
+            appState.meta.updatedAt = Date.now();
+        }
+        const serialized = JSON.stringify(appState);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        updateStorageQuotaBadge(serialized.length);
+        if (currentCloudUser && !skipCloud && !isApplyingRemoteState) {
+            pendingCloudUpload = true;
+            updateSyncStatus('saving');
+            scheduleCloudSync();
+        }
+    } catch (_) {
+        showToast('Error al guardar estado local (cuota llena)', 'error');
     }
 }
 
-async function importProtectedVaultFile(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+function loadLocalState() {
     try {
-        const text = await file.text();
-        const unpacked = await unpackDrivePayload(text, VAULT_SALT);
-        const driveMeta = { ...state.drive };
-        state = mergeState(createDefaultState(), unpacked);
-        state.drive = driveMeta;
-        saveState(true);
-        renderAll();
-        closeDriveModal();
-        showToast('Vault .dwpk importado correctamente', 'success');
-    } catch (err) {
-        showToast(err.message || 'Archivo .dwpk no válido', 'error');
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        appState = mergeState(cloneState(defaultState), parsed);
+        updateStorageQuotaBadge(raw.length);
+    } catch (_) {
+        appState = cloneState(defaultState);
     }
 }
 
-/* ==========================================================
-   WORKSPACES, PERFILES, TEMAS Y FUENTES
-   ========================================================== */
+function updateStorageQuotaBadge(bytesLen) {
+    const badge = document.getElementById('storage-quota-badge');
+    if (!badge) return;
+    const kb = (bytesLen / 1024).toFixed(1);
+    badge.textContent = `Storage: ${kb} KB`;
+}
+
+/* --------------------------------------------------------------------------
+   NAVEGACIÓN DE WORKSPACES Y PERFILES
+   -------------------------------------------------------------------------- */
 function switchWorkspace(wsName) {
-    state.activeWorkspace = wsName;
-    saveState();
-
+    appState.activeWorkspace = wsName;
+    document.querySelectorAll('.workspace-view').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.ws-tab').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.ws === wsName);
     });
-    document.querySelectorAll('.workspace-view').forEach(view => {
-        view.classList.toggle('active', view.id === `ws-${wsName}`);
-    });
+    const target = document.getElementById(`ws-${wsName}`);
+    if (target) target.classList.add('active');
 
     if (wsName === 'studio') {
-        renderStudioSavedList();
-        updateStudioMetrics();
-        if (state.studio.autoRun && ['html', 'css', 'js'].includes(state.studio.activeTab)) {
-            runStudioCode();
-        }
-    } else if (wsName === 'database') {
-        renderDatabaseWorkspace();
-    } else if (wsName === 'academy') {
-        renderAcademyWorkspace();
-    } else if (wsName === 'devlab') {
-        renderDevLabWorkspace();
-    } else if (wsName === 'fonts') {
-        renderFontsAndThemesWorkspace();
+        runStudioPreview();
+        updateStudioEditorMetrics();
     }
+    saveState({ skipTimestamp: true, skipCloud: true });
 }
 
 function applyWorkspacePreset(preset) {
-    state.workspacePreset = preset;
-    const cardMap = {
-        default: [],
-        today: ['card-deliveries'],
-        exam: ['card-tasks', 'card-notes'],
-        dev: ['card-schedule', 'card-deliveries'],
-        db: ['card-schedule', 'card-deliveries'],
-        sysadmin: ['card-deliveries', 'card-notes']
-    };
-    const hidden = cardMap[preset] || [];
-    state.hiddenCards = {};
-    hidden.forEach(id => { state.hiddenCards[id] = true; });
+    const allCardIds = [
+        'card-schedule', 'card-deliveries', 'card-tasks', 'card-pomodoro',
+        'card-notes', 'card-kanban', 'card-grades', 'card-study-hub',
+        'card-projects', 'card-dev-toolbox', 'card-servers', 'card-snippets', 'card-bookmarks'
+    ];
 
-    document.querySelectorAll('#ws-cockpit .card').forEach(card => {
-        card.classList.toggle('hidden-card', Boolean(state.hiddenCards[card.id]));
+    allCardIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('hidden-card');
     });
 
-    if (preset === 'dev') switchWorkspace('studio');
-    else if (preset === 'db') switchWorkspace('database');
-    else if (preset === 'sysadmin') switchWorkspace('devlab');
-    else switchWorkspace('cockpit');
-
-    saveState();
-    showToast(`Perfil aplicado: ${preset}`, 'info');
+    if (preset === 'today') {
+        switchWorkspace('cockpit');
+        ['card-notes'].forEach(id => document.getElementById(id)?.classList.add('hidden-card'));
+    } else if (preset === 'exam') {
+        switchWorkspace('academy');
+        ['card-projects'].forEach(id => document.getElementById(id)?.classList.add('hidden-card'));
+        examCramOnly = true;
+        renderKanban();
+    } else if (preset === 'dev') {
+        switchWorkspace('studio');
+    } else if (preset === 'sysadmin') {
+        switchWorkspace('devlab');
+    } else {
+        examCramOnly = false;
+        renderKanban();
+    }
+    showToast(`Perfil aplicado: ${preset.toUpperCase()}`, 'info');
 }
 
 function toggleZenMode() {
-    state.zenMode = !state.zenMode;
-    document.body.classList.toggle('zen-mode-active', state.zenMode);
-    document.getElementById('btn-zen-mode')?.classList.toggle('active', state.zenMode);
-    saveState();
+    document.body.classList.toggle('zen-mode-active');
+    const active = document.body.classList.contains('zen-mode-active');
+    document.getElementById('btn-zen-mode')?.classList.toggle('active', active);
+    if (active) switchWorkspace('cockpit');
 }
 
 function togglePresentationMode() {
-    state.presentationMode = !state.presentationMode;
-    document.body.classList.toggle('presentation-mode-active', state.presentationMode);
-    document.getElementById('btn-present-mode')?.classList.toggle('active', state.presentationMode);
-    saveState();
+    document.body.classList.toggle('presentation-mode-active');
+    const active = document.body.classList.contains('presentation-mode-active');
+    document.getElementById('btn-present-mode')?.classList.toggle('active', active);
+    showToast(active ? 'Modo Clase activado: datos sensibles difuminados' : 'Modo Clase desactivado');
 }
 
 function toggleDensityMode() {
-    state.density = state.density === 'airy' ? 'compact' : 'airy';
-    applyDensity();
+    appState.density = appState.density === 'compact' ? 'airy' : 'compact';
+    applyDensityMode();
     saveState();
 }
 
-function applyDensity() {
-    const isCompact = state.density === 'compact';
+function applyDensityMode() {
+    const isCompact = appState.density === 'compact';
     document.body.classList.toggle('density-compact', isCompact);
     const btn = document.getElementById('btn-density-mode');
     if (btn) btn.textContent = isCompact ? '📐 Compacto' : '📐 Aireado';
 }
 
+/* --------------------------------------------------------------------------
+   TEMAS Y GOOGLE FONTS DINÁMICOS
+   -------------------------------------------------------------------------- */
 function applyTheme(themeName) {
-    state.theme = themeName;
+    appState.theme = themeName;
     document.documentElement.setAttribute('data-theme', themeName);
     const select = document.getElementById('theme-select');
     if (select) select.value = themeName;
 
     if (themeName === 'custom') {
-        applyCustomThemeStyles(state.customColors, state.customThemeFontUi, state.customThemeFontMono);
+        applyCustomThemeVariables(appState.customTheme);
     } else {
-        clearCustomThemeInlineStyles();
-        applyFontSettings();
+        CUSTOM_THEME_VARS.forEach(v => document.documentElement.style.removeProperty(v));
     }
-}
-
-function handleThemeSelectChange(themeName) {
-    const savedPreset = state.savedCustomThemes.find(t => t.name === themeName);
-    if (savedPreset) {
-        state.customThemeName = savedPreset.name;
-        state.customColors = { ...DEFAULT_CUSTOM_COLORS, ...savedPreset.colors };
-        state.customThemeFontUi = savedPreset.fontUi || '';
-        state.customThemeFontMono = savedPreset.fontMono || '';
-        if (savedPreset.fontUi) state.googleFonts.uiFont = savedPreset.fontUi;
-        if (savedPreset.fontMono) state.googleFonts.monoFont = savedPreset.fontMono;
-        applyTheme('custom');
-        syncThemeInputsFromState();
-        saveState();
-        showToast(`Tema cargado: ${savedPreset.name}`, 'success');
-        return;
-    }
-
-    applyTheme(themeName);
     saveState();
 }
 
-function clearCustomThemeInlineStyles() {
-    const root = document.documentElement.style;
-    ['--bg-color', '--card-bg', '--card-border', '--text-main', '--accent-cyan', '--accent-violet'].forEach(prop => {
-        root.removeProperty(prop);
-    });
+function syncCustomThemeInputs() {
+    const c = appState.customTheme || defaultState.customTheme;
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    };
+    setVal('custom-theme-name', c.name || 'Mi Tema');
+    setVal('cp-bg', c.bg || '#060813');
+    setVal('cp-card', c.card || '#0d131f');
+    setVal('cp-border', c.border || '#1e293b');
+    setVal('cp-text', c.text || '#f1f5f9');
+    setVal('cp-cyan', c.cyan || '#38bdf8');
+    setVal('cp-violet', c.violet || '#a855f7');
 }
 
-function applyCustomThemeStyles(colors, fontUi = '', fontMono = '') {
-    const c = { ...DEFAULT_CUSTOM_COLORS, ...(colors || {}) };
+function applyCustomThemeVariables(c) {
+    if (!c) return;
     const root = document.documentElement.style;
     root.setProperty('--bg-color', c.bg);
     root.setProperty('--card-bg', c.card);
@@ -677,287 +434,97 @@ function applyCustomThemeStyles(colors, fontUi = '', fontMono = '') {
     root.setProperty('--text-main', c.text);
     root.setProperty('--accent-cyan', c.cyan);
     root.setProperty('--accent-violet', c.violet);
-
-    if (fontUi) {
-        ensureGoogleFontLoaded(fontUi);
-        root.setProperty('--font-sans', `'${fontUi}', system-ui, sans-serif`);
-    }
-    if (fontMono) {
-        ensureGoogleFontLoaded(fontMono);
-        root.setProperty('--font-mono', `'${fontMono}', monospace`);
-    }
-}
-
-function syncThemeInputsFromState() {
-    const nameEl = document.getElementById('custom-theme-name');
-    const uiFontEl = document.getElementById('custom-theme-font-ui');
-    const monoFontEl = document.getElementById('custom-theme-font-mono');
-    if (nameEl) nameEl.value = state.customThemeName || 'Mi Tema';
-    if (uiFontEl) uiFontEl.value = state.customThemeFontUi || '';
-    if (monoFontEl) monoFontEl.value = state.customThemeFontMono || '';
-
-    const map = {
-        'cp-bg': state.customColors.bg,
-        'cp-card': state.customColors.card,
-        'cp-border': state.customColors.border,
-        'cp-text': state.customColors.text,
-        'cp-cyan': state.customColors.cyan,
-        'cp-violet': state.customColors.violet
-    };
-    Object.entries(map).forEach(([id, val]) => {
-        const el = document.getElementById(id);
-        if (el && val) el.value = val;
-    });
 }
 
 function previewCustomThemeColors() {
-    const colors = {
-        bg: document.getElementById('cp-bg')?.value || DEFAULT_CUSTOM_COLORS.bg,
-        card: document.getElementById('cp-card')?.value || DEFAULT_CUSTOM_COLORS.card,
-        border: document.getElementById('cp-border')?.value || DEFAULT_CUSTOM_COLORS.border,
-        text: document.getElementById('cp-text')?.value || DEFAULT_CUSTOM_COLORS.text,
-        cyan: document.getElementById('cp-cyan')?.value || DEFAULT_CUSTOM_COLORS.cyan,
-        violet: document.getElementById('cp-violet')?.value || DEFAULT_CUSTOM_COLORS.violet
+    appState.customTheme = {
+        name: document.getElementById('custom-theme-name')?.value || 'Mi Tema',
+        bg: document.getElementById('cp-bg')?.value || '#060813',
+        card: document.getElementById('cp-card')?.value || '#0d131f',
+        border: document.getElementById('cp-border')?.value || '#1e293b',
+        text: document.getElementById('cp-text')?.value || '#f1f5f9',
+        cyan: document.getElementById('cp-cyan')?.value || '#38bdf8',
+        violet: document.getElementById('cp-violet')?.value || '#a855f7'
     };
-    state.customColors = colors;
-    if (state.theme === 'custom') {
-        applyCustomThemeStyles(colors, state.customThemeFontUi, state.customThemeFontMono);
+    if (appState.theme === 'custom') {
+        applyCustomThemeVariables(appState.customTheme);
     }
 }
 
 function activateCustomTheme() {
     previewCustomThemeColors();
-    state.customThemeName = (document.getElementById('custom-theme-name')?.value || 'Mi Tema').trim();
-    state.customThemeFontUi = (document.getElementById('custom-theme-font-ui')?.value || '').trim();
-    state.customThemeFontMono = (document.getElementById('custom-theme-font-mono')?.value || '').trim();
     applyTheme('custom');
-    saveState();
-    showToast('Tema personalizado activado', 'success');
-}
-
-function saveNewCustomThemePreset() {
-    previewCustomThemeColors();
-    const name = (document.getElementById('custom-theme-name')?.value || 'Mi Tema').trim() || 'Mi Tema';
-    const fontUi = (document.getElementById('custom-theme-font-ui')?.value || state.googleFonts.uiFont || '').trim();
-    const fontMono = (document.getElementById('custom-theme-font-mono')?.value || state.googleFonts.monoFont || '').trim();
-    state.customThemeName = name;
-    state.customThemeFontUi = fontUi;
-    state.customThemeFontMono = fontMono;
-
-    const preset = { name, colors: { ...state.customColors }, fontUi, fontMono };
-    const idx = state.savedCustomThemes.findIndex(t => t.name === name);
-    if (idx >= 0) state.savedCustomThemes[idx] = preset;
-    else state.savedCustomThemes.push(preset);
-
-    applyTheme('custom');
-    saveState();
-    renderThemeSelectOptions();
-    renderSavedCustomThemesList();
-    showToast(`Tema "${name}" guardado`, 'success');
-}
-
-function deleteCustomThemePreset(name) {
-    state.savedCustomThemes = state.savedCustomThemes.filter(t => t.name !== name);
-    if (state.theme === 'custom' && state.customThemeName === name) {
-        applyTheme('cyberpunk');
-    }
-    saveState();
-    renderThemeSelectOptions();
-    renderSavedCustomThemesList();
+    showToast(`Tema personalizado "${appState.customTheme.name}" activado`, 'success');
 }
 
 function exportCustomThemeJson() {
     previewCustomThemeColors();
-    const payload = {
-        name: (document.getElementById('custom-theme-name')?.value || state.customThemeName || 'Mi Tema').trim(),
-        colors: state.customColors,
-        fontUi: (document.getElementById('custom-theme-font-ui')?.value || state.customThemeFontUi || '').trim(),
-        fontMono: (document.getElementById('custom-theme-font-mono')?.value || state.customThemeFontMono || '').trim()
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(appState.customTheme, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-theme.json`;
+    a.download = `${(appState.customTheme.name || 'tema-devworkspace').toLowerCase().replace(/\s+/g, '-')}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function importCustomThemeJson(event) {
+function importCustomThemeJson(event) {
     const file = event.target.files?.[0];
-    event.target.value = '';
     if (!file) return;
-    try {
-        const data = JSON.parse(await file.text());
-        if (!data || !data.colors) throw new Error('JSON de tema inválido');
-        state.customThemeName = data.name || 'Tema Importado';
-        state.customColors = { ...DEFAULT_CUSTOM_COLORS, ...data.colors };
-        state.customThemeFontUi = data.fontUi || '';
-        state.customThemeFontMono = data.fontMono || '';
-        applyTheme('custom');
-        syncThemeInputsFromState();
-        saveNewCustomThemePreset();
-    } catch (err) {
-        showToast(err.message || 'Error importando tema', 'error');
-    }
-}
-
-function resetAppearanceDefaults() {
-    state.theme = 'cyberpunk';
-    state.uiScale = 1;
-    state.customColors = { ...DEFAULT_CUSTOM_COLORS };
-    state.customThemeFontUi = '';
-    state.customThemeFontMono = '';
-    state.googleFonts.uiFont = '';
-    state.googleFonts.monoFont = '';
-    state.googleFonts.studioFont = '';
-    document.documentElement.style.setProperty('--ui-scale', '1');
-    const scaleSelect = document.getElementById('ui-scale-select');
-    if (scaleSelect) scaleSelect.value = '1';
-    clearCustomThemeInlineStyles();
-    applyTheme('cyberpunk');
-    saveState();
-    renderStudioFontSelect();
-    showToast('Apariencia restaurada', 'info');
-}
-
-function updateAppearanceSettings() {
-    const scale = parseFloat(document.getElementById('ui-scale-select')?.value || '1');
-    state.uiScale = Number.isFinite(scale) ? scale : 1;
-    document.documentElement.style.setProperty('--ui-scale', String(state.uiScale));
-    saveState();
-}
-
-function renderThemeSelectOptions() {
-    const select = document.getElementById('theme-select');
-    if (!select) return;
-    const baseOptions = [
-        { value: 'cyberpunk', label: '⚡ Cyberpunk' },
-        { value: 'dracula', label: '🧛 Dracula' },
-        { value: 'valorant', label: '🎯 Valorant' },
-        { value: 'minecraft', label: '🟩 Minecraft' },
-        { value: 'retro', label: '📟 Retro CRT' },
-        { value: 'daylight', label: '☀️ Alto Contraste Día' },
-        { value: 'custom', label: '🎨 Personalizado' }
-    ];
-    const presetOptions = state.savedCustomThemes.map(t => ({
-        value: t.name,
-        label: `★ ${t.name}`
-    }));
-
-    select.innerHTML = [...baseOptions, ...presetOptions]
-        .map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)
-        .join('');
-
-    if (state.theme === 'custom' && state.savedCustomThemes.some(t => t.name === state.customThemeName)) {
-        select.value = state.customThemeName;
-    } else {
-        select.value = state.theme;
-    }
-}
-
-function renderSavedCustomThemesList() {
-    const list = document.getElementById('saved-custom-themes-list');
-    if (!list) return;
-    if (!state.savedCustomThemes.length) {
-        list.innerHTML = '<div class="mono-muted">No hay temas guardados todavía.</div>';
-        return;
-    }
-    list.innerHTML = state.savedCustomThemes.map(t => `
-        <div class="grade-item-row">
-            <span><strong>${escapeHtml(t.name)}</strong> <small>(${escapeHtml(t.fontUi || 'UI base')} / ${escapeHtml(t.fontMono || 'Mono base')})</small></span>
-            <div class="filter-pills-row">
-                <button type="button" class="btn-cyan btn-sm" onclick="handleThemeSelectChange(${JSON.stringify(t.name)})">Aplicar</button>
-                <button type="button" class="btn-icon" onclick="deleteCustomThemePreset(${JSON.stringify(t.name)})">🗑️</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function ensureGoogleFontLoaded(fontName) {
-    const clean = String(fontName || '').trim();
-    if (!clean) return;
-    const link = document.getElementById('dynamic-google-fonts');
-    if (!link) return;
-
-    const existingHref = link.getAttribute('href') || '';
-    const encoded = encodeURIComponent(clean).replace(/%20/g, '+');
-    const familySpec = `family=${encoded}:wght@400;500;600;700`;
-
-    if (!existingHref.includes(familySpec)) {
-        if (!existingHref) {
-            link.setAttribute('href', `https://fonts.googleapis.com/css2?${familySpec}&display=swap`);
-        } else {
-            link.setAttribute('href', `${existingHref}&${familySpec}`);
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const parsed = JSON.parse(String(e.target?.result || '{}'));
+            appState.customTheme = mergeState(cloneState(defaultState.customTheme), parsed);
+            syncCustomThemeInputs();
+            applyTheme('custom');
+            showToast(`Tema "${appState.customTheme.name}" importado`, 'success');
+        } catch (_) {
+            showToast('Archivo de tema JSON inválido', 'error');
+        } finally {
+            event.target.value = '';
         }
-    }
+    };
+    reader.readAsText(file);
 }
 
-function applyFontSettings() {
-    const root = document.documentElement.style;
-    if (state.googleFonts.uiFont) {
-        ensureGoogleFontLoaded(state.googleFonts.uiFont);
-        root.setProperty('--font-sans', `'${state.googleFonts.uiFont}', system-ui, sans-serif`);
-    } else {
-        root.removeProperty('--font-sans');
-    }
-
-    if (state.googleFonts.monoFont) {
-        ensureGoogleFontLoaded(state.googleFonts.monoFont);
-        root.setProperty('--font-mono', `'${state.googleFonts.monoFont}', monospace`);
-    } else {
-        root.removeProperty('--font-mono');
-    }
-
-    if (state.googleFonts.studioFont) {
-        applyFontToStudioPreview(state.googleFonts.studioFont, false);
-    }
+function buildGoogleFontUrl(fontFamily) {
+    const encoded = encodeURIComponent(fontFamily.trim()).replace(/%20/g, '+');
+    return `https://fonts.googleapis.com/css2?family=${encoded}:wght@400;500;600;700&display=swap`;
 }
 
-function loadGoogleFontByName(presetName = '') {
+function injectGoogleFontStylesheet(fontFamily) {
+    if (!fontFamily) return;
+    const id = `gf-link-${fontFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = buildGoogleFontUrl(fontFamily);
+    document.head.appendChild(link);
+}
+
+function loadGoogleFontByName() {
     const input = document.getElementById('gf-input-name');
-    const name = (presetName || input?.value || '').trim();
-    if (!name) return;
-    ensureGoogleFontLoaded(name);
-    state.googleFonts.loadedFont = name;
-    if (input && !presetName) input.value = name;
-    saveState();
-    renderFontPlayground();
-    showToast(`Fuente cargada: ${name}`, 'success');
+    const name = input?.value.trim();
+    if (!name) return showToast('Escribe el nombre de una fuente de Google Fonts', 'error');
+    quickLoadGoogleFont(name);
 }
 
-function saveGoogleFontFavorite() {
-    const name = (state.googleFonts.loadedFont || document.getElementById('gf-input-name')?.value || '').trim();
-    if (!name) return;
-    ensureGoogleFontLoaded(name);
-    if (!state.googleFonts.favorites.includes(name)) {
-        state.googleFonts.favorites.push(name);
-    }
-    state.googleFonts.loadedFont = name;
-    saveState();
-    renderFontFavorites();
-    renderStudioFontSelect();
-    showToast(`"${name}" añadida a favoritos`, 'success');
-}
+function quickLoadGoogleFont(fontName) {
+    injectGoogleFontStylesheet(fontName);
+    lastPreviewedGoogleFont = fontName;
+    const input = document.getElementById('gf-input-name');
+    if (input) input.value = fontName;
 
-function renderFontFavorites() {
-    const box = document.getElementById('gf-favorites-list');
-    if (!box) return;
-    box.innerHTML = state.googleFonts.favorites.map(font => `
-        <button type="button" class="pill-btn ${state.googleFonts.loadedFont === font ? 'active' : ''}" onclick="loadGoogleFontByName(${JSON.stringify(font)})">
-            ${escapeHtml(font)}
-        </button>
-    `).join('');
-}
-
-function renderFontPlayground() {
-    const font = state.googleFonts.loadedFont || 'JetBrains Mono';
-    ensureGoogleFontLoaded(font);
     const label = document.getElementById('gf-active-preview-label');
+    if (label) label.textContent = `Vista previa: ${fontName}`;
+
     const sample = document.getElementById('gf-preview-sample');
-    if (label) label.textContent = `Vista previa: ${font}`;
-    if (sample) sample.style.fontFamily = `'${font}', monospace`;
+    if (sample) sample.style.fontFamily = `'${fontName}', monospace`;
+
     updateFontPlaygroundStyle();
+    showToast(`Fuente "${fontName}" cargada`, 'success');
 }
 
 function updateFontPlaygroundStyle() {
@@ -966,251 +533,227 @@ function updateFontPlaygroundStyle() {
     if (sample) sample.style.fontSize = `${size}px`;
 }
 
-function applyLoadedFontToUi(target) {
-    const font = state.googleFonts.loadedFont;
-    if (!font) return;
-    if (target === 'sans') {
-        state.googleFonts.uiFont = font;
-        state.customThemeFontUi = font;
+function saveGoogleFontFavorite() {
+    const name = (document.getElementById('gf-input-name')?.value || lastPreviewedGoogleFont).trim();
+    if (!name) return;
+    if (!appState.appearance.favoriteFonts.includes(name)) {
+        appState.appearance.favoriteFonts.push(name);
+        saveState();
+        renderFavoriteFonts();
+        showToast(`"${name}" guardada en favoritas`, 'success');
     } else {
-        state.googleFonts.monoFont = font;
-        state.customThemeFontMono = font;
+        showToast('Esa fuente ya está en favoritas');
     }
-    applyFontSettings();
-    syncThemeInputsFromState();
+}
+
+function removeGoogleFontFavorite(fontName) {
+    appState.appearance.favoriteFonts = appState.appearance.favoriteFonts.filter(f => f !== fontName);
     saveState();
-    showToast(`Fuente "${font}" aplicada a ${target === 'sans' ? 'UI' : 'Código'}`, 'success');
+    renderFavoriteFonts();
+}
+
+function renderFavoriteFonts() {
+    const container = document.getElementById('gf-favorites-list');
+    if (!container) return;
+    container.innerHTML = appState.appearance.favoriteFonts.map(font => `
+        <span class="pill-btn">
+            <span onclick="quickLoadGoogleFont('${escapeHtml(font)}')">${escapeHtml(font)}</span>
+            <button type="button" class="btn-icon" onclick="removeGoogleFontFavorite('${escapeHtml(font)}')" title="Quitar">×</button>
+        </span>
+    `).join('');
+
+    const studioSelect = document.getElementById('studio-font-select');
+    if (studioSelect) {
+        const current = appState.appearance.studioFont || '';
+        studioSelect.innerHTML = `<option value="">🔤 Fuente Preview (Por defecto)</option>` +
+            appState.appearance.favoriteFonts.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
+    }
+}
+
+function applyLoadedFontToUi(targetType) {
+    const font = lastPreviewedGoogleFont;
+    if (!font) return;
+    injectGoogleFontStylesheet(font);
+    if (targetType === 'sans') {
+        appState.appearance.fontSans = font;
+        document.documentElement.style.setProperty('--font-sans', `'${font}', system-ui, sans-serif`);
+        showToast(`Fuente UI cambiada a "${font}"`, 'success');
+    } else {
+        appState.appearance.fontMono = font;
+        document.documentElement.style.setProperty('--font-mono', `'${font}', monospace`);
+        showToast(`Fuente Código/Terminal cambiada a "${font}"`, 'success');
+    }
+    saveState();
 }
 
 function applyLoadedFontToStudio() {
-    const font = state.googleFonts.loadedFont;
+    const font = lastPreviewedGoogleFont;
     if (!font) return;
-    state.googleFonts.studioFont = font;
+    appState.appearance.studioFont = font;
+    renderFavoriteFonts();
     saveState();
-    renderStudioFontSelect();
-    applyFontToStudioPreview(font);
-    showToast(`Fuente "${font}" aplicada al Studio`, 'success');
+    runStudioPreview();
+    showToast(`Fuente "${font}" aplicada en Live Code Studio`, 'success');
 }
 
-function renderStudioFontSelect() {
-    const sel = document.getElementById('studio-font-select');
-    if (!sel) return;
-    const options = [''].concat(state.googleFonts.favorites || []);
-    sel.innerHTML = options.map(f => `<option value="${escapeHtml(f)}">${f ? `🔤 ${escapeHtml(f)}` : '🔤 Fuente Preview (Por defecto)'}</option>`).join('');
-    sel.value = state.googleFonts.studioFont || '';
+function applyFontToStudioPreview(fontName) {
+    appState.appearance.studioFont = fontName;
+    saveState();
+    runStudioPreview();
 }
 
-function applyFontToStudioPreview(fontName, persist = true) {
-    state.googleFonts.studioFont = fontName || '';
-    if (fontName) ensureGoogleFontLoaded(fontName);
-    const iframe = document.getElementById('studio-preview-iframe');
-    const runner = document.getElementById('studio-runner-output');
-    const fam = fontName ? `'${fontName}', system-ui, sans-serif` : '';
-    if (runner) runner.style.fontFamily = fam;
-    if (iframe && iframe.contentDocument && iframe.contentDocument.body) {
-        iframe.contentDocument.body.style.fontFamily = fam;
+function updateAppearanceSettings() {
+    const scale = document.getElementById('ui-scale-select')?.value || '1';
+    appState.appearance.uiScale = scale;
+    document.documentElement.style.setProperty('--ui-scale', scale);
+    saveState();
+}
+
+function applyAllAppearance() {
+    const { fontSans, fontMono, uiScale } = appState.appearance;
+    [fontSans, fontMono].forEach(font => {
+        if (font && font !== 'Inter' && font !== 'JetBrains Mono') {
+            injectGoogleFontStylesheet(font);
+        }
+    });
+    document.documentElement.style.setProperty('--font-sans', `'${fontSans}', system-ui, sans-serif`);
+    document.documentElement.style.setProperty('--font-mono', `'${fontMono}', monospace`);
+    document.documentElement.style.setProperty('--ui-scale', uiScale || '1');
+    const scaleSelect = document.getElementById('ui-scale-select');
+    if (scaleSelect) scaleSelect.value = uiScale || '1';
+    syncCustomThemeInputs();
+    renderFavoriteFonts();
+}
+
+function resetAppearanceDefaults() {
+    appState.appearance.fontSans = 'Inter';
+    appState.appearance.fontMono = 'JetBrains Mono';
+    appState.appearance.studioFont = '';
+    appState.appearance.uiScale = '1';
+    applyAllAppearance();
+    saveState();
+    showToast('Tipografía y escala base restauradas', 'info');
+}
+
+/* --------------------------------------------------------------------------
+   RELOJ EN TIEMPO REAL (MADRID) Y CLIMA OPCIONAL
+   -------------------------------------------------------------------------- */
+async function syncRealTimeNetwork() {
+    const statusEl = document.getElementById('net-status');
+    if (statusEl) statusEl.textContent = '🔄 Sincronizando...';
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    try {
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Europe/Madrid', {
+            cache: 'no-store',
+            signal: controller.signal
+        });
+        if (!res.ok) throw new Error('HTTP error');
+        const data = await res.json();
+        const serverMs = new Date(data.datetime).getTime();
+        clockOffsetMs = serverMs - Date.now();
+        if (statusEl) {
+            statusEl.textContent = '🟢 Hora Madrid Sync';
+            statusEl.style.color = 'var(--accent-green)';
+        }
+    } catch (_) {
+        clockOffsetMs = 0;
+        if (statusEl) {
+            statusEl.textContent = '🟡 Hora Sistema (Madrid)';
+            statusEl.style.color = 'var(--accent-yellow)';
+        }
+    } finally {
+        clearTimeout(timeoutId);
     }
-    if (persist) saveState();
+    updateClockDisplay();
 }
 
-function renderFontsAndThemesWorkspace() {
-    renderThemeSelectOptions();
-    renderSavedCustomThemesList();
-    renderFontFavorites();
-    renderFontPlayground();
-    syncThemeInputsFromState();
-}
-
-/* ==========================================================
-   RELOJ, CLIMA Y SNAPSHOTS
-   ========================================================== */
-function getNowDate() {
-    const base = new Date();
-    if (state.manualClock && state.manualClock.enabled) {
-        return new Date(base.getTime() + (state.manualClock.offsetMs || 0));
-    }
-    return base;
-}
-
-function updateClock() {
-    const now = getNowDate();
+function updateClockDisplay() {
+    const now = new Date(Date.now() + clockOffsetMs);
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
-    const netEl = document.getElementById('net-status');
 
     if (timeEl) {
-        timeEl.textContent = now.toLocaleTimeString('es-ES', { hour12: false });
+        timeEl.textContent = new Intl.DateTimeFormat('es-ES', {
+            timeZone: 'Europe/Madrid',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }).format(now);
     }
     if (dateEl) {
-        dateEl.textContent = now.toLocaleDateString('es-ES', {
+        dateEl.textContent = new Intl.DateTimeFormat('es-ES', {
+            timeZone: 'Europe/Madrid',
             weekday: 'short',
             day: '2-digit',
             month: 'short',
             year: 'numeric'
-        });
+        }).format(now);
     }
-    if (netEl) {
-        if (state.manualClock?.enabled) {
-            netEl.textContent = '🕒 Hora manual';
-        } else {
-            netEl.textContent = navigator.onLine ? '🟢 En línea' : '🟡 Sin red';
-        }
-    }
-
-    renderScheduleWidget();
 }
 
-function openClockModal() {
-    const now = getNowDate();
-    const dateInput = document.getElementById('manual-clock-date');
-    const timeInput = document.getElementById('manual-clock-time');
-    if (dateInput) dateInput.value = now.toISOString().slice(0, 10);
-    if (timeInput) timeInput.value = now.toTimeString().slice(0, 8);
-    const modal = document.getElementById('clock-modal');
-    if (modal) modal.style.display = 'flex';
-}
-
-function closeClockModal() {
-    const modal = document.getElementById('clock-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function applyManualClock() {
-    const d = document.getElementById('manual-clock-date')?.value;
-    const t = document.getElementById('manual-clock-time')?.value || '00:00:00';
-    if (!d) {
-        showToast('Selecciona una fecha válida', 'error');
-        return;
-    }
-    const target = new Date(`${d}T${t.length === 5 ? `${t}:00` : t}`);
-    if (!Number.isFinite(target.getTime())) {
-        showToast('Fecha u hora inválida', 'error');
-        return;
-    }
-    state.manualClock = {
-        enabled: true,
-        offsetMs: target.getTime() - Date.now()
-    };
-    saveState(true);
-    updateClock();
-    closeClockModal();
-    showToast('Hora manual aplicada', 'success');
-}
-
-function resetManualClockToAuto() {
-    state.manualClock = { enabled: false, offsetMs: 0 };
-    saveState(true);
-    updateClock();
-    showToast('Hora sincronizada automáticamente', 'info');
-}
-
-async function toggleWeatherBadge() {
-    state.weatherEnabled = !state.weatherEnabled;
-    const badgeText = document.getElementById('weather-text');
-    if (!state.weatherEnabled) {
-        if (badgeText) badgeText.textContent = 'Clima: OFF';
+function toggleWeatherWidget() {
+    appState.weather.enabled = !appState.weather.enabled;
+    if (appState.weather.enabled && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                appState.weather.lat = Number(pos.coords.latitude.toFixed(3));
+                appState.weather.lon = Number(pos.coords.longitude.toFixed(3));
+                appState.weather.label = 'Ubicación actual';
+                saveState();
+                fetchLocalWeather();
+            },
+            () => {
+                saveState();
+                fetchLocalWeather();
+            },
+            { timeout: 4000 }
+        );
+    } else {
         saveState();
+        fetchLocalWeather();
+    }
+}
+
+async function fetchLocalWeather() {
+    const textEl = document.getElementById('weather-text');
+    const btnEl = document.getElementById('weather-badge');
+    if (!textEl || !btnEl) return;
+
+    if (!appState.weather.enabled) {
+        textEl.textContent = 'Clima: OFF';
+        btnEl.classList.remove('active');
         return;
     }
 
-    if (badgeText) badgeText.textContent = 'Cargando...';
+    btnEl.classList.add('active');
+    textEl.textContent = 'Cargando...';
     try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=38.42&longitude=-6.31&current_weather=true');
-        if (!res.ok) throw new Error('Error consultando clima');
+        const { lat, lon, label } = appState.weather;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+        const res = await fetch(url);
         const data = await res.json();
-        const temp = data?.current_weather?.temperature;
-        state.weatherData = { temp };
-        if (badgeText) badgeText.textContent = `${temp ?? '--'}°C`;
-        saveState();
+        const temp = Math.round(data.current_weather.temperature);
+        const wind = Math.round(data.current_weather.windspeed);
+        textEl.textContent = `${label}: ${temp}°C · ${wind} km/h`;
     } catch (_) {
-        state.weatherEnabled = false;
-        if (badgeText) badgeText.textContent = 'Clima: N/D';
-        saveState();
-        showToast('No se pudo obtener el clima', 'error');
+        textEl.textContent = 'Clima: Sin red';
     }
 }
 
-function openSnapshotsModal() {
-    renderSnapshotsList();
-    const modal = document.getElementById('snapshots-modal');
-    if (modal) modal.style.display = 'flex';
-}
-
-function closeSnapshotsModal() {
-    const modal = document.getElementById('snapshots-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function getSnapshotsList() {
-    try {
-        return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    } catch (_) {
-        return [];
-    }
-}
-
-function createBackupSnapshot() {
-    const snaps = getSnapshotsList();
-    const snap = {
-        id: `snap-${Date.now()}`,
-        createdAt: new Date().toLocaleString('es-ES'),
-        data: JSON.parse(JSON.stringify(state))
-    };
-    snaps.unshift(snap);
-    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps.slice(0, 15)));
-    renderSnapshotsList();
-    showToast('Snapshot creado', 'success');
-}
-
-function restoreSnapshot(id) {
-    const snaps = getSnapshotsList();
-    const found = snaps.find(s => s.id === id);
-    if (!found) return;
-    state = mergeState(createDefaultState(), found.data);
-    saveState(true);
-    renderAll();
-    closeSnapshotsModal();
-    showToast('Snapshot restaurado', 'success');
-}
-
-function deleteSnapshot(id) {
-    const snaps = getSnapshotsList().filter(s => s.id !== id);
-    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps));
-    renderSnapshotsList();
-}
-
-function renderSnapshotsList() {
-    const list = document.getElementById('snapshots-list');
-    if (!list) return;
-    const snaps = getSnapshotsList();
-    if (!snaps.length) {
-        list.innerHTML = '<div class="mono-muted">No hay snapshots guardados.</div>';
-        return;
-    }
-    list.innerHTML = snaps.map(s => `
-        <div class="grade-item-row">
-            <span>📸 ${escapeHtml(s.createdAt)}</span>
-            <div class="filter-pills-row">
-                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot(${JSON.stringify(s.id)})">Restaurar</button>
-                <button type="button" class="btn-icon" onclick="deleteSnapshot(${JSON.stringify(s.id)})">🗑️</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-/* ==========================================================
+/* --------------------------------------------------------------------------
    HORARIO & CLASE ACTUAL
-   ========================================================== */
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+   -------------------------------------------------------------------------- */
+const DAYS_MAP = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-function timeToMinutes(hhmm) {
-    const [h, m] = String(hhmm || '00:00').split(':').map(Number);
-    return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+function parseMinutes(hhmm) {
+    const [h, m] = String(hhmm).split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
 }
 
 function toggleScheduleViewMode() {
-    state.scheduleViewMode = state.scheduleViewMode === 'current' ? 'table' : 'current';
-    saveState();
+    scheduleShowTable = !scheduleShowTable;
     renderScheduleWidget();
 }
 
@@ -1218,28 +761,27 @@ function renderScheduleWidget() {
     const container = document.getElementById('schedule-widget');
     if (!container) return;
 
-    const sorted = [...(state.schedule || [])].sort((a, b) =>
-        a.day !== b.day ? a.day - b.day : timeToMinutes(a.start) - timeToMinutes(b.start)
-    );
+    const now = new Date(Date.now() + clockOffsetMs);
+    const madridClock = getMadridClock(now);
+    const currentDay = madridClock.day;
+    const currentMins = madridClock.minutes;
 
-    if (state.scheduleViewMode === 'table') {
-        if (!sorted.length) {
-            container.innerHTML = '<div class="sch-detail">No hay clases configuradas. Pulsa "Configurar" para añadir.</div>';
+    if (scheduleShowTable) {
+        if (!appState.schedule.length) {
+            container.innerHTML = `<div class="mono-muted">No hay clases configuradas. Pulsa "Configurar" para añadir tu horario.</div>`;
             return;
         }
+        const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || parseMinutes(a.start) - parseMinutes(b.start));
         container.innerHTML = `
             <table class="sch-table">
-                <thead>
-                    <tr><th>Día</th><th>Hora</th><th>Asignatura</th><th>Aula</th><th>Profesor/a</th></tr>
-                </thead>
+                <thead><tr><th>Día</th><th>Hora</th><th>Asignatura</th><th>Aula</th></tr></thead>
                 <tbody>
-                    ${sorted.map(item => `
+                    ${sorted.map(c => `
                         <tr>
-                            <td>${escapeHtml(DAY_NAMES[item.day] || item.day)}</td>
-                            <td>${escapeHtml(item.start)} - ${escapeHtml(item.end)}</td>
-                            <td>${escapeHtml(item.subject)}</td>
-                            <td>${escapeHtml(item.room || '-')}</td>
-                            <td>${escapeHtml(item.teacher || '-')}</td>
+                            <td>${DAYS_MAP[c.day] || ''}</td>
+                            <td>${escapeHtml(c.start)} - ${escapeHtml(c.end)}</td>
+                            <td><strong>${escapeHtml(c.subject)}</strong></td>
+                            <td>${escapeHtml(c.room || '-')}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -1248,194 +790,189 @@ function renderScheduleWidget() {
         return;
     }
 
-    const now = getNowDate();
-    const currentDay = now.getDay();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const todayClasses = appState.schedule
+        .filter(c => Number(c.day) === currentDay)
+        .sort((a, b) => parseMinutes(a.start) - parseMinutes(b.start));
 
-    const todayClasses = sorted.filter(c => c.day === currentDay);
-    const activeClass = todayClasses.find(c =>
-        currentMin >= timeToMinutes(c.start) && currentMin < timeToMinutes(c.end)
-    );
-    const nextClass = todayClasses.find(c => timeToMinutes(c.start) > currentMin)
-        || sorted.find(c => c.day > currentDay)
-        || sorted[0];
-
-    if (activeClass) {
-        const startM = timeToMinutes(activeClass.start);
-        const endM = timeToMinutes(activeClass.end);
-        const pct = Math.max(0, Math.min(100, Math.round(((currentMin - startM) / Math.max(1, endM - startM)) * 100)));
-        const remMins = Math.max(0, endM - currentMin);
+    if (!todayClasses.length) {
         container.innerHTML = `
-            <div class="sch-status">🟢 <strong>${escapeHtml(activeClass.subject)}</strong> <span class="badge-version">${escapeHtml(activeClass.start)} - ${escapeHtml(activeClass.end)}</span></div>
-            <div class="sch-detail">Aula: ${escapeHtml(activeClass.room || 'N/D')} · Profesor/a: ${escapeHtml(activeClass.teacher || 'N/D')} · Restan ${remMins} min</div>
-            <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>
+            <div class="sch-status">🎉 Hoy (${DAYS_MAP[currentDay]}) no tienes clases programadas</div>
+            <div class="sch-detail">Puedes cambiar a vista "Tabla / Actual" o añadir asignaturas en Configurar.</div>
         `;
         return;
     }
 
-    if (nextClass) {
+    const activeClass = todayClasses.find(c => currentMins >= parseMinutes(c.start) && currentMins < parseMinutes(c.end));
+    const nextClass = todayClasses.find(c => parseMinutes(c.start) > currentMins);
+
+    if (activeClass) {
+        const s = parseMinutes(activeClass.start);
+        const e = parseMinutes(activeClass.end);
+        const pct = Math.min(100, Math.max(0, Math.round(((currentMins - s) / Math.max(1, e - s)) * 100)));
+        const left = e - currentMins;
         container.innerHTML = `
-            <div class="sch-status">⏭️ Próxima: <strong>${escapeHtml(nextClass.subject)}</strong></div>
-            <div class="sch-detail">${escapeHtml(DAY_NAMES[nextClass.day] || '')} · ${escapeHtml(nextClass.start)} - ${escapeHtml(nextClass.end)} · Aula: ${escapeHtml(nextClass.room || 'N/D')}</div>
+            <div class="sch-status">🟢 En clase: <strong>${escapeHtml(activeClass.subject)}</strong> <span class="badge-version">${escapeHtml(activeClass.room || 'Aula')}</span></div>
+            <div class="sch-detail">${escapeHtml(activeClass.start)} - ${escapeHtml(activeClass.end)} · Quedan ${left} min (${pct}%) ${nextClass ? `· Siguiente: ${escapeHtml(nextClass.subject)} (${escapeHtml(nextClass.start)})` : ''}</div>
+            <div class="sch-progress-track"><div class="sch-progress-fill" style="width:${pct}%"></div></div>
+        `;
+    } else if (nextClass) {
+        const wait = parseMinutes(nextClass.start) - currentMins;
+        container.innerHTML = `
+            <div class="sch-status">⏳ Próxima clase: <strong>${escapeHtml(nextClass.subject)}</strong> a las ${escapeHtml(nextClass.start)}</div>
+            <div class="sch-detail">Empieza en ${wait} min · Aula: ${escapeHtml(nextClass.room || '-')}</div>
         `;
     } else {
-        container.innerHTML = '<div class="sch-detail">Sin clases programadas en el horario.</div>';
+        container.innerHTML = `
+            <div class="sch-status">✅ Jornada lectiva de hoy completada</div>
+            <div class="sch-detail">Todas las clases del ${DAYS_MAP[currentDay]} han finalizado.</div>
+        `;
     }
 }
 
 function openScheduleModal() {
-    renderSubjectSelectTargets();
+    document.getElementById('schedule-modal').style.display = 'flex';
     renderScheduleEditorList();
-    const modal = document.getElementById('schedule-modal');
-    if (modal) modal.style.display = 'flex';
 }
 
 function closeScheduleModal() {
-    const modal = document.getElementById('schedule-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function autofillScheduleFromCatalog(subjectName) {
-    const found = (state.subjectsCatalog || []).find(s => s.name === subjectName);
-    if (!found) return;
-    const teacherInput = document.getElementById('sch-add-teacher');
-    const roomInput = document.getElementById('sch-add-room');
-    if (teacherInput && found.teacher) teacherInput.value = found.teacher;
-    if (roomInput && found.room) roomInput.value = found.room;
+    document.getElementById('schedule-modal').style.display = 'none';
 }
 
 function addScheduleClass() {
     const day = Number(document.getElementById('sch-add-day')?.value || 1);
-    const start = (document.getElementById('sch-add-start')?.value || '').trim();
-    const end = (document.getElementById('sch-add-end')?.value || '').trim();
-    const subject = (document.getElementById('sch-add-subject')?.value || '').trim();
-    const teacher = (document.getElementById('sch-add-teacher')?.value || '').trim();
-    const room = (document.getElementById('sch-add-room')?.value || '').trim();
+    const start = document.getElementById('sch-add-start')?.value || '';
+    const end = document.getElementById('sch-add-end')?.value || '';
+    const subject = document.getElementById('sch-add-subject')?.value.trim() || '';
+    const room = document.getElementById('sch-add-room')?.value.trim() || '';
 
-    if (!subject || !start || !end) {
-        showToast('Completa asignatura, hora de inicio y fin', 'error');
-        return;
+    if (!subject || !start || !end) return showToast('Completa asignatura y horas', 'error');
+    if (parseMinutes(end) <= parseMinutes(start)) {
+        return showToast('La hora de fin debe ser posterior a la de inicio', 'error');
     }
 
-    ensureSubjectInCatalog(subject, teacher, room);
-    state.schedule.push({ day, start, end, subject, teacher, room });
+    appState.schedule.push({ id: generateId('sch'), day, start, end, subject, room });
+    document.getElementById('sch-add-subject').value = '';
     saveState();
-    renderScheduleWidget();
     renderScheduleEditorList();
-    showToast('Clase añadida al horario', 'success');
+    renderScheduleWidget();
 }
 
-function deleteScheduleClass(index) {
-    state.schedule.splice(index, 1);
+function deleteScheduleClass(id) {
+    appState.schedule = appState.schedule.filter(c => c.id !== id);
     saveState();
-    renderScheduleWidget();
     renderScheduleEditorList();
+    renderScheduleWidget();
 }
 
 function clearSchedule() {
-    state.schedule = [];
+    const backup = [...appState.schedule];
+    appState.schedule = [];
     saveState();
-    renderScheduleWidget();
     renderScheduleEditorList();
-    showToast('Horario vaciado', 'info');
+    renderScheduleWidget();
+    registerUndo('Horario vaciado', () => {
+        appState.schedule = backup;
+    });
 }
 
-function importScheduleFromText() {
-    const raw = document.getElementById('sch-import-text')?.value || '';
-    const parsed = parseScheduleImportText(raw);
-    if (!parsed.length) {
-        showToast('No se reconocieron líneas válidas en el texto', 'error');
-        return;
-    }
-    parsed.forEach(row => {
-        ensureSubjectInCatalog(row.subject, row.teacher, row.room);
-        state.schedule.push(row);
-    });
-    saveState();
-    renderScheduleWidget();
-    renderScheduleEditorList();
-    showToast(`${parsed.length} clases importadas`, 'success');
+function exportScheduleJson() {
+    const blob = new Blob([JSON.stringify(appState.schedule, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'devworkspace-horario.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importScheduleJson(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const parsed = JSON.parse(String(e.target?.result || '[]'));
+            if (!Array.isArray(parsed)) throw new Error('Formato inválido');
+            appState.schedule = parsed.map(c => ({
+                id: c.id || generateId('sch'),
+                day: Number(c.day) || 1,
+                start: String(c.start || '08:30'),
+                end: String(c.end || '09:25'),
+                subject: String(c.subject || 'Asignatura'),
+                room: String(c.room || '')
+            }));
+            saveState();
+            renderScheduleEditorList();
+            renderScheduleWidget();
+            showToast('Horario importado correctamente', 'success');
+        } catch (_) {
+            showToast('Archivo de horario inválido', 'error');
+        } finally {
+            event.target.value = '';
+        }
+    };
+    reader.readAsText(file);
 }
 
 function renderScheduleEditorList() {
-    const list = document.getElementById('schedule-editor-list');
-    if (!list) return;
-    if (!state.schedule.length) {
-        list.innerHTML = '<div class="mono-muted">Sin clases registradas.</div>';
+    const container = document.getElementById('schedule-list-editor');
+    if (!container) return;
+    if (!appState.schedule.length) {
+        container.innerHTML = `<div class="mono-muted">Aún no has añadido clases.</div>`;
         return;
     }
-    list.innerHTML = state.schedule.map((item, idx) => `
-        <div class="grade-item-row">
-            <span><strong>${escapeHtml(DAY_NAMES[item.day] || item.day)}</strong> ${escapeHtml(item.start)}-${escapeHtml(item.end)} · ${escapeHtml(item.subject)} (${escapeHtml(item.room || '-')}, ${escapeHtml(item.teacher || '-')})</span>
-            <button type="button" class="btn-icon" onclick="deleteScheduleClass(${idx})">🗑️</button>
+    const sorted = [...appState.schedule].sort((a, b) => a.day - b.day || parseMinutes(a.start) - parseMinutes(b.start));
+    container.innerHTML = sorted.map(c => `
+        <div class="deadline-card-item">
+            <div class="deadline-card-top">
+                <span><strong>${DAYS_MAP[c.day]}</strong> · ${escapeHtml(c.start)}-${escapeHtml(c.end)} · <strong>${escapeHtml(c.subject)}</strong> (${escapeHtml(c.room || '-')})</span>
+                <button type="button" class="btn-icon" onclick="deleteScheduleClass('${c.id}')" title="Eliminar">🗑️</button>
+            </div>
         </div>
     `).join('');
 }
 
-/* ==========================================================
-   ENTREGAS Y EXÁMENES
-   ========================================================== */
-function setDeliveryFilter(filter) {
-    state.deliveryFilter = filter;
-    document.querySelectorAll('.delivery-filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.dfilter === filter);
+/* --------------------------------------------------------------------------
+   ENTREGAS & EXÁMENES + NOTIFICACIONES FIABLES
+   -------------------------------------------------------------------------- */
+function setDeliveriesFilter(filter) {
+    currentDeliveriesFilter = filter;
+    ['all', 'pending', 'soon', 'exam', 'practice'].forEach(f => {
+        document.getElementById(`deliv-filter-${f}`)?.classList.toggle('active', f === filter);
     });
-    saveState();
     renderDeliveries();
-}
-
-function toggleExamCramMode() {
-    state.examCramMode = !state.examCramMode;
-    document.getElementById('btn-exam-cram')?.classList.toggle('active', state.examCramMode);
-    saveState();
-    renderDeliveries();
-}
-
-function requestDesktopNotifications() {
-    if (!('Notification' in window)) {
-        showToast('Este navegador no soporta notificaciones', 'info');
-        return;
-    }
-    Notification.requestPermission().then(perm => {
-        showToast(perm === 'granted' ? 'Avisos activados' : 'Permiso de avisos denegado', perm === 'granted' ? 'success' : 'info');
-    });
 }
 
 function addDelivery() {
-    const title = (document.getElementById('del-title')?.value || '').trim();
-    const subject = (document.getElementById('del-subject')?.value || '').trim();
-    const type = document.getElementById('del-type')?.value || 'practica';
-    const dueDate = document.getElementById('del-date')?.value || getMadridDateKey();
-    const notes = (document.getElementById('del-notes')?.value || '').trim();
+    const title = document.getElementById('deliv-title')?.value.trim();
+    const subject = document.getElementById('deliv-subject')?.value.trim() || 'General';
+    const type = document.getElementById('deliv-type')?.value || 'Práctica';
+    const datetime = document.getElementById('deliv-datetime')?.value;
+    const alertMins = Number(document.getElementById('deliv-alert-mins')?.value || 0);
 
-    if (!title) {
-        showToast('Escribe un título para la entrega o examen', 'error');
-        return;
-    }
+    if (!title || !datetime) return showToast('Introduce título y fecha límite', 'error');
 
-    ensureSubjectInCatalog(subject);
-    state.deliveries.unshift({
-        id: `del-${Date.now()}`,
+    const item = {
+        id: generateId('deliv'),
         title,
         subject,
         type,
-        dueDate,
-        notes,
+        datetime,
+        alertMins,
+        notified: false,
         done: false
-    });
+    };
+    appState.deliveries.push(item);
 
-    const titleEl = document.getElementById('del-title');
-    const notesEl = document.getElementById('del-notes');
-    if (titleEl) titleEl.value = '';
-    if (notesEl) notesEl.value = '';
-    toggleForm('form-add-delivery');
+    document.getElementById('deliv-title').value = '';
     saveState();
     renderDeliveries();
+    checkDueDeliveryNotifications();
     showToast('Entrega añadida', 'success');
 }
 
 function toggleDeliveryDone(id) {
-    const item = state.deliveries.find(d => d.id === id);
+    const item = appState.deliveries.find(d => d.id === id);
     if (!item) return;
     item.done = !item.done;
     saveState();
@@ -1443,1876 +980,2615 @@ function toggleDeliveryDone(id) {
 }
 
 function deleteDelivery(id) {
-    state.deliveries = state.deliveries.filter(d => d.id !== id);
+    const index = appState.deliveries.findIndex(d => d.id === id);
+    if (index === -1) return;
+    const [removed] = appState.deliveries.splice(index, 1);
     saveState();
     renderDeliveries();
+    registerUndo(`Entrega "${removed.title}" eliminada`, () => {
+        appState.deliveries.splice(index, 0, removed);
+    });
+}
+
+function editDeliveryPrompt(id) {
+    const d = appState.deliveries.find(item => item.id === id);
+    if (!d) return;
+    openEditItemModal('Editar Entrega / Examen', [
+        { key: 'title', label: 'Título', type: 'text', value: d.title },
+        { key: 'subject', label: 'Módulo', type: 'text', value: d.subject },
+        {
+            key: 'type',
+            label: 'Tipo',
+            type: 'select',
+            value: d.type,
+            options: [
+                { value: 'Práctica', label: 'Práctica' },
+                { value: 'Examen', label: 'Examen' },
+                { value: 'Proyecto', label: 'Proyecto' }
+            ]
+        },
+        { key: 'datetime', label: 'Fecha y hora', type: 'datetime-local', value: d.datetime }
+    ], updated => {
+        if (!updated.title.trim() || !updated.datetime) {
+            showToast('Título y fecha son obligatorios', 'error');
+            return false;
+        }
+        d.title = updated.title.trim();
+        d.subject = updated.subject.trim() || 'General';
+        d.type = updated.type;
+        if (d.datetime !== updated.datetime) {
+            d.datetime = updated.datetime;
+            d.notified = false;
+        }
+        return true;
+    });
+}
+
+function enableDeadlineNotifications() {
+    if (!('Notification' in window)) return showToast('Tu navegador no soporta notificaciones', 'error');
+    Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+            showToast('Notificaciones de entregas activadas', 'success');
+            checkDueDeliveryNotifications();
+        } else {
+            showToast('Permiso de notificaciones denegado', 'error');
+        }
+    });
+}
+
+function checkDueDeliveryNotifications() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const now = Date.now() + clockOffsetMs;
+    let changed = false;
+
+    appState.deliveries.forEach(d => {
+        if (d.done || d.notified || !d.alertMins) return;
+        const target = new Date(d.datetime).getTime();
+        const triggerTime = target - d.alertMins * 60000;
+        if (now >= triggerTime && now <= target + 3600000) {
+            d.notified = true;
+            changed = true;
+            new Notification(`⏳ ${d.type}: ${d.title}`, {
+                body: `Módulo: ${d.subject} · Fecha límite próxima`
+            });
+        }
+    });
+
+    if (changed) saveState();
 }
 
 function renderDeliveries() {
-    const list = document.getElementById('deliveries-list');
-    if (!list) return;
+    const container = document.getElementById('deliveries-list');
+    if (!container) return;
 
-    const todayKey = getMadridDateKey();
-    const todayMs = new Date(`${todayKey}T00:00:00Z`).getTime();
+    const now = Date.now() + clockOffsetMs;
+    let list = [...appState.deliveries].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
-    const filtered = (state.deliveries || []).filter(item => {
-        const dueMs = item.dueDate ? new Date(`${item.dueDate}T00:00:00Z`).getTime() : todayMs;
-        const diffDays = (dueMs - todayMs) / (1000 * 60 * 60 * 24);
+    if (currentDeliveriesFilter === 'pending') list = list.filter(d => !d.done);
+    if (currentDeliveriesFilter === 'soon') list = list.filter(d => !d.done && (new Date(d.datetime) - now) <= 48 * 3600000);
+    if (currentDeliveriesFilter === 'exam') list = list.filter(d => d.type === 'Examen');
+    if (currentDeliveriesFilter === 'practice') list = list.filter(d => d.type === 'Práctica');
 
-        if (state.examCramMode && (item.done || diffDays > 7)) return false;
-        if (state.deliveryFilter === 'pending') return !item.done;
-        if (state.deliveryFilter === 'soon') return !item.done && diffDays <= 3;
-        if (state.deliveryFilter === 'exam') return item.type === 'examen';
-        if (state.deliveryFilter === 'practice') return item.type === 'practica' || item.type === 'entrega';
-        return true;
-    });
-
-    if (!filtered.length) {
-        list.innerHTML = '<div class="mono-muted">No hay entregas que coincidan con el filtro.</div>';
+    if (!list.length) {
+        container.innerHTML = `<div class="mono-muted">No hay entregas en esta vista.</div>`;
         return;
     }
 
-    list.innerHTML = filtered.map(item => `
-        <div class="delivery-item ${item.done ? 'is-done' : ''}">
-            <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleDeliveryDone(${JSON.stringify(item.id)})" aria-label="Marcar entrega completada">
-            <div class="delivery-body">
-                <div class="delivery-title">
-                    <span>${escapeHtml(item.title)}</span>
-                    <span class="delivery-badge">${escapeHtml(item.type)}</span>
-                    ${item.subject ? `<span class="badge-version">${escapeHtml(item.subject)}</span>` : ''}
-                </div>
-                <div class="delivery-meta">Fecha: ${escapeHtml(item.dueDate || 'Sin fecha')}${item.notes ? ` · ${escapeHtml(item.notes)}` : ''}</div>
-            </div>
-            <button type="button" class="btn-icon" onclick="deleteDelivery(${JSON.stringify(item.id)})">🗑️</button>
-        </div>
-    `).join('');
-}
+    container.innerHTML = list.map(d => {
+        const diffMs = new Date(d.datetime).getTime() - now;
+        const hours = Math.round(diffMs / 3600000);
+        let badgeClass = 'cd-ok';
+        let badgeText = hours >= 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : `${hours}h`;
 
-/* ==========================================================
-   TAREAS CON BLOQUES DE JORNADA
-   ========================================================== */
-function setTaskFilter(filter) {
-    state.taskFilter = filter;
-    document.querySelectorAll('.task-filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.filter === filter);
-    });
-    saveState();
-    renderTasks();
-}
-
-function setTaskBlockFilter(block) {
-    state.taskBlockFilter = block;
-    saveState();
-    renderTasks();
-}
-
-function setTaskSort(sort) {
-    state.taskSort = sort;
-    saveState();
-    renderTasks();
-}
-
-function addTask() {
-    const input = document.getElementById('task-input');
-    const text = (input?.value || '').trim();
-    if (!text) return;
-
-    const block = document.getElementById('task-block')?.value || 'afternoon';
-    const priority = document.getElementById('task-priority')?.value || 'medium';
-    const dueDate = document.getElementById('task-date')?.value || getMadridDateKey();
-    const repeat = document.getElementById('task-repeat')?.value || '';
-
-    state.tasks.unshift({
-        id: `tsk-${Date.now()}`,
-        text,
-        block,
-        priority,
-        dueDate,
-        repeat,
-        done: false,
-        subtasks: [],
-        createdAt: Date.now()
-    });
-
-    if (input) input.value = '';
-    saveState();
-    renderTasks();
-    renderPomodoroLinkedTasks();
-}
-
-function toggleTaskDone(id) {
-    const task = state.tasks.find(t => t.id === id);
-    if (!task) return;
-    task.done = !task.done;
-    if (task.done && task.repeat) {
-        try {
-            const nextDate = getNextRepeatDate(task.dueDate || getMadridDateKey(), task.repeat);
-            state.tasks.unshift({
-                ...task,
-                id: `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                dueDate: nextDate,
-                done: false,
-                subtasks: (task.subtasks || []).map(st => ({ ...st, done: false })),
-                createdAt: Date.now()
-            });
-        } catch (_) {}
-    }
-    saveState();
-    renderTasks();
-}
-
-function deleteTask(id) {
-    state.tasks = state.tasks.filter(t => t.id !== id);
-    saveState();
-    renderTasks();
-    renderPomodoroLinkedTasks();
-}
-
-function clearCompletedTasks() {
-    state.tasks = state.tasks.filter(t => !t.done);
-    saveState();
-    renderTasks();
-    renderPomodoroLinkedTasks();
-}
-
-function addSubtaskPrompt(taskId) {
-    const task = state.tasks.find(t => t.id === taskId);
-    if (!task) return;
-    const title = prompt('Nueva subtarea:');
-    if (!title || !title.trim()) return;
-    task.subtasks = task.subtasks || [];
-    task.subtasks.push({ id: `sub-${Date.now()}`, text: title.trim(), done: false });
-    saveState();
-    renderTasks();
-}
-
-function toggleSubtaskDone(taskId, subId) {
-    const task = state.tasks.find(t => t.id === taskId);
-    if (!task || !task.subtasks) return;
-    const sub = task.subtasks.find(s => s.id === subId);
-    if (!sub) return;
-    sub.done = !sub.done;
-    saveState();
-    renderTasks();
-}
-
-function renderTasks() {
-    const list = document.getElementById('tasks-list');
-    if (!list) return;
-
-    const todayKey = getMadridDateKey();
-    const blockLabels = { morning: '🌅 Mañana', afternoon: '☀️ Tarde', night: '🌙 Noche' };
-    const prioRank = { high: 0, medium: 1, low: 2 };
-    const blockRank = { morning: 0, afternoon: 1, night: 2 };
-
-    let filtered = (state.tasks || []).filter(t => {
-        if (state.taskBlockFilter !== 'all' && t.block !== state.taskBlockFilter) return false;
-        if (state.taskFilter === 'pending') return !t.done;
-        if (state.taskFilter === 'done') return t.done;
-        if (state.taskFilter === 'today') return t.dueDate === todayKey;
-        if (state.taskFilter === 'overdue') return !t.done && t.dueDate && t.dueDate < todayKey;
-        return true;
-    });
-
-    filtered = [...filtered].sort((a, b) => {
-        if (state.taskSort === 'priority') return (prioRank[a.priority] ?? 1) - (prioRank[b.priority] ?? 1);
-        if (state.taskSort === 'block') return (blockRank[a.block] ?? 1) - (blockRank[b.block] ?? 1);
-        if (state.taskSort === 'date') return String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'));
-        return (b.createdAt || 0) - (a.createdAt || 0);
-    });
-
-    if (!filtered.length) {
-        list.innerHTML = '<div class="mono-muted">No hay tareas en este filtro.</div>';
-        return;
-    }
-
-    list.innerHTML = filtered.map(task => {
-        const subsHtml = (task.subtasks || []).map(sub => `
-            <label class="subtask-row">
-                <input type="checkbox" ${sub.done ? 'checked' : ''} onchange="toggleSubtaskDone(${JSON.stringify(task.id)}, ${JSON.stringify(sub.id)})">
-                <span style="${sub.done ? 'text-decoration:line-through;opacity:0.65' : ''}">${escapeHtml(sub.text)}</span>
-            </label>
-        `).join('');
+        if (d.done) {
+            badgeClass = 'cd-done';
+            badgeText = 'Entregada';
+        } else if (diffMs < 0) {
+            badgeClass = 'cd-urgent';
+            badgeText = 'Vencida';
+        } else if (hours <= 48) {
+            badgeClass = 'cd-warn';
+        }
 
         return `
-            <div class="task-item ${task.done ? 'is-done' : ''}">
-                <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleTaskDone(${JSON.stringify(task.id)})" aria-label="Completar tarea">
-                <div class="task-body">
-                    <div class="task-text">${escapeHtml(task.text)}</div>
-                    <div class="task-meta">
-                        ${escapeHtml(blockLabels[task.block] || '☀️ Tarde')} · ${escapeHtml(task.dueDate || 'Sin fecha')} · Prioridad: ${escapeHtml(task.priority || 'media')}${task.repeat ? ` · 🔁 ${escapeHtml(task.repeat)}` : ''}
+            <div class="deadline-card-item">
+                <div class="deadline-card-top">
+                    <div>
+                        <span class="deadline-title">${escapeHtml(d.title)}</span>
+                        <div class="deadline-meta">
+                            <span>[${escapeHtml(d.type)}]</span>
+                            <span>${escapeHtml(d.subject)}</span>
+                            <span>· ${escapeHtml(d.datetime.replace('T', ' '))}</span>
+                        </div>
                     </div>
-                    ${subsHtml ? `<div class="subtasks-box">${subsHtml}</div>` : ''}
+                    <div class="filter-pills-row">
+                        <span class="countdown-badge ${badgeClass}">${badgeText}</span>
+                        <button type="button" class="btn-icon" onclick="editDeliveryPrompt('${d.id}')" title="Editar">✏️</button>
+                        <button type="button" class="btn-icon" onclick="toggleDeliveryDone('${d.id}')" title="Completar">${d.done ? '↩️' : '✅'}</button>
+                        <button type="button" class="btn-icon" onclick="deleteDelivery('${d.id}')" title="Eliminar">🗑️</button>
+                    </div>
                 </div>
-                <button type="button" class="btn-icon" onclick="addSubtaskPrompt(${JSON.stringify(task.id)})" title="Añadir subtarea">➕</button>
-                <button type="button" class="btn-icon" onclick="deleteTask(${JSON.stringify(task.id)})" title="Eliminar tarea">🗑️</button>
             </div>
         `;
     }).join('');
 }
 
-/* ==========================================================
-   POMODORO, AUDIO & MÉTRICAS
-   ========================================================== */
-function renderPomodoroLinkedTasks() {
-    const sel = document.getElementById('pomo-linked-task');
-    if (!sel) return;
-    const pending = (state.tasks || []).filter(t => !t.done);
-    sel.innerHTML = '<option value="">-- Vincular tarea (opcional) --</option>' +
-        pending.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.text)}</option>`).join('');
-    sel.value = state.pomodoro.linkedTaskId || '';
+/* --------------------------------------------------------------------------
+   TAREAS, SUBTAREAS Y BLOQUES DE JORNADA
+   -------------------------------------------------------------------------- */
+function setTaskFilter(filter) {
+    currentTaskFilter = filter;
+    ['all', 'pending', 'done', 'today', 'overdue'].forEach(f => {
+        document.getElementById(`filter-${f}`)?.classList.toggle('active', f === filter);
+    });
+    renderTasks();
+}
+
+function setTaskBlockFilter(block) {
+    currentTaskBlockFilter = block || 'all';
+    renderTasks();
+}
+
+function setTaskSort(sort) {
+    currentTaskSort = sort;
+    renderTasks();
+}
+
+function addTask() {
+    const textEl = document.getElementById('task-text');
+    const text = textEl?.value.trim();
+    if (!text) return;
+
+    const block = document.getElementById('task-block')?.value || 'afternoon';
+    const priority = document.getElementById('task-priority')?.value || 'medium';
+    const date = document.getElementById('task-date')?.value || '';
+    const repeat = document.getElementById('task-repeat')?.value || '';
+
+    appState.tasks.unshift({
+        id: generateId('task'),
+        text,
+        block,
+        priority,
+        date,
+        repeat,
+        done: false,
+        pomosSpent: 0,
+        subtasks: [],
+        createdAt: Date.now()
+    });
+
+    textEl.value = '';
+    saveState();
+    renderTasks();
+    renderPomodoroTaskSelect();
+    updateStudyStats();
+}
+
+function toggleTaskDone(id) {
+    const t = appState.tasks.find(item => item.id === id);
+    if (!t) return;
+    t.done = !t.done;
+
+    if (t.done && t.repeat) {
+        const baseDate = t.date || getMadridDateKey(new Date(Date.now() + clockOffsetMs));
+        let nextDate = '';
+        try {
+            nextDate = getNextRepeatDate(baseDate, t.repeat);
+        } catch (error) {
+            if (!(error instanceof TypeError)) throw error;
+        }
+        if (nextDate) {
+            appState.tasks.unshift({
+                ...t,
+                id: generateId('task'),
+                done: false,
+                pomosSpent: 0,
+                date: nextDate,
+                subtasks: (t.subtasks || []).map(st => ({ ...st, done: false })),
+                createdAt: Date.now()
+            });
+            showToast(`Siguiente repetición programada para ${nextDate}`, 'info');
+        }
+    }
+    saveState();
+    renderTasks();
+    renderPomodoroTaskSelect();
+    updateStudyStats();
+}
+
+function deleteTask(id) {
+    const index = appState.tasks.findIndex(t => t.id === id);
+    if (index === -1) return;
+    const [removed] = appState.tasks.splice(index, 1);
+    if (linkedPomodoroTaskId === id) linkedPomodoroTaskId = '';
+    saveState();
+    renderTasks();
+    renderPomodoroTaskSelect();
+    updateStudyStats();
+    registerUndo(`Tarea "${removed.text}" eliminada`, () => {
+        appState.tasks.splice(index, 0, removed);
+    });
+}
+
+function editTaskPrompt(id) {
+    const t = appState.tasks.find(item => item.id === id);
+    if (!t) return;
+    openEditItemModal('Editar Tarea', [
+        { key: 'text', label: 'Descripción', type: 'text', value: t.text },
+        {
+            key: 'block',
+            label: 'Bloque horario',
+            type: 'select',
+            value: t.block || 'afternoon',
+            options: [
+                { value: 'morning', label: '🌅 Mañana' },
+                { value: 'afternoon', label: '☀️ Tarde' },
+                { value: 'night', label: '🌙 Noche' }
+            ]
+        },
+        {
+            key: 'priority',
+            label: 'Prioridad',
+            type: 'select',
+            value: t.priority || 'medium',
+            options: [
+                { value: 'high', label: '🔴 Alta' },
+                { value: 'medium', label: '🟠 Media' },
+                { value: 'low', label: '🔵 Baja' }
+            ]
+        },
+        { key: 'date', label: 'Fecha límite', type: 'date', value: t.date || '' },
+        {
+            key: 'repeat',
+            label: 'Repetición',
+            type: 'select',
+            value: t.repeat || '',
+            options: [
+                { value: '', label: 'Sin repetición' },
+                { value: 'daily', label: 'Cada día' },
+                { value: 'weekly', label: 'Cada semana' },
+                { value: 'monthly', label: 'Cada mes' }
+            ]
+        }
+    ], updated => {
+        if (!updated.text.trim()) {
+            showToast('La descripción no puede estar vacía', 'error');
+            return false;
+        }
+        t.text = updated.text.trim();
+        t.block = updated.block;
+        t.priority = updated.priority;
+        t.date = updated.date;
+        t.repeat = updated.repeat;
+        return true;
+    });
+}
+
+function addTaskSubtask(taskId) {
+    const task = appState.tasks.find(item => item.id === taskId);
+    const input = document.getElementById(`subtask-input-${taskId}`);
+    const text = input?.value.trim();
+    if (!task || !text) return;
+
+    task.subtasks = task.subtasks || [];
+    task.subtasks.push({ id: generateId('sub'), text, done: false });
+    saveState();
+    renderTasks();
+}
+
+function toggleTaskSubtask(taskId, subtaskId) {
+    const task = appState.tasks.find(item => item.id === taskId);
+    const subtask = task?.subtasks?.find(item => item.id === subtaskId);
+    if (!subtask) return;
+
+    subtask.done = !subtask.done;
+    saveState();
+    renderTasks();
+}
+
+function deleteTaskSubtask(taskId, subtaskId) {
+    const task = appState.tasks.find(item => item.id === taskId);
+    if (!task?.subtasks) return;
+
+    task.subtasks = task.subtasks.filter(item => item.id !== subtaskId);
+    saveState();
+    renderTasks();
+}
+
+function renderTasks() {
+    const listEl = document.getElementById('tasks-list');
+    if (!listEl) return;
+
+    const todayStr = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
+    let tasks = [...appState.tasks];
+
+    if (currentTaskFilter === 'pending') tasks = tasks.filter(t => !t.done);
+    if (currentTaskFilter === 'done') tasks = tasks.filter(t => t.done);
+    if (currentTaskFilter === 'today') tasks = tasks.filter(t => t.date === todayStr);
+    if (currentTaskFilter === 'overdue') tasks = tasks.filter(t => !t.done && t.date && t.date < todayStr);
+
+    if (currentTaskBlockFilter !== 'all') {
+        tasks = tasks.filter(t => (t.block || 'afternoon') === currentTaskBlockFilter);
+    }
+
+    const prioWeight = { high: 1, medium: 2, low: 3 };
+    const blockWeight = { morning: 1, afternoon: 2, night: 3 };
+
+    tasks.sort((a, b) => {
+        if (currentTaskSort === 'priority') return (prioWeight[a.priority] || 9) - (prioWeight[b.priority] || 9);
+        if (currentTaskSort === 'block') return (blockWeight[a.block] || 9) - (blockWeight[b.block] || 9);
+        if (currentTaskSort === 'date') return (a.date || '9999').localeCompare(b.date || '9999');
+        return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    if (!tasks.length) {
+        listEl.innerHTML = `<li class="mono-muted">No hay tareas en este filtro.</li>`;
+        return;
+    }
+
+    const blockIcon = { morning: '🌅', afternoon: '☀️', night: '🌙' };
+    const prioIcon = { high: '🔴', medium: '🟠', low: '🔵' };
+    const repeatLabels = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual' };
+
+    listEl.innerHTML = tasks.map(t => {
+        const subtasks = Array.isArray(t.subtasks) ? t.subtasks : [];
+        const doneSubCount = subtasks.filter(st => st.done).length;
+        const subtaskProgressHtml = subtasks.length
+            ? `<span class="subtask-progress-pill">${doneSubCount}/${subtasks.length}</span>`
+            : '';
+        const subtasksHtml = subtasks.map(st => `
+            <div class="task-subtask-row ${st.done ? 'subtask-done' : ''}">
+                <label>
+                    <input type="checkbox" ${st.done ? 'checked' : ''} onchange="toggleTaskSubtask('${t.id}', '${st.id}')">
+                    <span>${escapeHtml(st.text)}</span>
+                </label>
+                <button type="button" class="btn-icon" onclick="deleteTaskSubtask('${t.id}', '${st.id}')" title="Eliminar subtarea">✕</button>
+            </div>
+        `).join('');
+
+        return `
+            <li class="${t.done ? 'task-done' : ''}">
+                <div class="task-main-row">
+                    <label class="task-label">
+                        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone('${t.id}')">
+                        <span>${blockIcon[t.block] || '☀️'} ${prioIcon[t.priority] || '🟠'} ${escapeHtml(t.text)}</span>
+                    </label>
+                    <div class="task-actions">
+                        ${subtaskProgressHtml}
+                        ${t.pomosSpent ? `<span class="mono-muted task-pomo-badge">🍅 ${t.pomosSpent}</span>` : ''}
+                        ${t.repeat ? `<span class="mono-muted task-repeat-badge">🔁 ${repeatLabels[t.repeat] || escapeHtml(t.repeat)}</span>` : ''}
+                        ${t.date ? `<span class="mono-muted">${escapeHtml(t.date)}</span>` : ''}
+                        <button type="button" class="btn-icon" onclick="editTaskPrompt('${t.id}')" title="Editar tarea">✏️</button>
+                        <button type="button" class="btn-icon" onclick="deleteTask('${t.id}')" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
+                <div class="task-subtasks">
+                    ${subtasksHtml}
+                    <div class="task-subtask-add">
+                        <input type="text" id="subtask-input-${t.id}" placeholder="Añadir subtarea..." onkeydown="if(event.key==='Enter') addTaskSubtask('${t.id}')">
+                        <button type="button" class="btn-ghost btn-sm" onclick="addTaskSubtask('${t.id}')" title="Añadir subtarea">+</button>
+                    </div>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+function exportTasksMarkdown() {
+    const md = appState.tasks.map(t => `- [${t.done ? 'x' : ' '}] (${t.block}) ${t.text} ${t.date ? `[${t.date}]` : ''}`).join('\n');
+    copyTextToClipboard(md || 'Sin tareas', 'Lista de tareas copiada en Markdown');
+}
+
+/* --------------------------------------------------------------------------
+   POMODORO, AUDIO AMBIENTE Y MÉTRICAS
+   -------------------------------------------------------------------------- */
+function renderPomodoroTaskSelect() {
+    const select = document.getElementById('pomo-linked-task');
+    if (!select) return;
+    const pendingTasks = appState.tasks.filter(t => !t.done);
+    select.innerHTML = `<option value="">🎯 Sesión libre</option>` +
+        pendingTasks.map(t => `<option value="${t.id}" ${t.id === linkedPomodoroTaskId ? 'selected' : ''}>🎯 ${escapeHtml(t.text.slice(0, 32))}</option>`).join('');
 }
 
 function setPomodoroLinkedTask(taskId) {
-    state.pomodoro.linkedTaskId = taskId;
-    saveState();
+    linkedPomodoroTaskId = taskId;
 }
 
-function setPomodoroMode(mode, minutesValue) {
-    pausePomodoro();
-    state.pomodoro.mode = mode === 'break' ? 'break' : 'focus';
-    const parsed = parseInt(minutesValue, 10);
-    const fallback = state.pomodoro.mode === 'break' ? state.pomodoro.breakMinutes : state.pomodoro.focusMinutes;
-    const mins = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    if (state.pomodoro.mode === 'break') state.pomodoro.breakMinutes = mins;
-    else state.pomodoro.focusMinutes = mins;
+function startCustomPomodoro(mode) {
+    clearInterval(pomoInterval);
+    pomoMode = mode;
+    const focusMins = Math.max(1, Number(document.getElementById('pomo-focus-time')?.value || 25));
+    const breakMins = Math.max(1, Number(document.getElementById('pomo-break-time')?.value || 5));
 
-    state.pomodoro.secondsLeft = mins * 60;
-    document.getElementById('btn-mode-focus')?.classList.toggle('active', state.pomodoro.mode === 'focus');
-    document.getElementById('btn-mode-break')?.classList.toggle('active', state.pomodoro.mode === 'break');
-    saveState();
-    renderPomodoro();
-}
+    pomoInitialMins = mode === 'break' ? breakMins : mode === 'exam' ? 60 : focusMins;
+    pomoRemainingSec = pomoInitialMins * 60;
+    updatePomodoroDisplay();
 
-function updatePomodoroConfig() {
-    const f = parseInt(document.getElementById('pomo-focus-mins')?.value, 10);
-    const b = parseInt(document.getElementById('pomo-break-mins')?.value, 10);
-    state.pomodoro.focusMinutes = Number.isFinite(f) && f > 0 ? f : 25;
-    state.pomodoro.breakMinutes = Number.isFinite(b) && b > 0 ? b : 5;
-    if (!state.pomodoro.running) {
-        state.pomodoro.secondsLeft = (state.pomodoro.mode === 'break' ? state.pomodoro.breakMinutes : state.pomodoro.focusMinutes) * 60;
-    }
-    saveState();
-    renderPomodoro();
-}
-
-function startPomodoro() {
-    if (pomodoroInterval) return;
-    state.pomodoro.running = true;
-    saveState();
-    pomodoroInterval = setInterval(() => {
-        if (state.pomodoro.secondsLeft > 0) {
-            state.pomodoro.secondsLeft -= 1;
-            renderPomodoro();
-        } else {
-            completePomodoroCycle();
+    pomoInterval = setInterval(() => {
+        pomoRemainingSec--;
+        updatePomodoroDisplay();
+        if (pomoRemainingSec <= 0) {
+            clearInterval(pomoInterval);
+            pomoInterval = null;
+            if (pomoMode !== 'break') {
+                recordStudyMinutes(pomoInitialMins);
+                if (linkedPomodoroTaskId) {
+                    const linked = appState.tasks.find(t => t.id === linkedPomodoroTaskId);
+                    if (linked) {
+                        linked.pomosSpent = (linked.pomosSpent || 0) + 1;
+                        saveState();
+                        renderTasks();
+                    }
+                }
+            }
+            playBellChime();
+            showToast(`¡Sesión ${pomoMode.toUpperCase()} completada!`, 'success');
         }
     }, 1000);
 }
 
-function pausePomodoro() {
-    state.pomodoro.running = false;
-    if (pomodoroInterval) {
-        clearInterval(pomodoroInterval);
-        pomodoroInterval = null;
-    }
+function stopPomodoro() {
+    clearInterval(pomoInterval);
+    pomoInterval = null;
+    const focusMins = Math.max(1, Number(document.getElementById('pomo-focus-time')?.value || 25));
+    pomoRemainingSec = focusMins * 60;
+    updatePomodoroDisplay();
+}
+
+function updatePomodoroDisplay() {
+    const disp = document.getElementById('pomodoro-display');
+    if (!disp) return;
+    const m = String(Math.floor(pomoRemainingSec / 60)).padStart(2, '0');
+    const s = String(pomoRemainingSec % 60).padStart(2, '0');
+    disp.textContent = `${m}:${s}`;
+}
+
+function recordStudyMinutes(mins) {
+    const todayKey = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
+    appState.studyStats.totalMinutes += mins;
+    appState.studyStats.dailyLog[todayKey] = (appState.studyStats.dailyLog[todayKey] || 0) + mins;
     saveState();
+    updateStudyStats();
 }
 
-function resetPomodoro() {
-    pausePomodoro();
-    const mins = state.pomodoro.mode === 'break' ? state.pomodoro.breakMinutes : state.pomodoro.focusMinutes;
-    state.pomodoro.secondsLeft = mins * 60;
-    saveState();
-    renderPomodoro();
-}
-
-function completePomodoroCycle() {
-    pausePomodoro();
-    if (state.pomodoro.mode === 'focus') {
-        const added = state.pomodoro.focusMinutes || 25;
-        const today = getMadridDateKey();
-        state.pomodoro.totalMinutes = (state.pomodoro.totalMinutes || 0) + added;
-        if (state.pomodoro.lastStudyDate === today) {
-            state.pomodoro.todayMinutes = (state.pomodoro.todayMinutes || 0) + added;
-        } else {
-            state.pomodoro.todayMinutes = added;
-            state.pomodoro.lastStudyDate = today;
-        }
-        state.pomodoro.historyByDate[today] = (state.pomodoro.historyByDate[today] || 0) + added;
-        showToast(`¡Sesión de foco completada (+${added} min)!`, 'success');
-        setPomodoroMode('break', state.pomodoro.breakMinutes);
-    } else {
-        showToast('Descanso terminado. ¡Listo para otro bloque!', 'info');
-        setPomodoroMode('focus', state.pomodoro.focusMinutes);
-    }
-    saveState(true);
-    renderPomodoro();
-}
-
-function renderPomodoro() {
-    const sec = Math.max(0, Number(state.pomodoro.secondsLeft) || 0);
-    const mm = String(Math.floor(sec / 60)).padStart(2, '0');
-    const ss = String(sec % 60).padStart(2, '0');
-    const disp = document.getElementById('pomo-display');
-    if (disp) disp.textContent = `${mm}:${ss}`;
-
-    const todayEl = document.getElementById('pomo-today-mins');
-    const totalEl = document.getElementById('pomo-total-mins');
-    const streakEl = document.getElementById('pomo-streak-days');
-    const heatEl = document.getElementById('pomo-heatmap');
-
-    const todayKey = getMadridDateKey();
-    const todayMins = state.pomodoro.lastStudyDate === todayKey ? (state.pomodoro.todayMinutes || 0) : 0;
-
-    if (todayEl) todayEl.textContent = `${todayMins}m`;
-    if (totalEl) totalEl.textContent = `${state.pomodoro.totalMinutes || 0}m`;
+function updateStudyStats() {
+    const todayKey = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
+    const todayMins = appState.studyStats.dailyLog[todayKey] || 0;
+    const totalHours = (appState.studyStats.totalMinutes / 60).toFixed(1);
 
     let streak = 0;
-    const cursor = new Date(`${todayKey}T12:00:00Z`);
-    while (true) {
-        const k = cursor.toISOString().slice(0, 10);
-        if ((state.pomodoro.historyByDate?.[k] || 0) > 0) {
-            streak += 1;
-            cursor.setUTCDate(cursor.getUTCDate() - 1);
-        } else {
-            break;
-        }
+    for (let i = 0; i < 365; i++) {
+        const d = new Date(Date.now() + clockOffsetMs - i * 86400000);
+        const key = getMadridDateKey(d);
+        if ((appState.studyStats.dailyLog[key] || 0) > 0) streak++;
+        else if (i > 0) break;
     }
-    if (streakEl) streakEl.textContent = `${streak}d`;
 
-    if (heatEl) {
-        const cells = [];
-        const d = new Date(`${todayKey}T12:00:00Z`);
-        d.setUTCDate(d.getUTCDate() - 13);
-        for (let i = 0; i < 14; i++) {
-            const key = d.toISOString().slice(0, 10);
-            const mins = state.pomodoro.historyByDate?.[key] || 0;
-            const lv = mins >= 60 ? 'lv-3' : mins >= 25 ? 'lv-2' : mins > 0 ? 'lv-1' : '';
-            cells.push(`<span class="heat-cell ${lv}" title="${key}: ${mins}m"></span>`);
-            d.setUTCDate(d.getUTCDate() + 1);
-        }
-        heatEl.innerHTML = cells.join('');
+    const totalTasks = appState.tasks.length;
+    const doneTasks = appState.tasks.filter(t => t.done).length;
+    const ratio = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    document.getElementById('stat-focus-today').textContent = `${todayMins}m`;
+    document.getElementById('stat-focus-total').textContent = `${totalHours}h`;
+    document.getElementById('stat-streak').textContent = `🔥 ${streak}d`;
+    document.getElementById('stat-ratio').textContent = `${ratio}%`;
+
+    const barsContainer = document.getElementById('study-bars-container');
+    if (!barsContainer) return;
+    const last7 = [];
+    let weekSum = 0;
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() + clockOffsetMs - i * 86400000);
+        const key = getMadridDateKey(d);
+        const mins = appState.studyStats.dailyLog[key] || 0;
+        weekSum += mins;
+        last7.push({ day: DAYS_MAP[getMadridClock(d).day].slice(0, 2), mins });
+    }
+    const maxMins = Math.max(30, ...last7.map(x => x.mins));
+    document.getElementById('chart-week-sum').textContent = `${weekSum} min`;
+
+    barsContainer.innerHTML = last7.map(item => {
+        const hPct = Math.max(8, Math.round((item.mins / maxMins) * 100));
+        return `
+            <div class="chart-bar-col" title="${item.mins} min">
+                <div class="chart-bar-fill" style="height:${hPct}%"></div>
+                <span class="chart-bar-day">${item.day}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+/* Generador Web Audio (Ruido Rosa, Marrón, Lluvia y Binaural) */
+function toggleNoiseGenerator() {
+    if (isAudioPlaying) {
+        stopNoiseGenerator();
+    } else {
+        startNoiseGenerator();
     }
 }
 
-let focusAudioCtx = null;
-let focusAudioGain = null;
-let focusAudioNode = null;
+function handleAudioTypeChange() {
+    if (isAudioPlaying) {
+        stopNoiseGenerator();
+        startNoiseGenerator();
+    }
+}
 
-function toggleFocusAudio() {
-    const btn = document.getElementById('btn-audio-toggle');
-    if (!state.focusAudio.playing) {
-        try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!focusAudioCtx) focusAudioCtx = new AudioCtx();
-            if (focusAudioCtx.state === 'suspended') focusAudioCtx.resume();
+function startNoiseGenerator() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return showToast('Web Audio API no soportada', 'error');
 
-            const bufferSize = 2 * focusAudioCtx.sampleRate;
-            const buffer = focusAudioCtx.createBuffer(1, bufferSize, focusAudioCtx.sampleRate);
-            const output = buffer.getChannelData(0);
-            let lastOut = 0;
-            for (let i = 0; i < bufferSize; i++) {
-                const white = Math.random() * 2 - 1;
+    audioCtx = audioCtx || new AudioContextClass();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const type = document.getElementById('audio-sound-type')?.value || 'brown';
+    const vol = Number(document.getElementById('audio-volume')?.value || 40) / 100;
+
+    audioMasterGain = audioCtx.createGain();
+    audioMasterGain.gain.value = vol * 0.35;
+    audioMasterGain.connect(audioCtx.destination);
+
+    audioActiveNodes = [];
+
+    if (type.startsWith('binaural')) {
+        const beat = type === 'binaural-alpha' ? 10 : 6;
+        const oscL = audioCtx.createOscillator();
+        const oscR = audioCtx.createOscillator();
+        const merger = audioCtx.createChannelMerger(2);
+        oscL.frequency.value = 200;
+        oscR.frequency.value = 200 + beat;
+        oscL.connect(merger, 0, 0);
+        oscR.connect(merger, 0, 1);
+        merger.connect(audioMasterGain);
+        oscL.start();
+        oscR.start();
+        audioActiveNodes.push(oscL, oscR);
+    } else {
+        const bufferSize = audioCtx.sampleRate * 3;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = buffer.getChannelData(0);
+        let lastOut = 0;
+
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            if (type === 'brown') {
                 output[i] = (lastOut + 0.02 * white) / 1.02;
                 lastOut = output[i];
-                output[i] *= 2.5;
+                output[i] *= 3.2;
+            } else if (type === 'rain') {
+                const drop = Math.random() < 0.0025 ? (Math.random() * 0.9 - 0.45) : 0;
+                output[i] = (lastOut * 0.72 + white * 0.28) * 0.55 + drop;
+                lastOut = output[i];
+            } else {
+                output[i] = (lastOut + 0.12 * white) / 1.12;
+                lastOut = output[i];
+                output[i] *= 1.8;
             }
-
-            const src = focusAudioCtx.createBufferSource();
-            src.buffer = buffer;
-            src.loop = true;
-
-            const gain = focusAudioCtx.createGain();
-            gain.gain.value = (state.focusAudio.volume || 25) / 400;
-
-            src.connect(gain);
-            gain.connect(focusAudioCtx.destination);
-            src.start(0);
-
-            focusAudioNode = src;
-            focusAudioGain = gain;
-            state.focusAudio.playing = true;
-            if (btn) btn.textContent = '🔊 Ruido Focus';
-        } catch (_) {
-            showToast('No se pudo iniciar el audio ambiental', 'error');
         }
-    } else {
-        try { focusAudioNode?.stop(); } catch (_) {}
-        focusAudioNode = null;
-        state.focusAudio.playing = false;
-        if (btn) btn.textContent = '🔇 Ruido Focus';
+
+        const noiseSource = audioCtx.createBufferSource();
+        noiseSource.buffer = buffer;
+        noiseSource.loop = true;
+
+        if (type === 'rain') {
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 950;
+            filter.Q.value = 0.7;
+            noiseSource.connect(filter);
+            filter.connect(audioMasterGain);
+        } else {
+            noiseSource.connect(audioMasterGain);
+        }
+
+        noiseSource.start();
+        audioActiveNodes.push(noiseSource);
     }
-    saveState();
+
+    isAudioPlaying = true;
+    document.getElementById('btn-audio-toggle').textContent = '⏸ Pausar';
+    document.getElementById('audio-visualizer')?.classList.add('audio-playing');
 }
 
-function updateFocusAudioVolume(val) {
-    state.focusAudio.volume = Number(val) || 25;
-    if (focusAudioGain) {
-        focusAudioGain.gain.value = state.focusAudio.volume / 400;
-    }
-    saveState();
-}
-
-/* ==========================================================
-   SCRATCHPAD & STICKY
-   ========================================================== */
-function switchNoteTab(tabName) {
-    state.notes.activeTab = tabName;
-    document.querySelectorAll('.note-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.notetab === tabName);
+function stopNoiseGenerator() {
+    audioActiveNodes.forEach(node => {
+        try {
+            node.stop();
+            node.disconnect();
+        } catch (_) {}
     });
-    const area = document.getElementById('notes-area');
-    if (area) area.value = state.notes.tabs[tabName] || '';
-    updateNoteMetrics();
-    saveState();
+    audioActiveNodes = [];
+    if (audioMasterGain) {
+        try {
+            audioMasterGain.disconnect();
+        } catch (_) {}
+        audioMasterGain = null;
+    }
+    isAudioPlaying = false;
+    const btn = document.getElementById('btn-audio-toggle');
+    if (btn) btn.textContent = '▶ Audio';
+    document.getElementById('audio-visualizer')?.classList.remove('audio-playing');
 }
 
-function handleNoteInput() {
-    const area = document.getElementById('notes-area');
+function updateAudioVolume(val) {
+    document.getElementById('audio-vol-text').textContent = `${val}%`;
+    if (isAudioPlaying && audioMasterGain && audioCtx) {
+        audioMasterGain.gain.setTargetAtTime((Number(val) / 100) * 0.35, audioCtx.currentTime, 0.03);
+    }
+}
+
+function playBellChime() {
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        const ctx = audioCtx || new AudioContextClass();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.9);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.9);
+    } catch (_) {}
+}
+
+/* --------------------------------------------------------------------------
+   SCRATCHPAD MARKDOWN + HISTORIAL + STICKY NOTE
+   -------------------------------------------------------------------------- */
+function setNotesTab(tab) {
+    currentNotesTab = tab;
+    ['general', 'comandos', 'clases'].forEach(t => {
+        document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab);
+    });
+    const area = document.getElementById('scratchpad');
+    if (area) area.value = appState.notes[tab] || '';
+    updateScratchpadMetrics();
+    if (isNotesPreviewMode) renderScratchpadPreview();
+}
+
+function updateScratchpadMetrics() {
+    const text = document.getElementById('scratchpad')?.value || '';
+    const lines = text ? text.split('\n').length : 0;
+    const el = document.getElementById('scratchpad-metrics');
+    if (el) el.textContent = `${lines} líneas • ${text.length} caracteres`;
+}
+
+function toggleScratchpadPreview() {
+    isNotesPreviewMode = !isNotesPreviewMode;
+    const area = document.getElementById('scratchpad');
+    const preview = document.getElementById('scratchpad-preview');
+    const btn = document.getElementById('btn-notes-preview');
+
+    if (isNotesPreviewMode) {
+        renderScratchpadPreview();
+        area?.classList.add('is-hidden');
+        preview?.classList.remove('is-hidden');
+        btn?.classList.add('active');
+    } else {
+        area?.classList.remove('is-hidden');
+        preview?.classList.add('is-hidden');
+        btn?.classList.remove('active');
+    }
+}
+
+function renderScratchpadPreview() {
+    const preview = document.getElementById('scratchpad-preview');
+    const raw = document.getElementById('scratchpad')?.value || '';
+    if (!preview) return;
+
+    const codeBlocks = [];
+    const withPlaceholders = raw.replace(/```([\s\S]*?)```/g, (_, code) => {
+        const idx = codeBlocks.length;
+        codeBlocks.push(`<pre><code>${escapeHtml(code.replace(/^\n+|\n+$/g, ''))}</code></pre>`);
+        return `\u0000CODEBLOCK_${idx}\u0000`;
+    });
+
+    const lines = withPlaceholders.split('\n');
+    const htmlParts = [];
+    let inList = false;
+
+    for (const line of lines) {
+        if (line.includes('\u0000CODEBLOCK_')) {
+            if (inList) {
+                htmlParts.push('</ul>');
+                inList = false;
+            }
+            htmlParts.push(line);
+            continue;
+        }
+
+        const listMatch = /^\s*[-*]\s+(.+)$/.exec(line);
+        if (listMatch) {
+            if (!inList) {
+                htmlParts.push('<ul>');
+                inList = true;
+            }
+            htmlParts.push(`<li>${formatInlineMarkdown(listMatch[1])}</li>`);
+            continue;
+        }
+
+        if (inList) {
+            htmlParts.push('</ul>');
+            inList = false;
+        }
+
+        if (/^###\s+/.test(line)) {
+            htmlParts.push(`<h3>${formatInlineMarkdown(line.replace(/^###\s+/, ''))}</h3>`);
+        } else if (/^##\s+/.test(line)) {
+            htmlParts.push(`<h2>${formatInlineMarkdown(line.replace(/^##\s+/, ''))}</h2>`);
+        } else if (/^#\s+/.test(line)) {
+            htmlParts.push(`<h1>${formatInlineMarkdown(line.replace(/^#\s+/, ''))}</h1>`);
+        } else if (/^>\s+/.test(line)) {
+            htmlParts.push(`<blockquote>${formatInlineMarkdown(line.replace(/^>\s+/, ''))}</blockquote>`);
+        } else if (line.trim() === '') {
+            htmlParts.push('<br>');
+        } else {
+            htmlParts.push(`<div>${formatInlineMarkdown(line)}</div>`);
+        }
+    }
+
+    if (inList) htmlParts.push('</ul>');
+
+    let finalHtml = htmlParts.join('');
+    codeBlocks.forEach((block, idx) => {
+        finalHtml = finalHtml.replace(`\u0000CODEBLOCK_${idx}\u0000`, block);
+    });
+
+    preview.innerHTML = finalHtml;
+}
+
+function formatInlineMarkdown(text) {
+    let escaped = escapeHtml(text);
+    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    escaped = escaped.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+        const safeUrl = normalizeExternalUrl(url);
+        return safeUrl
+            ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+            : label;
+    });
+    return escaped;
+}
+
+function wrapScratchpadSelection(prefix, suffix) {
+    const area = document.getElementById('scratchpad');
     if (!area) return;
-    state.notes.tabs[state.notes.activeTab] = area.value;
-    updateNoteMetrics();
+    const start = area.selectionStart;
+    const end = area.selectionEnd;
+    const selected = area.value.slice(start, end) || 'texto';
+    const replacement = `${prefix}${selected}${suffix}`;
+    area.setRangeText(replacement, start, end, 'select');
+    appState.notes[currentNotesTab] = area.value;
+    updateScratchpadMetrics();
+    saveState();
+    area.focus();
+}
+
+function toggleScratchpadFind() {
+    toggleForm('scratchpad-find-bar');
+}
+
+function replaceInScratchpad(replaceAll) {
+    const findVal = document.getElementById('sp-find-text')?.value;
+    const repVal = document.getElementById('sp-replace-text')?.value ?? '';
+    const area = document.getElementById('scratchpad');
+    if (!findVal || !area) return;
+
+    area.value = replaceAll
+        ? area.value.split(findVal).join(repVal)
+        : area.value.replace(findVal, repVal);
+
+    appState.notes[currentNotesTab] = area.value;
+    updateScratchpadMetrics();
+    saveState();
+    showToast('Reemplazo aplicado', 'success');
+}
+
+function insertNoteTemplate(tpl) {
+    const templates = {
+        clase: `\n## Clase - ${getMadridDateKey()}\n- **Concepto clave:** \n- **Dudas:** \n`,
+        comando: `\n### Comando\n\`\`\`bash\n# Descripción\ncomando --opcion\n\`\`\`\n`,
+        practica: `\n## Análisis de Práctica\n- **Objetivo:** \n- **Requisitos:** \n- **Edge cases:** \n`,
+        readme: `# Nombre del Proyecto\n\n## Instalación\n\`\`\`bash\ngit clone ...\n\`\`\`\n`
+    };
+    if (!templates[tpl]) return;
+    const area = document.getElementById('scratchpad');
+    area.value += templates[tpl];
+    appState.notes[currentNotesTab] = area.value;
+    updateScratchpadMetrics();
     saveState();
 }
 
-function updateNoteMetrics() {
-    const text = state.notes.tabs[state.notes.activeTab] || '';
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const el = document.getElementById('notes-word-count');
-    if (el) el.textContent = `${words} palabras · ${text.length} car.`;
-}
-
-function toggleNoteMarkdownPreview() {
-    const preview = document.getElementById('notes-md-preview');
-    const area = document.getElementById('notes-area');
-    if (!preview || !area) return;
-    const show = preview.classList.contains('is-hidden');
-    if (show) {
-        const lines = escapeHtml(area.value)
-            .replace(/^### (.*)$/gm, '<h4>$1</h4>')
-            .replace(/^## (.*)$/gm, '<h3>$1</h3>')
-            .replace(/^# (.*)$/gm, '<h2>$1</h2>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>');
-        preview.innerHTML = lines || '<em>Sin contenido</em>';
-        preview.classList.remove('is-hidden');
-        area.classList.add('is-hidden');
-    } else {
-        preview.classList.add('is-hidden');
-        area.classList.remove('is-hidden');
-    }
-}
-
-function saveNoteRevision() {
-    const content = state.notes.tabs[state.notes.activeTab] || '';
-    state.notes.revisions.unshift({
-        id: `rev-${Date.now()}`,
-        tab: state.notes.activeTab,
-        date: new Date().toLocaleString('es-ES'),
-        content
-    });
-    state.notes.revisions = state.notes.revisions.slice(0, 20);
+function insertNoteTimestamp() {
+    const area = document.getElementById('scratchpad');
+    const time = document.getElementById('time')?.textContent || '';
+    area.value += `\n[${getMadridDateKey()} ${time}] `;
+    appState.notes[currentNotesTab] = area.value;
     saveState();
-    showToast('Versión de nota guardada', 'success');
+}
+
+function insertNoteCodeBlock() {
+    const area = document.getElementById('scratchpad');
+    area.value += `\n\`\`\`js\n\n\`\`\`\n`;
+    appState.notes[currentNotesTab] = area.value;
+    saveState();
 }
 
 function openNoteHistoryModal() {
-    const list = document.getElementById('note-history-list');
-    if (list) {
-        if (!state.notes.revisions.length) {
-            list.innerHTML = '<div class="mono-muted">No hay versiones guardadas.</div>';
-        } else {
-            list.innerHTML = state.notes.revisions.map(r => `
-                <div class="grade-item-row">
-                    <span>[${escapeHtml(r.tab)}] ${escapeHtml(r.date)}</span>
-                    <button type="button" class="btn-cyan btn-sm" onclick="restoreNoteRevision(${JSON.stringify(r.id)})">Restaurar</button>
-                </div>
-            `).join('');
-        }
-    }
-    const modal = document.getElementById('note-history-modal');
-    if (modal) modal.style.display = 'flex';
+    document.getElementById('note-history-modal').style.display = 'flex';
+    renderNoteHistoryList();
 }
 
 function closeNoteHistoryModal() {
-    const modal = document.getElementById('note-history-modal');
-    if (modal) modal.style.display = 'none';
+    document.getElementById('note-history-modal').style.display = 'none';
 }
 
-function restoreNoteRevision(id) {
-    const rev = state.notes.revisions.find(r => r.id === id);
-    if (!rev) return;
-    state.notes.activeTab = rev.tab;
-    state.notes.tabs[rev.tab] = rev.content;
+function saveNoteRevisionManual() {
+    appState.noteRevisions = appState.noteRevisions || { general: [], comandos: [], clases: [] };
+    const list = appState.noteRevisions[currentNotesTab] || [];
+    const content = appState.notes[currentNotesTab] || '';
+    list.unshift({
+        id: generateId('rev'),
+        date: new Date().toLocaleString('es-ES'),
+        content
+    });
+    appState.noteRevisions[currentNotesTab] = list.slice(0, 15);
     saveState();
-    switchNoteTab(rev.tab);
+    renderNoteHistoryList();
+    showToast(`Versión guardada en pestaña "${currentNotesTab}"`, 'success');
+}
+
+function restoreNoteRevision(revId) {
+    const list = appState.noteRevisions?.[currentNotesTab] || [];
+    const rev = list.find(r => r.id === revId);
+    if (!rev) return;
+    appState.notes[currentNotesTab] = rev.content;
+    const area = document.getElementById('scratchpad');
+    if (area) area.value = rev.content;
+    updateScratchpadMetrics();
+    if (isNotesPreviewMode) renderScratchpadPreview();
+    saveState();
     closeNoteHistoryModal();
     showToast('Versión restaurada', 'success');
 }
 
-function exportCurrentNoteMd() {
-    const text = state.notes.tabs[state.notes.activeTab] || '';
+function renderNoteHistoryList() {
+    const container = document.getElementById('note-history-list');
+    if (!container) return;
+    const list = appState.noteRevisions?.[currentNotesTab] || [];
+    if (!list.length) {
+        container.innerHTML = `<div class="mono-muted">No hay versiones guardadas aún para "${escapeHtml(currentNotesTab)}".</div>`;
+        return;
+    }
+    container.innerHTML = list.map(r => `
+        <div class="deadline-card-item">
+            <div class="deadline-card-top">
+                <span><strong>${escapeHtml(r.date)}</strong> · ${r.content.length} chars</span>
+                <button type="button" class="btn-cyan btn-sm" onclick="restoreNoteRevision('${r.id}')">Restaurar</button>
+            </div>
+            <div class="mono-muted">${escapeHtml(r.content.slice(0, 110))}...</div>
+        </div>
+    `).join('');
+}
+
+function toolCopy() {
+    copyElementValue('scratchpad');
+}
+
+function toolDownload() {
+    const text = document.getElementById('scratchpad')?.value || '';
     const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `nota-${state.notes.activeTab}-${getMadridDateKey()}.md`;
+    a.download = `devworkspace-${currentNotesTab}-${getMadridDateKey()}.md`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function toggleStickyNote() {
-    state.notes.stickyOpen = !state.notes.stickyOpen;
-    const drawer = document.getElementById('sticky-drawer');
-    if (drawer) drawer.classList.toggle('is-hidden', !state.notes.stickyOpen);
+function copyStickyNote() {
+    copyElementValue('sticky-note-input');
+}
+
+function clearStickyNote() {
+    appState.stickyNote = '';
+    const el = document.getElementById('sticky-note-input');
+    if (el) el.value = '';
     saveState();
 }
 
-function saveStickyNote() {
-    const area = document.getElementById('sticky-note-area');
-    if (!area) return;
-    state.notes.sticky = area.value;
-    saveState();
-}
-/* ==========================================================
-   WORKSPACE 2: CODE STUDIO (HTML / CSS / JS + PYTHON + JAVA)
-   ========================================================== */
-function switchStudioTab(tab) {
-    state.studio.activeTab = tab;
-    document.querySelectorAll('.studio-file-tab').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.sttab === tab);
+/* --------------------------------------------------------------------------
+   WORKSPACE 2: LIVE CODE STUDIO (HTML / CSS / JS EN VIVO)
+   -------------------------------------------------------------------------- */
+function switchStudioEditorTab(tab) {
+    currentStudioEditorTab = tab;
+    ['html', 'css', 'js', 'saved'].forEach(t => {
+        document.getElementById(`ed-tab-${t}`)?.classList.toggle('active', t === tab);
+        document.getElementById(`ed-pane-${t}`)?.classList.toggle('active', t === tab);
     });
-
-    const tabs = ['html', 'css', 'js', 'python', 'java'];
-    tabs.forEach(t => {
-        const el = document.getElementById(`studio-editor-${t}`);
-        if (el) el.classList.toggle('active', t === tab);
-    });
-
-    const savedPanel = document.getElementById('studio-saved-panel');
-    if (savedPanel) savedPanel.classList.toggle('is-hidden', tab !== 'saved');
-
-    const iframe = document.getElementById('studio-preview-iframe');
-    const runnerOut = document.getElementById('studio-runner-output');
-    const modeLabel = document.getElementById('studio-output-mode-label');
-
-    if (tab === 'python' || tab === 'java') {
-        iframe?.classList.add('is-hidden');
-        runnerOut?.classList.remove('is-hidden');
-        if (modeLabel) modeLabel.textContent = tab === 'python' ? 'Salida Python 3' : 'Salida Java Console';
-    } else {
-        iframe?.classList.remove('is-hidden');
-        runnerOut?.classList.add('is-hidden');
-        if (modeLabel) modeLabel.textContent = 'Vista Previa Web en Vivo';
-    }
-
-    if (tab === 'saved') renderStudioSavedList();
-    updateStudioMetrics();
-    saveState();
+    if (tab === 'saved') renderStudioSavedProjects();
+    updateStudioEditorMetrics();
 }
 
-function handleStudioTitleChange() {
-    const val = document.getElementById('studio-project-title')?.value || '';
-    state.studio.title = val;
-    saveState();
-}
-
-function handleStudioEditorInput(lang) {
-    const el = document.getElementById(`studio-editor-${lang}`);
+function updateStudioEditorMetrics() {
+    const el = document.getElementById('studio-editor-metrics');
     if (!el) return;
-    state.studio[lang] = el.value;
-    updateStudioMetrics();
-    saveState();
-
-    const liveChecked = document.getElementById('studio-live-toggle')?.checked;
-    state.studio.autoRun = Boolean(liveChecked);
-    if (liveChecked && ['html', 'css', 'js'].includes(lang)) {
-        runStudioCode();
+    if (currentStudioEditorTab === 'saved') {
+        el.textContent = `${appState.studioProjects.length} proyectos`;
+        return;
     }
-}
-
-function updateStudioMetrics() {
-    const active = state.studio.activeTab;
-    const text = ['html', 'css', 'js', 'python', 'java'].includes(active)
-        ? (state.studio[active] || '')
-        : '';
+    const text = document.getElementById(`code-${currentStudioEditorTab}`)?.value || '';
     const lines = text ? text.split('\n').length : 0;
-    const label = document.getElementById('studio-editor-metrics');
-    if (label) label.textContent = `${lines} líneas · ${text.length} car.`;
-}
-
-function appendStudioConsole(msg, level = 'log') {
-    const box = document.getElementById('studio-console-output');
-    if (!box) return;
-    const line = document.createElement('div');
-    line.className = level === 'error' ? 'console-err' : level === 'warn' ? 'console-warn' : 'console-line';
-    line.textContent = `[${new Date().toLocaleTimeString('es-ES', { hour12: false })}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-}
-
-function clearStudioConsole() {
-    const box = document.getElementById('studio-console-output');
-    if (box) box.innerHTML = '';
-}
-
-let pyodideInstance = null;
-let pyodideLoadingPromise = null;
-
-async function ensurePyodideLoaded() {
-    if (pyodideInstance) return pyodideInstance;
-    if (pyodideLoadingPromise) return pyodideLoadingPromise;
-
-    pyodideLoadingPromise = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js';
-        script.onload = async () => {
-            try {
-                pyodideInstance = await window.loadPyodide();
-                resolve(pyodideInstance);
-            } catch (err) {
-                reject(err);
-            }
-        };
-        script.onerror = () => reject(new Error('No se pudo cargar Pyodide desde CDN'));
-        document.head.appendChild(script);
-    });
-
-    return pyodideLoadingPromise;
-}
-
-async function runPythonInStudio(code) {
-    const outEl = document.getElementById('studio-runner-output');
-    if (outEl) outEl.textContent = 'Ejecutando Python...';
-    try {
-        const py = await ensurePyodideLoaded();
-        await py.runPythonAsync(`
-import sys, io
-_dw_stdout = io.StringIO()
-sys.stdout = _dw_stdout
-sys.stderr = _dw_stdout
-`);
-        await py.runPythonAsync(code);
-        const captured = await py.runPythonAsync('_dw_stdout.getvalue()');
-        const text = String(captured || '').trim() || '(Ejecución completada sin salida por consola)';
-        if (outEl) outEl.textContent = text;
-        appendStudioConsole('Python ejecutado correctamente');
-    } catch (err) {
-        const msg = err?.message || String(err);
-        if (outEl) outEl.textContent = `Error Python:\n${msg}`;
-        appendStudioConsole(msg, 'error');
-    }
-}
-
-function runJavaInStudio(code) {
-    const outEl = document.getElementById('studio-runner-output');
-    const lines = [];
-    const printRegex = /System\.out\.(println|print)\s*\(([\s\S]*?)\)\s*;/g;
-    let match;
-    while ((match = printRegex.exec(code)) !== null) {
-        const rawArg = match[2].trim();
-        const cleaned = rawArg
-            .split('+')
-            .map(part => {
-                const p = part.trim();
-                if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
-                    return p.slice(1, -1);
-                }
-                return p;
-            })
-            .join('');
-        lines.push(cleaned);
-    }
-
-    const hasMain = /public\s+static\s+void\s+main\s*\(/.test(code);
-    if (!hasMain) {
-        const warn = 'Aviso: No se detectó el método estándar public static void main(String[] args).';
-        if (outEl) outEl.textContent = `${warn}\n\n${lines.join('\n')}`;
-        appendStudioConsole(warn, 'warn');
-        return;
-    }
-
-    const result = lines.length
-        ? lines.join('\n')
-        : 'Compilación sintáctica local OK. (Añade System.out.println(...) para ver salida)';
-    if (outEl) outEl.textContent = result;
-    appendStudioConsole('Java ejecutado en sandbox local');
-}
-
-function runStudioCode() {
-    const active = state.studio.activeTab;
-    if (active === 'python') {
-        runPythonInStudio(state.studio.python || '');
-        return;
-    }
-    if (active === 'java') {
-        runJavaInStudio(state.studio.java || '');
-        return;
-    }
-
-    const iframe = document.getElementById('studio-preview-iframe');
-    if (!iframe) return;
-
-    const fontName = state.googleFonts.studioFont || '';
-    const fontLink = fontName
-        ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName).replace(/%20/g, '+')}:wght@400;600;700&display=swap">`
-        : '';
-    const fontStyle = fontName ? `body { font-family: '${fontName}', system-ui, sans-serif; }` : '';
-
-    const doc = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-${fontLink}
-<style>${fontStyle}\n${state.studio.css || ''}</style>
-</head>
-<body>
-${state.studio.html || ''}
-<script>
-(function(){
-  const send = (lvl, args) => {
-    try {
-      window.parent.postMessage({ source: 'dw-studio-console', level: lvl, text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
-    } catch(_) {}
-  };
-  const origLog = console.log, origErr = console.error, origWarn = console.warn;
-  console.log = (...a) => { origLog.apply(console, a); send('log', a); };
-  console.error = (...a) => { origErr.apply(console, a); send('error', a); };
-  console.warn = (...a) => { origWarn.apply(console, a); send('warn', a); };
-  window.onerror = (msg, _s, line) => send('error', [msg + ' (línea ' + line + ')']);
-})();
-<\/script>
-<script>${state.studio.js || ''}<\/script>
-</body>
-</html>`;
-
-    iframe.srcdoc = doc;
-}
-
-function loadStudioTemplate(tplKey) {
-    const tpl = STUDIO_TEMPLATES[tplKey];
-    if (!tpl) return;
-    state.studio.title = tpl.title;
-    const titleEl = document.getElementById('studio-project-title');
-    if (titleEl) titleEl.value = tpl.title;
-
-    if (tplKey === 'python') {
-        state.studio.python = tpl.python;
-        const pyEl = document.getElementById('studio-editor-python');
-        if (pyEl) pyEl.value = tpl.python;
-        switchStudioTab('python');
-        runStudioCode();
-    } else if (tplKey === 'java') {
-        state.studio.java = tpl.java;
-        const jvEl = document.getElementById('studio-editor-java');
-        if (jvEl) jvEl.value = tpl.java;
-        switchStudioTab('java');
-        runStudioCode();
-    } else {
-        state.studio.html = tpl.html;
-        state.studio.css = tpl.css;
-        state.studio.js = tpl.js;
-        ['html', 'css', 'js'].forEach(k => {
-            const el = document.getElementById(`studio-editor-${k}`);
-            if (el) el.value = state.studio[k];
-        });
-        switchStudioTab('html');
-        runStudioCode();
-    }
-    saveState();
-    showToast(`Plantilla "${tpl.title}" cargada`, 'success');
-}
-
-function injectCdnIntoStudio(cdnKey) {
-    const snippet = STUDIO_CDNS[cdnKey];
-    if (!snippet) return;
-    if (!state.studio.html.includes(snippet)) {
-        state.studio.html = `${snippet}\n${state.studio.html}`;
-        const htmlEl = document.getElementById('studio-editor-html');
-        if (htmlEl) htmlEl.value = state.studio.html;
-        saveState();
-        runStudioCode();
-        showToast(`CDN ${cdnKey} inyectado en HTML`, 'success');
-    }
+    el.textContent = `${lines} líneas · ${text.length} chars`;
 }
 
 function formatStudioCode() {
-    const tab = state.studio.activeTab;
-    const el = document.getElementById(`studio-editor-${tab}`);
-    if (!el) return;
-    el.value = el.value
-        .split('\n')
-        .map(line => line.replace(/\s+$/, ''))
-        .join('\n')
-        .trim();
-    state.studio[tab] = el.value;
-    saveState();
-    updateStudioMetrics();
-    showToast('Espacios sobrantes limpiados', 'info');
+    if (currentStudioEditorTab === 'saved') return;
+    const area = document.getElementById(`code-${currentStudioEditorTab}`);
+    if (!area) return;
+    const lines = area.value.split('\n');
+    let indent = 0;
+    const formatted = lines.map(rawLine => {
+        const line = rawLine.trim();
+        if (!line) return '';
+        if (/^(\}|<\/|\]|\))/.test(line)) {
+            indent = Math.max(0, indent - 1);
+        }
+        const out = '  '.repeat(indent) + line;
+        if (/(\{|\[|\()\s*$/.test(line) || (/^<[a-zA-Z][^/]*>$/.test(line) && !/^<(meta|link|img|br|hr|input)\b/i.test(line))) {
+            indent++;
+        }
+        return out;
+    }).join('\n');
+
+    area.value = formatted;
+    syncStudioStateFromInputs();
+    updateStudioEditorMetrics();
+    if (document.getElementById('studio-autorun')?.checked) runStudioPreview();
+    showToast('Código formateado', 'success');
 }
 
-function setStudioViewport(width) {
-    state.studio.viewport = width;
-    document.querySelectorAll('.vp-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.vp === width);
-    });
-    const iframe = document.getElementById('studio-preview-iframe');
-    if (iframe) iframe.style.width = width;
-    saveState();
-}
+function buildStudioSrcdoc(forExport = false) {
+    const title = appState.studioCurrent.title || 'Proyecto DevWorkspace';
+    const html = appState.studioCurrent.html || '';
+    const css = appState.studioCurrent.css || '';
+    const js = appState.studioCurrent.js || '';
+    const studioFont = appState.appearance.studioFont || '';
 
-function saveStudioProjectToLibrary() {
-    const title = (state.studio.title || 'Proyecto sin título').trim();
-    const item = {
-        id: `st-${Date.now()}`,
-        title,
-        updatedAt: new Date().toLocaleString('es-ES'),
-        html: state.studio.html,
-        css: state.studio.css,
-        js: state.studio.js,
-        python: state.studio.python,
-        java: state.studio.java
+    const fontTag = studioFont
+        ? `<link rel="stylesheet" href="${buildGoogleFontUrl(studioFont)}">\n<style>body { font-family: '${escapeHtml(studioFont)}', sans-serif; }</style>`
+        : '';
+
+    const consoleBridge = forExport ? '' : `
+<script>
+(function(){
+  const send = (level, args) => {
+    try {
+      parent.postMessage({
+        source: 'devworkspace-studio',
+        level,
+        msg: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
+      }, '*');
+    } catch(e) {}
+  };
+  ['log','warn','error'].forEach(fn => {
+    const orig = console[fn];
+    console[fn] = function(...args) {
+      send(fn, args);
+      orig.apply(console, args);
     };
-    state.studio.savedProjects.unshift(item);
+  });
+  window.onerror = function(msg, src, line) {
+    send('error', [msg + ' (línea ' + line + ')']);
+  };
+})();
+</script>`;
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+${fontTag}
+<style>
+${css}
+</style>
+</head>
+<body>
+${html}
+${consoleBridge}
+<script>
+${js}
+<\/script>
+</body>
+</html>`;
+}
+
+function runStudioPreview() {
+    syncStudioStateFromInputs();
+    const iframe = document.getElementById('studio-preview-iframe');
+    if (!iframe) return;
+    studioConsoleLogs = [];
+    renderStudioConsole();
+    iframe.srcdoc = buildStudioSrcdoc(false);
+}
+
+function syncStudioStateFromInputs() {
+    appState.studioCurrent.title = document.getElementById('studio-project-title')?.value || 'Mi Proyecto Web';
+    appState.studioCurrent.html = document.getElementById('code-html')?.value || '';
+    appState.studioCurrent.css = document.getElementById('code-css')?.value || '';
+    appState.studioCurrent.js = document.getElementById('code-js')?.value || '';
+}
+
+function setStudioViewport(widthVal) {
+    const iframe = document.getElementById('studio-preview-iframe');
+    if (iframe) iframe.style.width = widthVal;
+
+    document.getElementById('vp-desktop')?.classList.toggle('active', widthVal === '100%');
+    document.getElementById('vp-tablet')?.classList.toggle('active', widthVal === '768px');
+    document.getElementById('vp-mobile')?.classList.toggle('active', widthVal === '375px');
+}
+
+function toggleStudioFullscreen() {
+    document.getElementById('studio-workbench')?.classList.toggle('studio-fullscreen');
+}
+
+function clearStudioConsole() {
+    studioConsoleLogs = [];
+    renderStudioConsole();
+}
+
+function renderStudioConsole() {
+    const out = document.getElementById('studio-console-output');
+    const count = document.getElementById('studio-console-count');
+    const filter = document.getElementById('studio-console-filter')?.value || 'all';
+
+    const filtered = filter === 'all'
+        ? studioConsoleLogs
+        : studioConsoleLogs.filter(item => item.level === filter);
+
+    if (count) count.textContent = `${filtered.length} logs`;
+    if (!out) return;
+    out.innerHTML = filtered.map(item => `
+        <div class="console-line-${item.level}">[${item.time}] [${item.level.toUpperCase()}] ${escapeHtml(item.msg)}</div>
+    `).join('');
+    out.scrollTop = out.scrollHeight;
+}
+
+function loadStudioTemplate(tpl) {
+    const templates = {
+        blank: {
+            title: 'HTML5 Base',
+            html: '<main class="container">\n  <h1>Nuevo Proyecto HTML5</h1>\n  <p>Empieza a construir aquí.</p>\n</main>',
+            css: 'body { font-family: system-ui, sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc; }',
+            js: 'console.log("Plantilla cargada");'
+        },
+        cybercard: {
+            title: 'Tarjeta Cyberpunk Neon',
+            html: '<div class="cyber-card">\n  <h2>SYSTEM ONLINE</h2>\n  <p>Interfaz HUD lista para producción.</p>\n</div>',
+            css: 'body { background:#05070e; color:#e2e8f0; display:grid; place-items:center; min-height:100vh; font-family:monospace; }\n.cyber-card { border:1px solid #38bdf8; padding:24px; border-radius:10px; box-shadow:0 0 24px rgba(56,189,248,.3); }',
+            js: ''
+        },
+        flexgrid: {
+            title: 'Flexbox & Grid Demo',
+            html: '<section class="grid">\n  <div class="box">01</div>\n  <div class="box">02</div>\n  <div class="box">03</div>\n</section>',
+            css: 'body { background:#0b1120; color:#fff; font-family:sans-serif; padding:20px; }\n.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px,1fr)); gap:12px; }\n.box { background:#1e293b; border:1px solid #38bdf8; padding:30px; text-align:center; border-radius:8px; font-weight:bold; }',
+            js: ''
+        },
+        domlab: {
+            title: 'Laboratorio DOM JS',
+            html: '<input id="item-in" placeholder="Escribe algo...">\n<button id="add-btn">Añadir</button>\n<ul id="list"></ul>',
+            css: 'body { font-family:sans-serif; background:#090d16; color:#f1f5f9; padding:20px; }\ninput, button { padding:8px; margin-right:6px; }',
+            js: 'document.getElementById("add-btn").onclick = () => {\n  const val = document.getElementById("item-in").value;\n  if(!val) return;\n  const li = document.createElement("li");\n  li.textContent = val;\n  document.getElementById("list").appendChild(li);\n  console.log("Añadido:", val);\n};'
+        }
+    };
+    const chosen = templates[tpl];
+    if (!chosen) return;
+    document.getElementById('studio-project-title').value = chosen.title;
+    document.getElementById('code-html').value = chosen.html;
+    document.getElementById('code-css').value = chosen.css;
+    document.getElementById('code-js').value = chosen.js;
+    syncStudioStateFromInputs();
     saveState();
-    renderStudioSavedList();
-    showToast(`Proyecto "${title}" guardado`, 'success');
+    runStudioPreview();
+    updateStudioEditorMetrics();
+}
+
+function injectStudioCdn(cdn) {
+    const snippets = {
+        tailwind: '<script src="https://cdn.tailwindcss.com"><\/script>\n',
+        bootstrap: '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">\n',
+        alpine: '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>\n',
+        chartjs: '<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>\n'
+    };
+    if (!snippets[cdn]) return;
+    const htmlArea = document.getElementById('code-html');
+    htmlArea.value = snippets[cdn] + htmlArea.value;
+    syncStudioStateFromInputs();
+    saveState();
+    runStudioPreview();
+    showToast(`CDN ${cdn} inyectado en HTML`, 'success');
+}
+
+function inspectStudioDomStructure() {
+    const html = document.getElementById('code-html')?.value || '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const ids = [...doc.querySelectorAll('[id]')].map(el => `#${el.id}`);
+    const classes = [...new Set([...doc.querySelectorAll('[class]')].flatMap(el => [...el.classList]).map(c => `.${c}`))];
+    showToast(`IDs: ${ids.join(', ') || 'ninguno'} | Clases: ${classes.slice(0, 8).join(', ') || 'ninguna'}`, 'info');
+}
+
+function saveStudioProject() {
+    syncStudioStateFromInputs();
+    const proj = {
+        id: generateId('stp'),
+        title: appState.studioCurrent.title,
+        html: appState.studioCurrent.html,
+        css: appState.studioCurrent.css,
+        js: appState.studioCurrent.js,
+        updatedAt: new Date().toLocaleString('es-ES')
+    };
+    appState.studioProjects.unshift(proj);
+    saveState();
+    renderStudioSavedProjects();
+    showToast(`Proyecto "${proj.title}" guardado`, 'success');
 }
 
 function loadSavedStudioProject(id) {
-    const item = state.studio.savedProjects.find(p => p.id === id);
-    if (!item) return;
-    state.studio.title = item.title;
-    state.studio.html = item.html || '';
-    state.studio.css = item.css || '';
-    state.studio.js = item.js || '';
-    state.studio.python = item.python || '';
-    state.studio.java = item.java || '';
-
-    const titleEl = document.getElementById('studio-project-title');
-    if (titleEl) titleEl.value = item.title;
-    ['html', 'css', 'js', 'python', 'java'].forEach(k => {
-        const el = document.getElementById(`studio-editor-${k}`);
-        if (el) el.value = state.studio[k];
-    });
-    switchStudioTab('html');
-    runStudioCode();
+    const proj = appState.studioProjects.find(p => p.id === id);
+    if (!proj) return;
+    document.getElementById('studio-project-title').value = proj.title;
+    document.getElementById('code-html').value = proj.html;
+    document.getElementById('code-css').value = proj.css;
+    document.getElementById('code-js').value = proj.js;
+    syncStudioStateFromInputs();
     saveState();
-    showToast(`Proyecto "${item.title}" cargado`, 'success');
+    switchStudioEditorTab('html');
+    runStudioPreview();
+    showToast(`Proyecto "${proj.title}" cargado`, 'success');
 }
 
 function deleteSavedStudioProject(id) {
-    state.studio.savedProjects = state.studio.savedProjects.filter(p => p.id !== id);
+    const index = appState.studioProjects.findIndex(p => p.id === id);
+    if (index === -1) return;
+    const [removed] = appState.studioProjects.splice(index, 1);
     saveState();
-    renderStudioSavedList();
+    renderStudioSavedProjects();
+    registerUndo(`Proyecto "${removed.title}" eliminado`, () => {
+        appState.studioProjects.splice(index, 0, removed);
+    });
 }
 
-function renderStudioSavedList() {
-    const list = document.getElementById('studio-saved-list');
-    if (!list) return;
-    if (!state.studio.savedProjects.length) {
-        list.innerHTML = '<div class="mono-muted">No hay proyectos guardados todavía.</div>';
+function renderStudioSavedProjects() {
+    const container = document.getElementById('studio-saved-projects-list');
+    if (!container) return;
+    if (!appState.studioProjects.length) {
+        container.innerHTML = `<div class="mono-muted">No tienes proyectos guardados todavía. Pulsa "Guardar" en la barra superior.</div>`;
         return;
     }
-    list.innerHTML = state.studio.savedProjects.map(p => `
-        <div class="grade-item-row">
-            <span>📁 <strong>${escapeHtml(p.title)}</strong> <small>(${escapeHtml(p.updatedAt)})</small></span>
-            <div class="filter-pills-row">
-                <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject(${JSON.stringify(p.id)})">Abrir</button>
-                <button type="button" class="btn-icon" onclick="deleteSavedStudioProject(${JSON.stringify(p.id)})">🗑️</button>
+    container.innerHTML = appState.studioProjects.map(p => `
+        <div class="deadline-card-item">
+            <div class="deadline-card-top">
+                <div>
+                    <strong>${escapeHtml(p.title)}</strong>
+                    <div class="mono-muted">Guardado: ${escapeHtml(p.updatedAt)}</div>
+                </div>
+                <div class="filter-pills-row">
+                    <button type="button" class="btn-cyan btn-sm" onclick="loadSavedStudioProject('${p.id}')">Abrir</button>
+                    <button type="button" class="btn-icon" onclick="deleteSavedStudioProject('${p.id}')">🗑️</button>
+                </div>
             </div>
         </div>
     `).join('');
 }
 
 function exportStudioSingleHtml() {
-    const full = `<!DOCTYPE html>\n<html lang="es">\n<head>\n<meta charset="UTF-8">\n<title>${escapeHtml(state.studio.title || 'Proyecto')}</title>\n<style>\n${state.studio.css || ''}\n</style>\n</head>\n<body>\n${state.studio.html || ''}\n<script>\n${state.studio.js || ''}\n<\/script>\n</body>\n</html>`;
-    const blob = new Blob([full], { type: 'text/html;charset=utf-8' });
+    syncStudioStateFromInputs();
+    const fullHtml = buildStudioSrcdoc(true);
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(state.studio.title || 'proyecto').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.html`;
+    const slug = (appState.studioCurrent.title || 'proyecto').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    a.download = `${slug}.html`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('Archivo .html autocontenido descargado', 'success');
 }
 
-function exportStudioMultiFiles() {
-    const bundle = JSON.stringify({
-        title: state.studio.title,
-        html: state.studio.html,
-        css: state.studio.css,
-        js: state.studio.js,
-        python: state.studio.python,
-        java: state.studio.java
-    }, null, 2);
-    const blob = new Blob([bundle], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(state.studio.title || 'proyecto').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-studio.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-}
+function importStudioHtmlFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const content = String(e.target?.result || '');
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(content, 'text/html');
+        const styles = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n');
+        const scripts = [...doc.querySelectorAll('script:not([src])')].map(s => s.textContent).join('\n');
+        doc.querySelectorAll('style, script:not([src])').forEach(el => el.remove());
 
-/* ==========================================================
-   WORKSPACE 3: BASE DE DATOS Y SQL LOCAL
-   ========================================================== */
-function renderDatabaseWorkspace() {
-    const tabsBox = document.getElementById('db-tables-tabs');
-    const gridBox = document.getElementById('db-table-grid-container');
-    const titleEl = document.getElementById('db-active-table-title');
-    if (!tabsBox || !gridBox) return;
-
-    const tableNames = Object.keys(state.database.tables || {});
-    if (!tableNames.length) {
-        tabsBox.innerHTML = '';
-        gridBox.innerHTML = '<div class="mono-muted">No hay tablas. Crea una arriba.</div>';
-        return;
-    }
-
-    if (!state.database.tables[state.database.activeTable]) {
-        state.database.activeTable = tableNames[0];
-    }
-
-    const activeName = state.database.activeTable;
-    if (titleEl) titleEl.textContent = `🗄️ Tabla: ${activeName}`;
-
-    tabsBox.innerHTML = tableNames.map(name => `
-        <button type="button" class="pill-btn ${name === activeName ? 'active' : ''}" onclick="selectDbTable(${JSON.stringify(name)})">
-            ${escapeHtml(name)}
-        </button>
-    `).join('');
-
-    const tbl = state.database.tables[activeName];
-    const cols = tbl.columns || [];
-    const rows = tbl.rows || [];
-
-    gridBox.innerHTML = `
-        <table class="sch-table">
-            <thead>
-                <tr>
-                    ${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}
-                    <th>Acción</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rows.length ? rows.map((row, rIdx) => `
-                    <tr>
-                        ${cols.map(c => `<td>${escapeHtml(row[c] ?? '')}</td>`).join('')}
-                        <td><button type="button" class="btn-icon" onclick="deleteDbRow(${rIdx})">🗑️</button></td>
-                    </tr>
-                `).join('') : `<tr><td colspan="${cols.length + 1}" class="mono-muted">Tabla vacía</td></tr>`}
-            </tbody>
-        </table>
-    `;
-}
-
-function selectDbTable(name) {
-    state.database.activeTable = name;
-    saveState();
-    renderDatabaseWorkspace();
-}
-
-function createDbTable() {
-    const name = (document.getElementById('db-new-table-name')?.value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    const colsRaw = (document.getElementById('db-new-table-cols')?.value || '').trim();
-    if (!name || !colsRaw) {
-        showToast('Indica nombre de tabla y columnas separadas por coma', 'error');
-        return;
-    }
-    const columns = colsRaw.split(',').map(c => c.trim()).filter(Boolean);
-    if (!columns.length) return;
-
-    state.database.tables[name] = { columns, rows: [] };
-    state.database.activeTable = name;
-    document.getElementById('db-new-table-name').value = '';
-    document.getElementById('db-new-table-cols').value = '';
-    saveState();
-    renderDatabaseWorkspace();
-    showToast(`Tabla "${name}" creada`, 'success');
-}
-
-function addDbRowPrompt() {
-    const activeName = state.database.activeTable;
-    const tbl = state.database.tables[activeName];
-    if (!tbl) return;
-    const row = {};
-    for (const col of tbl.columns) {
-        const val = prompt(`Valor para "${col}":`, '');
-        if (val === null) return;
-        row[col] = val;
-    }
-    tbl.rows.push(row);
-    saveState();
-    renderDatabaseWorkspace();
-}
-
-function deleteDbRow(idx) {
-    const tbl = state.database.tables[state.database.activeTable];
-    if (!tbl) return;
-    tbl.rows.splice(idx, 1);
-    saveState();
-    renderDatabaseWorkspace();
-}
-
-function deleteCurrentDbTable() {
-    const name = state.database.activeTable;
-    if (!name || !state.database.tables[name]) return;
-    delete state.database.tables[name];
-    const remaining = Object.keys(state.database.tables);
-    state.database.activeTable = remaining[0] || '';
-    saveState();
-    renderDatabaseWorkspace();
-    showToast(`Tabla "${name}" eliminada`, 'info');
-}
-
-function exportDbJson() {
-    const blob = new Blob([JSON.stringify(state.database.tables, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `devworkspace-db-${getMadridDateKey()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-function insertSqlTemplate(kind) {
-    const active = state.database.activeTable || 'alumnos';
-    const tbl = state.database.tables[active];
-    const cols = tbl ? tbl.columns.join(', ') : 'id, nombre';
-    const box = document.getElementById('db-sql-input');
-    if (!box) return;
-    if (kind === 'select') box.value = `SELECT * FROM ${active};`;
-    else if (kind === 'insert') box.value = `INSERT INTO ${active} (${cols}) VALUES (${tbl ? tbl.columns.map(() => "'valor'").join(', ') : "'1', 'Dato'"});`;
-    else if (kind === 'delete') box.value = `DELETE FROM ${active} WHERE id = '1';`;
-}
-
-function executeLocalSql() {
-    const raw = (document.getElementById('db-sql-input')?.value || '').trim().replace(/;+$/, '');
-    const out = document.getElementById('db-sql-result');
-    if (!out) return;
-
-    const selectMatch = /^SELECT\s+(.+?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*['"]?([^'"]+)['"]?)?$/i.exec(raw);
-    if (selectMatch) {
-        const [, colsPart, tableName, whereCol, whereVal] = selectMatch;
-        const tbl = state.database.tables[tableName.toLowerCase()];
-        if (!tbl) {
-            out.innerHTML = `<div class="console-err">Tabla "${escapeHtml(tableName)}" no encontrada.</div>`;
-            return;
-        }
-        const cols = colsPart.trim() === '*' ? tbl.columns : colsPart.split(',').map(c => c.trim());
-        const rows = whereCol
-            ? tbl.rows.filter(r => String(r[whereCol] ?? '') === whereVal)
-            : tbl.rows;
-
-        out.innerHTML = `
-            <table class="sch-table">
-                <thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
-                <tbody>
-                    ${rows.map(r => `<tr>${cols.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('')}</tr>`).join('')}
-                </tbody>
-            </table>
-        `;
-        return;
-    }
-
-    const insertMatch = /^INSERT\s+INTO\s+([a-zA-Z0-9_]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)$/i.exec(raw);
-    if (insertMatch) {
-        const [, tableName, colsRaw, valsRaw] = insertMatch;
-        const tbl = state.database.tables[tableName.toLowerCase()];
-        if (!tbl) {
-            out.innerHTML = `<div class="console-err">Tabla "${escapeHtml(tableName)}" no encontrada.</div>`;
-            return;
-        }
-        const cols = colsRaw.split(',').map(c => c.trim());
-        const vals = valsRaw.split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''));
-        const row = {};
-        tbl.columns.forEach(c => { row[c] = ''; });
-        cols.forEach((c, idx) => { row[c] = vals[idx] ?? ''; });
-        tbl.rows.push(row);
+        document.getElementById('studio-project-title').value = file.name.replace(/\.html?$/i, '');
+        document.getElementById('code-html').value = doc.body.innerHTML.trim();
+        document.getElementById('code-css').value = styles.trim();
+        document.getElementById('code-js').value = scripts.trim();
+        syncStudioStateFromInputs();
         saveState();
-        renderDatabaseWorkspace();
-        out.innerHTML = `<div class="console-line">1 fila insertada en ${escapeHtml(tableName)}.</div>`;
-        return;
-    }
-
-    const deleteMatch = /^DELETE\s+FROM\s+([a-zA-Z0-9_]+)\s+WHERE\s+([a-zA-Z0-9_]+)\s*=\s*['"]?([^'"]+)['"]?$/i.exec(raw);
-    if (deleteMatch) {
-        const [, tableName, whereCol, whereVal] = deleteMatch;
-        const tbl = state.database.tables[tableName.toLowerCase()];
-        if (!tbl) {
-            out.innerHTML = `<div class="console-err">Tabla "${escapeHtml(tableName)}" no encontrada.</div>`;
-            return;
-        }
-        const before = tbl.rows.length;
-        tbl.rows = tbl.rows.filter(r => String(r[whereCol] ?? '') !== whereVal);
-        const deleted = before - tbl.rows.length;
-        saveState();
-        renderDatabaseWorkspace();
-        out.innerHTML = `<div class="console-line">${deleted} fila(s) eliminada(s) de ${escapeHtml(tableName)}.</div>`;
-        return;
-    }
-
-    out.innerHTML = '<div class="console-warn">Sintaxis soportada: SELECT ... FROM tabla [WHERE col = \'val\'], INSERT INTO tabla (cols) VALUES (vals), DELETE FROM tabla WHERE col = \'val\'.</div>';
+        runStudioPreview();
+        updateStudioEditorMetrics();
+        showToast(`Archivo "${file.name}" importado`, 'success');
+        event.target.value = '';
+    };
+    reader.readAsText(file);
 }
 
-/* ==========================================================
-   WORKSPACE 4: ACADEMIA DAM
-   ========================================================== */
-function ensureSubjectInCatalog(name, teacher = '', room = '') {
-    const clean = String(name || '').trim();
-    if (!clean) return;
-    const existing = (state.subjectsCatalog || []).find(s => s.name.toLowerCase() === clean.toLowerCase());
-    if (existing) {
-        if (teacher) existing.teacher = teacher;
-        if (room) existing.room = room;
-    } else {
-        state.subjectsCatalog.push({
-            id: `subj-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-            name: clean,
-            teacher,
-            room
-        });
-    }
-    renderSubjectSelectTargets();
-}
-
-function renderSubjectSelectTargets() {
-    const subjects = state.subjectsCatalog || [];
-    const optionsHtml = subjects.length
-        ? subjects.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('')
-        : '<option value="General">General</option>';
-
-    document.querySelectorAll('.subject-select-target').forEach(sel => {
-        const current = sel.value;
-        sel.innerHTML = optionsHtml;
-        if (current && Array.from(sel.options).some(o => o.value === current)) {
-            sel.value = current;
-        }
-    });
-
-    const fcFilter = document.getElementById('fc-filter-subject');
-    if (fcFilter) {
-        const cur = fcFilter.value || 'all';
-        fcFilter.innerHTML = '<option value="all">Todas las asignaturas</option>' + optionsHtml;
-        fcFilter.value = cur;
-    }
-}
-
-function addCatalogSubject() {
-    const name = (document.getElementById('subj-cat-name')?.value || '').trim();
-    const teacher = (document.getElementById('subj-cat-teacher')?.value || '').trim();
-    const room = (document.getElementById('subj-cat-room')?.value || '').trim();
-    if (!name) return;
-
-    ensureSubjectInCatalog(name, teacher, room);
-    document.getElementById('subj-cat-name').value = '';
-    document.getElementById('subj-cat-teacher').value = '';
-    document.getElementById('subj-cat-room').value = '';
-    toggleForm('form-add-subject-catalog');
-    saveState();
-    renderSubjectsCatalogList();
-    showToast('Asignatura guardada', 'success');
-}
-
-function deleteCatalogSubject(id) {
-    state.subjectsCatalog = state.subjectsCatalog.filter(s => s.id !== id);
-    saveState();
-    renderSubjectSelectTargets();
-    renderSubjectsCatalogList();
-}
-
-function renderSubjectsCatalogList() {
-    const list = document.getElementById('subjects-catalog-list');
-    if (!list) return;
-    if (!state.subjectsCatalog.length) {
-        list.innerHTML = '<div class="mono-muted">Sin asignaturas registradas.</div>';
-        return;
-    }
-    list.innerHTML = state.subjectsCatalog.map(s => `
-        <div class="grade-item-row">
-            <span><strong>${escapeHtml(s.name)}</strong> · ${escapeHtml(s.teacher || 'Sin profesor')} · ${escapeHtml(s.room || 'Sin aula')}</span>
-            <button type="button" class="btn-icon" onclick="deleteCatalogSubject(${JSON.stringify(s.id)})">🗑️</button>
-        </div>
-    `).join('');
+/* --------------------------------------------------------------------------
+   ACADEMIA: KANBAN (CON DRAG & DROP), NOTAS PONDERADAS Y STUDY HUB
+   -------------------------------------------------------------------------- */
+function toggleExamCramFilter() {
+    examCramOnly = !examCramOnly;
+    document.getElementById('btn-exam-cram-mode')?.classList.toggle('active', examCramOnly);
+    renderKanban();
 }
 
 function addKanbanTask() {
-    const subject = (document.getElementById('kb-subject')?.value || '').trim();
-    const title = (document.getElementById('kb-title')?.value || '').trim();
-    if (!title) return;
+    const title = document.getElementById('kanban-new-title')?.value.trim();
+    const subject = document.getElementById('kanban-new-subject')?.value.trim() || 'DAM';
+    const pomos = Number(document.getElementById('kanban-new-pomos')?.value || 2);
+    const priority = document.getElementById('kanban-new-prio')?.value || 'medium';
 
-    state.kanban.push({
-        id: `kb-${Date.now()}`,
-        subject,
-        title,
-        status: 'todo'
-    });
-    document.getElementById('kb-title').value = '';
-    toggleForm('form-add-kanban');
+    if (!title) return showToast('Escribe el nombre del tema', 'error');
+
+    appState.kanban.push({ id: generateId('kb'), title, subject, status: 'todo', priority, pomos });
+    document.getElementById('kanban-new-title').value = '';
     saveState();
     renderKanban();
 }
 
 function moveKanbanTask(id, nextStatus) {
-    const item = state.kanban.find(k => k.id === id);
-    if (!item) return;
+    const item = appState.kanban.find(k => k.id === id);
+    if (!item || item.status === nextStatus) return;
     item.status = nextStatus;
     saveState();
     renderKanban();
 }
 
 function deleteKanbanTask(id) {
-    state.kanban = state.kanban.filter(k => k.id !== id);
+    const index = appState.kanban.findIndex(k => k.id === id);
+    if (index === -1) return;
+    const [removed] = appState.kanban.splice(index, 1);
     saveState();
     renderKanban();
+    registerUndo(`Tema "${removed.title}" eliminado`, () => {
+        appState.kanban.splice(index, 0, removed);
+    });
+}
+
+function initKanbanDragAndDrop() {
+    document.querySelectorAll('.kanban-col[data-kanban-col]').forEach(col => {
+        col.addEventListener('dragover', e => {
+            e.preventDefault();
+            col.classList.add('kanban-drop-hover');
+        });
+        col.addEventListener('dragleave', () => {
+            col.classList.remove('kanban-drop-hover');
+        });
+        col.addEventListener('drop', e => {
+            e.preventDefault();
+            col.classList.remove('kanban-drop-hover');
+            const targetStatus = col.dataset.kanbanCol;
+            const id = e.dataTransfer?.getData('text/plain') || draggedKanbanId;
+            if (id && targetStatus) {
+                moveKanbanTask(id, targetStatus);
+            }
+            draggedKanbanId = null;
+        });
+    });
+}
+
+function handleKanbanDragStart(event, id) {
+    draggedKanbanId = id;
+    event.currentTarget?.classList.add('dragging');
+    if (event.dataTransfer) {
+        event.dataTransfer.setData('text/plain', id);
+        event.dataTransfer.effectAllowed = 'move';
+    }
+}
+
+function handleKanbanDragEnd(event) {
+    event.currentTarget?.classList.remove('dragging');
+    document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('kanban-drop-hover'));
 }
 
 function renderKanban() {
-    const cols = {
-        todo: document.getElementById('kb-col-todo'),
-        doing: document.getElementById('kb-col-doing'),
-        done: document.getElementById('kb-col-done')
-    };
-    if (!cols.todo || !cols.doing || !cols.done) return;
+    const cols = { todo: [], doing: [], done: [] };
+    appState.kanban.forEach(item => {
+        if (examCramOnly && item.priority !== 'high') return;
+        if (cols[item.status]) cols[item.status].push(item);
+    });
 
-    Object.values(cols).forEach(el => { el.innerHTML = ''; });
+    ['todo', 'doing', 'done'].forEach(status => {
+        const listEl = document.getElementById(`kanban-list-${status}`);
+        const countEl = document.getElementById(`kanban-count-${status}`);
+        if (countEl) countEl.textContent = cols[status].length;
+        if (!listEl) return;
 
-    (state.kanban || []).forEach(item => {
-        const target = cols[item.status] || cols.todo;
-        const card = document.createElement('div');
-        card.className = 'kanban-card';
-        card.innerHTML = `
-            <span class="kb-subj">${escapeHtml(item.subject || 'General')}</span>
-            <div>${escapeHtml(item.title)}</div>
-            <div class="filter-pills-row">
-                ${item.status !== 'todo' ? `<button type="button" class="btn-ghost btn-sm" onclick="moveKanbanTask(${JSON.stringify(item.id)}, 'todo')">⬅️</button>` : ''}
-                ${item.status === 'todo' ? `<button type="button" class="btn-cyan btn-sm" onclick="moveKanbanTask(${JSON.stringify(item.id)}, 'doing')">➡️</button>` : ''}
-                ${item.status === 'doing' ? `<button type="button" class="btn-green btn-sm" onclick="moveKanbanTask(${JSON.stringify(item.id)}, 'done')">✅</button>` : ''}
-                <button type="button" class="btn-icon" onclick="deleteKanbanTask(${JSON.stringify(item.id)})">🗑️</button>
+        listEl.innerHTML = cols[status].map(k => `
+            <div class="kanban-card" draggable="true" ondragstart="handleKanbanDragStart(event, '${k.id}')" ondragend="handleKanbanDragEnd(event)">
+                <div class="kanban-card-header">
+                    <span class="kanban-subject-tag">${escapeHtml(k.subject)}</span>
+                    <span>${k.priority === 'high' ? '🔴' : k.priority === 'medium' ? '🟠' : '🔵'}</span>
+                </div>
+                <div>${escapeHtml(k.title)}</div>
+                <div class="kanban-card-footer">
+                    <span>🍅 ${k.pomos}</span>
+                    <div>
+                        ${status !== 'todo' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','todo')" title="Por estudiar">⬅️</button>` : ''}
+                        ${status !== 'doing' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','doing')" title="En curso">▶️</button>` : ''}
+                        ${status !== 'done' ? `<button type="button" class="btn-icon" onclick="moveKanbanTask('${k.id}','done')" title="Dominado">✅</button>` : ''}
+                        <button type="button" class="btn-icon" onclick="deleteKanbanTask('${k.id}')" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
             </div>
-        `;
-        target.appendChild(card);
+        `).join('');
     });
 }
 
-function addGrade() {
-    const subject = (document.getElementById('grd-subject')?.value || '').trim();
-    const title = (document.getElementById('grd-title')?.value || '').trim();
-    const score = parseFloat(document.getElementById('grd-score')?.value || '');
-    const weight = parseFloat(document.getElementById('grd-weight')?.value || '100');
+/* Calculadora de Calificaciones */
+function addGradeSubject() {
+    const name = document.getElementById('new-grade-subj-name')?.value.trim();
+    const target = Number(document.getElementById('new-grade-subj-target')?.value || 5);
+    const credits = Number(document.getElementById('new-grade-subj-credits')?.value || 6);
+    if (!name) return showToast('Escribe el nombre de la asignatura', 'error');
 
-    if (!title || !Number.isFinite(score)) {
-        showToast('Introduce título y nota válida', 'error');
-        return;
+    appState.grades.push({ id: generateId('gr'), name, target, credits, items: [] });
+    document.getElementById('new-grade-subj-name').value = '';
+    saveState();
+    renderGrades();
+}
+
+function addGradeItem(subjId) {
+    const subj = appState.grades.find(g => g.id === subjId);
+    if (!subj) return;
+    const title = document.getElementById(`gi-title-${subjId}`)?.value.trim() || 'Prueba';
+    const score = Number(document.getElementById(`gi-score-${subjId}`)?.value);
+    const weight = Number(document.getElementById(`gi-weight-${subjId}`)?.value);
+
+    if (isNaN(score) || score < 0 || score > 10 || isNaN(weight) || weight <= 0) {
+        return showToast('Nota (0-10) y peso (%) válidos requeridos', 'error');
     }
-
-    state.grades.unshift({
-        id: `grd-${Date.now()}`,
-        subject,
-        title,
-        score,
-        weight: Number.isFinite(weight) && weight > 0 ? weight : 100
-    });
-    document.getElementById('grd-title').value = '';
-    document.getElementById('grd-score').value = '';
-    toggleForm('form-add-grade');
+    subj.items.push({ id: generateId('gi'), title, score, weight });
     saveState();
     renderGrades();
 }
 
-function deleteGrade(id) {
-    state.grades = state.grades.filter(g => g.id !== id);
+function deleteGradeItem(subjId, itemId) {
+    const subj = appState.grades.find(g => g.id === subjId);
+    if (!subj) return;
+    subj.items = subj.items.filter(it => it.id !== itemId);
     saveState();
     renderGrades();
+}
+
+function deleteGradeSubject(subjId) {
+    const index = appState.grades.findIndex(g => g.id === subjId);
+    if (index === -1) return;
+    const [removed] = appState.grades.splice(index, 1);
+    saveState();
+    renderGrades();
+    registerUndo(`Asignatura "${removed.name}" eliminada`, () => {
+        appState.grades.splice(index, 0, removed);
+    });
 }
 
 function renderGrades() {
-    const list = document.getElementById('grades-list');
-    const avgBadge = document.getElementById('grades-avg-badge');
-    if (!list) return;
+    const container = document.getElementById('grades-subjects-container');
+    if (!container) return;
 
-    const grades = state.grades || [];
-    if (avgBadge) {
-        if (!grades.length) {
-            avgBadge.textContent = 'Media: --';
-        } else {
-            const totalW = grades.reduce((acc, g) => acc + (g.weight || 100), 0);
-            const weighted = grades.reduce((acc, g) => acc + g.score * (g.weight || 100), 0);
-            avgBadge.textContent = `Media: ${(weighted / Math.max(1, totalW)).toFixed(2)}`;
+    let weightedCourseSum = 0;
+    let totalCredits = 0;
+
+    container.innerHTML = appState.grades.map(subj => {
+        const totalWeight = subj.items.reduce((acc, it) => acc + it.weight, 0);
+        const earnedPoints = subj.items.reduce((acc, it) => acc + (it.score * (it.weight / 100)), 0);
+        const currentAvg = totalWeight > 0 ? (earnedPoints / (totalWeight / 100)) : 0;
+
+        if (totalWeight > 0) {
+            weightedCourseSum += currentAvg * subj.credits;
+            totalCredits += subj.credits;
         }
-    }
 
-    if (!grades.length) {
-        list.innerHTML = '<div class="mono-muted">Sin calificaciones registradas.</div>';
-        return;
-    }
+        const remainingWeight = Math.max(0, 100 - totalWeight);
+        let simulatorText = `100% evaluado · Nota final: ${earnedPoints.toFixed(2)}`;
+        if (remainingWeight > 0) {
+            const needed = ((subj.target - earnedPoints) / (remainingWeight / 100));
+            simulatorText = needed <= 0
+                ? `🎉 Objetivo (${subj.target}) ya asegurado con el ${totalWeight}% evaluado`
+                : `🎯 Necesitas un ${needed.toFixed(2)} en el ${remainingWeight}% restante para llegar a ${subj.target}`;
+        }
 
-    list.innerHTML = grades.map(g => `
-        <div class="grade-item-row">
-            <span><strong>${escapeHtml(g.subject)}</strong> · ${escapeHtml(g.title)}: <strong>${g.score.toFixed(2)}</strong> (${g.weight}%)</span>
-            <button type="button" class="btn-icon" onclick="deleteGrade(${JSON.stringify(g.id)})">🗑️</button>
-        </div>
-    `).join('');
+        return `
+            <div class="grade-subject-card">
+                <div class="grade-subj-header">
+                    <span><strong>${escapeHtml(subj.name)}</strong> (${subj.credits}h · Obj: ${subj.target})</span>
+                    <div class="filter-pills-row">
+                        <span class="grade-subj-score ${currentAvg >= subj.target ? 'score-pass' : 'score-fail'}">${currentAvg.toFixed(2)}</span>
+                        <button type="button" class="btn-icon" onclick="deleteGradeSubject('${subj.id}')">🗑️</button>
+                    </div>
+                </div>
+                <div class="grade-progress-bar-bg"><div class="grade-progress-bar-fill" style="width:${Math.min(100, totalWeight)}%"></div></div>
+                <div class="grade-needed-banner">${simulatorText}</div>
+                <div class="grade-items-list">
+                    ${subj.items.map(it => `
+                        <div class="grade-item-row">
+                            <span>${escapeHtml(it.title)}: <strong>${it.score}</strong> (${it.weight}%)</span>
+                            <button type="button" class="btn-icon" onclick="deleteGradeItem('${subj.id}', '${it.id}')" title="Eliminar prueba">✕</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="form-inline-row">
+                    <input type="text" id="gi-title-${subj.id}" placeholder="Examen / Práctica">
+                    <input type="number" id="gi-score-${subj.id}" placeholder="Nota" step="0.1" min="0" max="10" class="w-75">
+                    <input type="number" id="gi-weight-${subj.id}" placeholder="%" min="1" max="100" class="w-65">
+                    <button type="button" class="btn-green btn-sm" onclick="addGradeItem('${subj.id}')">+</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const badge = document.getElementById('global-course-avg-badge');
+    if (badge) {
+        badge.textContent = totalCredits > 0 ? `Media: ${(weightedCourseSum / totalCredits).toFixed(2)}` : 'Media: --';
+    }
 }
 
-function switchStudyHubTab(tab) {
-    document.querySelectorAll('.study-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.studytab === tab);
+/* Study Hub: Flashcards, Bug Log y Dudas */
+function setStudyHubTab(tab) {
+    ['flashcards', 'bugs', 'doubts'].forEach(t => {
+        document.getElementById(`hub-tab-${t}`)?.classList.toggle('active', t === tab);
+        document.getElementById(`hub-view-${t}`)?.classList.toggle('is-hidden', t !== tab);
     });
-    ['flashcards', 'bugs', 'doubts'].forEach(panel => {
-        document.getElementById(`study-panel-${panel}`)?.classList.toggle('is-hidden', panel !== tab);
-    });
-}
-
-function getFilteredFlashcards() {
-    const filter = document.getElementById('fc-filter-subject')?.value || 'all';
-    if (filter === 'all') return state.flashcards || [];
-    return (state.flashcards || []).filter(fc => fc.subject === filter);
 }
 
 function addFlashcard() {
-    const subject = (document.getElementById('fc-subject')?.value || 'DAM').trim();
-    const front = (document.getElementById('fc-front')?.value || '').trim();
-    const back = (document.getElementById('fc-back')?.value || '').trim();
-    if (!front || !back) return;
+    const subject = document.getElementById('fc-new-subj')?.value.trim() || 'General';
+    const question = document.getElementById('fc-new-q')?.value.trim();
+    const answer = document.getElementById('fc-new-a')?.value.trim();
+    if (!question || !answer) return showToast('Completa pregunta y respuesta', 'error');
 
-    state.flashcards.push({ id: `fc-${Date.now()}`, subject, front, back });
-    document.getElementById('fc-front').value = '';
-    document.getElementById('fc-back').value = '';
-    toggleForm('form-add-fc');
-    state.flashcardIndex = state.flashcards.length - 1;
-    state.flashcardFlipped = false;
+    appState.flashcards.push({ id: generateId('fc'), subject, question, answer, mastered: false });
+    document.getElementById('fc-new-q').value = '';
+    document.getElementById('fc-new-a').value = '';
     saveState();
     renderFlashcards();
 }
 
-function flipFlashcard() {
-    state.flashcardFlipped = !state.flashcardFlipped;
-    renderFlashcards();
+function getFilteredFlashcards() {
+    const subjFilter = document.getElementById('fc-filter-subject')?.value || 'all';
+    const unmasteredOnly = Boolean(document.getElementById('fc-unmastered-only')?.checked);
+    return appState.flashcards.filter(c => {
+        if (subjFilter !== 'all' && c.subject !== subjFilter) return false;
+        if (unmasteredOnly && c.mastered) return false;
+        return true;
+    });
 }
 
-function prevFlashcard() {
-    const list = getFilteredFlashcards();
-    if (!list.length) return;
-    state.flashcardIndex = (state.flashcardIndex - 1 + list.length) % list.length;
-    state.flashcardFlipped = false;
+function renderFlashcards() {
+    const select = document.getElementById('fc-filter-subject');
+    if (select) {
+        const current = select.value;
+        const subjects = [...new Set(appState.flashcards.map(f => f.subject))];
+        select.innerHTML = `<option value="all">Todas las asignaturas</option>` +
+            subjects.map(s => `<option value="${escapeHtml(s)}" ${s === current ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+    }
+
+    const deck = getFilteredFlashcards();
+    const statsEl = document.getElementById('fc-deck-stats');
+    const stage = document.getElementById('flashcard-stage');
+    if (!stage) return;
+
+    if (!deck.length) {
+        if (statsEl) statsEl.textContent = '0/0';
+        stage.innerHTML = `<div class="mono-muted">No hay tarjetas en este filtro.</div>`;
+        return;
+    }
+
+    currentFlashcardIndex = currentFlashcardIndex % deck.length;
+    const card = deck[currentFlashcardIndex];
+    const masteredCount = deck.filter(c => c.mastered).length;
+    if (statsEl) statsEl.textContent = `${currentFlashcardIndex + 1}/${deck.length} (✅ ${masteredCount})`;
+
+    stage.innerHTML = currentFlashcardFlipped
+        ? `<div class="fc-hint">[${escapeHtml(card.subject)}] Respuesta:</div><div class="fc-answer-text">${escapeHtml(card.answer)}</div>`
+        : `<div class="fc-hint">[${escapeHtml(card.subject)}] ${card.mastered ? '✅ Dominada' : '🔄 Pendiente'} · Clic para voltear</div><div class="fc-question-text">${escapeHtml(card.question)}</div>`;
+}
+
+function flipCurrentFlashcard() {
+    currentFlashcardFlipped = !currentFlashcardFlipped;
     renderFlashcards();
 }
 
 function nextFlashcard() {
-    const list = getFilteredFlashcards();
-    if (!list.length) return;
-    state.flashcardIndex = (state.flashcardIndex + 1) % list.length;
-    state.flashcardFlipped = false;
+    currentFlashcardIndex++;
+    currentFlashcardFlipped = false;
     renderFlashcards();
+}
+
+function markFlashcardStatus(mastered) {
+    const deck = getFilteredFlashcards();
+    if (!deck.length) return;
+    const card = deck[currentFlashcardIndex % deck.length];
+    card.mastered = mastered;
+    saveState();
+    nextFlashcard();
 }
 
 function deleteCurrentFlashcard() {
-    const list = getFilteredFlashcards();
-    if (!list.length) return;
-    const current = list[state.flashcardIndex % list.length];
-    state.flashcards = state.flashcards.filter(fc => fc.id !== current.id);
-    state.flashcardIndex = 0;
-    state.flashcardFlipped = false;
+    const deck = getFilteredFlashcards();
+    if (!deck.length) return;
+    const card = deck[currentFlashcardIndex % deck.length];
+    const index = appState.flashcards.findIndex(f => f.id === card.id);
+    if (index === -1) return;
+    const [removed] = appState.flashcards.splice(index, 1);
+    currentFlashcardFlipped = false;
     saveState();
     renderFlashcards();
-}
-
-function renderFlashcards() {
-    const list = getFilteredFlashcards();
-    const counter = document.getElementById('fc-counter');
-    const subjEl = document.getElementById('fc-card-subject');
-    const contentEl = document.getElementById('fc-card-content');
-    if (!contentEl) return;
-
-    if (!list.length) {
-        if (counter) counter.textContent = '0 / 0';
-        if (subjEl) subjEl.textContent = 'DAM';
-        contentEl.textContent = 'Añade tarjetas de estudio arriba';
-        return;
-    }
-
-    const idx = ((state.flashcardIndex % list.length) + list.length) % list.length;
-    const card = list[idx];
-    if (counter) counter.textContent = `${idx + 1} / ${list.length}`;
-    if (subjEl) subjEl.textContent = `${card.subject} · ${state.flashcardFlipped ? 'RESPUESTA' : 'PREGUNTA'}`;
-    contentEl.textContent = state.flashcardFlipped ? card.back : card.front;
+    registerUndo('Flashcard eliminada', () => {
+        appState.flashcards.splice(index, 0, removed);
+    });
 }
 
 function addBugLog() {
-    const title = (document.getElementById('bug-title')?.value || '').trim();
-    const fix = (document.getElementById('bug-fix')?.value || '').trim();
-    if (!title) return;
-    state.bugLogs.unshift({ id: `bug-${Date.now()}`, title, fix });
-    document.getElementById('bug-title').value = '';
-    document.getElementById('bug-fix').value = '';
-    toggleForm('form-add-bug');
+    const subject = document.getElementById('bug-new-subj')?.value.trim() || 'Dev';
+    const error = document.getElementById('bug-new-error')?.value.trim();
+    const cause = document.getElementById('bug-new-cause')?.value.trim() || '-';
+    const fix = document.getElementById('bug-new-fix')?.value.trim() || '-';
+    if (!error) return showToast('Describe el error encontrado', 'error');
+
+    appState.bugLogs.unshift({ id: generateId('bug'), subject, error, cause, fix, date: getMadridDateKey() });
+    document.getElementById('bug-new-error').value = '';
+    document.getElementById('bug-new-cause').value = '';
+    document.getElementById('bug-new-fix').value = '';
     saveState();
     renderBugLogs();
 }
 
 function deleteBugLog(id) {
-    state.bugLogs = state.bugLogs.filter(b => b.id !== id);
+    appState.bugLogs = appState.bugLogs.filter(b => b.id !== id);
     saveState();
     renderBugLogs();
 }
 
 function renderBugLogs() {
-    const list = document.getElementById('bug-logs-list');
-    if (!list) return;
-    if (!state.bugLogs.length) {
-        list.innerHTML = '<div class="mono-muted">Sin bugs registrados.</div>';
+    const container = document.getElementById('bug-log-list');
+    if (!container) return;
+    const query = (document.getElementById('bug-search-input')?.value || '').toLowerCase();
+    const filtered = appState.bugLogs.filter(b =>
+        b.error.toLowerCase().includes(query) || b.fix.toLowerCase().includes(query) || b.subject.toLowerCase().includes(query)
+    );
+    if (!filtered.length) {
+        container.innerHTML = `<div class="mono-muted">Sin registros de errores.</div>`;
         return;
     }
-    list.innerHTML = state.bugLogs.map(b => `
-        <div class="grade-item-row">
-            <span>🐞 <strong>${escapeHtml(b.title)}</strong> → ${escapeHtml(b.fix || 'Pendiente')}</span>
-            <button type="button" class="btn-icon" onclick="deleteBugLog(${JSON.stringify(b.id)})">🗑️</button>
+    container.innerHTML = filtered.map(b => `
+        <div class="hub-item-card">
+            <div class="deadline-card-top">
+                <span><strong>[${escapeHtml(b.subject)}]</strong> ${escapeHtml(b.error)}</span>
+                <button type="button" class="btn-icon" onclick="deleteBugLog('${b.id}')" title="Eliminar">🗑️</button>
+            </div>
+            <div class="mono-muted">Causa: ${escapeHtml(b.cause)} · Solución: <span style="color:var(--accent-green)">${escapeHtml(b.fix)}</span></div>
         </div>
     `).join('');
 }
 
 function addClassDoubt() {
-    const subject = (document.getElementById('doubt-subject')?.value || '').trim();
-    const text = (document.getElementById('doubt-text')?.value || '').trim();
+    const subj = document.getElementById('doubt-new-subj')?.value.trim() || 'Clase';
+    const text = document.getElementById('doubt-new-text')?.value.trim();
     if (!text) return;
-    state.classDoubts.unshift({ id: `dbt-${Date.now()}`, subject, text, resolved: false });
-    document.getElementById('doubt-text').value = '';
-    toggleForm('form-add-doubt');
+
+    appState.doubts.unshift({ id: generateId('dbt'), subj, text, resolved: false });
+    document.getElementById('doubt-new-text').value = '';
     saveState();
-    renderClassDoubts();
+    renderDoubts();
+}
+
+function toggleDoubtResolved(id) {
+    const d = appState.doubts.find(x => x.id === id);
+    if (!d) return;
+    d.resolved = !d.resolved;
+    saveState();
+    renderDoubts();
 }
 
 function deleteClassDoubt(id) {
-    state.classDoubts = state.classDoubts.filter(d => d.id !== id);
+    appState.doubts = appState.doubts.filter(x => x.id !== id);
     saveState();
-    renderClassDoubts();
+    renderDoubts();
 }
 
-function renderClassDoubts() {
-    const list = document.getElementById('class-doubts-list');
-    if (!list) return;
-    if (!state.classDoubts.length) {
-        list.innerHTML = '<div class="mono-muted">No hay dudas pendientes.</div>';
+function renderDoubts() {
+    const container = document.getElementById('doubts-list');
+    if (!container) return;
+    if (!appState.doubts.length) {
+        container.innerHTML = `<div class="mono-muted">No hay dudas pendientes.</div>`;
         return;
     }
-    list.innerHTML = state.classDoubts.map(d => `
-        <div class="grade-item-row">
-            <span>❓ <strong>[${escapeHtml(d.subject || 'DAM')}]</strong> ${escapeHtml(d.text)}</span>
-            <button type="button" class="btn-icon" onclick="deleteClassDoubt(${JSON.stringify(d.id)})">🗑️</button>
-        </div>
-    `).join('');
-}
-
-function addProject() {
-    const title = (document.getElementById('prj-title')?.value || '').trim();
-    const stack = (document.getElementById('prj-stack')?.value || '').trim();
-    const progress = Math.max(0, Math.min(100, Number(document.getElementById('prj-progress')?.value || 0)));
-    const url = normalizeExternalUrl(document.getElementById('prj-url')?.value || '');
-    if (!title) return;
-
-    state.projects.unshift({ id: `prj-${Date.now()}`, title, stack, progress, url });
-    document.getElementById('prj-title').value = '';
-    document.getElementById('prj-stack').value = '';
-    document.getElementById('prj-url').value = '';
-    toggleForm('form-add-project');
-    saveState();
-    renderProjects();
-}
-
-function deleteProject(id) {
-    state.projects = state.projects.filter(p => p.id !== id);
-    saveState();
-    renderProjects();
-}
-
-function renderProjects() {
-    const list = document.getElementById('projects-list');
-    if (!list) return;
-    if (!state.projects.length) {
-        list.innerHTML = '<div class="mono-muted">Sin proyectos registrados.</div>';
-        return;
-    }
-    list.innerHTML = state.projects.map(p => `
-        <div class="grade-item-row">
-            <span>🚀 <strong>${escapeHtml(p.title)}</strong> (${escapeHtml(p.stack || 'General')}) · ${p.progress}% ${p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">🔗</a>` : ''}</span>
-            <button type="button" class="btn-icon" onclick="deleteProject(${JSON.stringify(p.id)})">🗑️</button>
-        </div>
-    `).join('');
-}
-
-function renderAcademyWorkspace() {
-    renderSubjectSelectTargets();
-    renderSubjectsCatalogList();
-    renderKanban();
-    renderGrades();
-    renderFlashcards();
-    renderBugLogs();
-    renderClassDoubts();
-    renderProjects();
-}
-
-/* ==========================================================
-   WORKSPACE 5: DEV & SYSADMIN LAB
-   ========================================================== */
-function switchToolboxTab(tab) {
-    document.querySelectorAll('.tb-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tbtab === tab);
-    });
-    ['format', 'encode', 'net', 'gen'].forEach(panel => {
-        document.getElementById(`tb-panel-${panel}`)?.classList.toggle('is-hidden', panel !== tab);
-    });
-}
-
-function formatJsonTool() {
-    const area = document.getElementById('json-input-area');
-    if (!area) return;
-    try {
-        area.value = JSON.stringify(JSON.parse(area.value), null, 2);
-    } catch (err) {
-        showToast(`JSON inválido: ${err.message}`, 'error');
-    }
-}
-
-function minifyJsonTool() {
-    const area = document.getElementById('json-input-area');
-    if (!area) return;
-    try {
-        area.value = JSON.stringify(JSON.parse(area.value));
-    } catch (err) {
-        showToast(`JSON inválido: ${err.message}`, 'error');
-    }
-}
-
-function encodeBase64Tool() {
-    const area = document.getElementById('encode-input-area');
-    if (!area) return;
-    try {
-        const bytes = new TextEncoder().encode(area.value);
-        let bin = '';
-        bytes.forEach(b => { bin += String.fromCharCode(b); });
-        area.value = btoa(bin);
-    } catch (err) {
-        showToast(err.message, 'error');
-    }
-}
-
-function decodeBase64Tool() {
-    const area = document.getElementById('encode-input-area');
-    if (!area) return;
-    try {
-        const bin = atob(area.value.trim());
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        area.value = new TextDecoder().decode(bytes);
-    } catch (err) {
-        showToast('Base64 inválido', 'error');
-    }
-}
-
-function encodeUrlTool() {
-    const area = document.getElementById('encode-input-area');
-    if (area) area.value = encodeURIComponent(area.value);
-}
-
-function decodeUrlTool() {
-    const area = document.getElementById('encode-input-area');
-    if (!area) return;
-    try {
-        area.value = decodeURIComponent(area.value);
-    } catch (_) {
-        showToast('URL codificada inválida', 'error');
-    }
-}
-
-function decodeJwtTool() {
-    const area = document.getElementById('encode-input-area');
-    if (!area) return;
-    try {
-        const parts = area.value.trim().split('.');
-        if (parts.length < 2) throw new Error('Token JWT incompleto');
-        const decodePart = p => JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
-        area.value = JSON.stringify({ header: decodePart(parts[0]), payload: decodePart(parts[1]) }, null, 2);
-    } catch (err) {
-        showToast(`JWT inválido: ${err.message}`, 'error');
-    }
-}
-
-function runSubnetTool() {
-    const raw = document.getElementById('subnet-cidr-input')?.value || '';
-    const out = document.getElementById('subnet-output');
-    if (!out) return;
-    const res = calculateSubnet(raw);
-    if (!res) {
-        out.textContent = 'Formato inválido. Usa IP/CIDR (ej. 192.168.1.0/24).';
-        return;
-    }
-    out.textContent = `Red: ${res.network} | Máscara: ${res.mask} | Broadcast: ${res.broadcast} | Rango: ${res.firstHost} - ${res.lastHost} | Hosts útiles: ${res.usableHosts}`;
-}
-
-function convertNumberBases(sourceRadix) {
-    const ids = { 10: 'num-dec', 16: 'num-hex', 2: 'num-bin' };
-    const raw = document.getElementById(ids[sourceRadix])?.value || '';
-    const val = parseBaseValue(raw, sourceRadix);
-    if (val === null) return;
-    if (sourceRadix !== 10) document.getElementById('num-dec').value = val.toString(10);
-    if (sourceRadix !== 16) document.getElementById('num-hex').value = val.toString(16).toUpperCase();
-    if (sourceRadix !== 2) document.getElementById('num-bin').value = val.toString(2);
-}
-
-function testRegexTool() {
-    const pattern = document.getElementById('regex-pattern')?.value || '';
-    const flags = document.getElementById('regex-flags')?.value || 'g';
-    const sample = document.getElementById('regex-test-text')?.value || '';
-    const out = document.getElementById('regex-output');
-    if (!out) return;
-    try {
-        const rx = new RegExp(pattern, flags);
-        const matches = [...sample.matchAll(rx.global ? rx : new RegExp(pattern, `${flags}g`))].map(m => m[0]);
-        out.textContent = matches.length ? `Coincidencias (${matches.length}): ${matches.join(', ')}` : 'Sin coincidencias.';
-    } catch (err) {
-        out.textContent = `Regex inválida: ${err.message}`;
-    }
-}
-
-function generateUuidTool() {
-    const box = document.getElementById('gen-output-box');
-    const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    if (box) box.textContent = uuid;
-}
-
-function generateSecurePassword() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-+=';
-    const arr = new Uint32Array(20);
-    crypto.getRandomValues(arr);
-    const pwd = Array.from(arr, n => chars[n % chars.length]).join('');
-    const box = document.getElementById('gen-output-box');
-    if (box) box.textContent = pwd;
-}
-
-function copyBoilerplate(kind) {
-    const templates = {
-        dockerfile: 'FROM node:22-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --omit=dev\nCOPY . .\nEXPOSE 3000\nCMD ["node", "index.js"]',
-        compose: 'services:\n  app:\n    image: nginx:alpine\n    restart: unless-stopped\n    ports:\n      - "8080:80"'
-    };
-    const text = templates[kind] || '';
-    const box = document.getElementById('gen-output-box');
-    if (box) box.textContent = text;
-    navigator.clipboard?.writeText(text).then(() => showToast('Plantilla copiada al portapapeles', 'success')).catch(() => {});
-}
-
-async function generateSha256Tool() {
-    const text = document.getElementById('hash-input-text')?.value || '';
-    const box = document.getElementById('gen-output-box');
-    if (!box) return;
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-    box.textContent = hex;
-}
-
-function addServer() {
-    const name = (document.getElementById('srv-name')?.value || '').trim();
-    const host = (document.getElementById('srv-host')?.value || '').trim();
-    const role = (document.getElementById('srv-role')?.value || '').trim();
-    const url = normalizeExternalUrl(document.getElementById('srv-url')?.value || '');
-    if (!name || !host) return;
-
-    state.servers.unshift({ id: `srv-${Date.now()}`, name, host, role, url });
-    ['srv-name', 'srv-host', 'srv-role', 'srv-url'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-    toggleForm('form-add-server');
-    saveState();
-    renderServers();
-}
-
-function deleteServer(id) {
-    state.servers = state.servers.filter(s => s.id !== id);
-    saveState();
-    renderServers();
-}
-
-function renderServers() {
-    const list = document.getElementById('servers-list');
-    if (!list) return;
-    if (!state.servers.length) {
-        list.innerHTML = '<div class="mono-muted">Sin hosts registrados.</div>';
-        return;
-    }
-    list.innerHTML = state.servers.map(s => `
-        <div class="grade-item-row">
-            <span>🖥️ <strong>${escapeHtml(s.name)}</strong> (${escapeHtml(s.host)}) · ${escapeHtml(s.role || 'Host')} ${s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">🔗</a>` : ''}</span>
-            <button type="button" class="btn-icon" onclick="deleteServer(${JSON.stringify(s.id)})">🗑️</button>
-        </div>
-    `).join('');
-}
-
-function addSnippet() {
-    const title = (document.getElementById('snp-title')?.value || '').trim();
-    const tag = (document.getElementById('snp-tag')?.value || 'general').trim();
-    const code = (document.getElementById('snp-code')?.value || '').trim();
-    if (!title || !code) return;
-
-    state.snippets.unshift({ id: `snp-${Date.now()}`, title, tag, code });
-    document.getElementById('snp-title').value = '';
-    document.getElementById('snp-tag').value = '';
-    document.getElementById('snp-code').value = '';
-    toggleForm('form-add-snippet');
-    saveState();
-    renderSnippets();
-}
-
-function copySnippet(code) {
-    navigator.clipboard?.writeText(code)
-        .then(() => showToast('Comando copiado', 'success'))
-        .catch(() => showToast('No se pudo copiar al portapapeles', 'error'));
-}
-
-function deleteSnippet(id) {
-    state.snippets = state.snippets.filter(s => s.id !== id);
-    saveState();
-    renderSnippets();
-}
-
-function renderSnippets() {
-    const list = document.getElementById('snippets-list');
-    if (!list) return;
-    const q = (document.getElementById('snippet-search-input')?.value || '').trim().toLowerCase();
-    const items = (state.snippets || []).filter(s =>
-        !q || s.title.toLowerCase().includes(q) || s.tag.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)
-    );
-    if (!items.length) {
-        list.innerHTML = '<div class="mono-muted">Sin snippets que coincidan.</div>';
-        return;
-    }
-    list.innerHTML = items.map(s => `
-        <div class="grade-item-row">
-            <span>⚡ <strong>${escapeHtml(s.title)}</strong> <small>[${escapeHtml(s.tag)}]</small>: <code>${escapeHtml(s.code)}</code></span>
-            <div class="filter-pills-row">
-                <button type="button" class="btn-cyan btn-sm" onclick="copySnippet(${JSON.stringify(s.code)})">📋</button>
-                <button type="button" class="btn-icon" onclick="deleteSnippet(${JSON.stringify(s.id)})">🗑️</button>
+    container.innerHTML = appState.doubts.map(d => `
+        <div class="hub-item-card">
+            <div class="deadline-card-top">
+                <span style="${d.resolved ? 'text-decoration:line-through;opacity:0.6' : ''}"><strong>[${escapeHtml(d.subj)}]</strong> ${escapeHtml(d.text)}</span>
+                <div class="filter-pills-row">
+                    <button type="button" class="btn-icon" onclick="toggleDoubtResolved('${d.id}')" title="Marcar resuelta">${d.resolved ? '↩️' : '✅'}</button>
+                    <button type="button" class="btn-icon" onclick="deleteClassDoubt('${d.id}')" title="Eliminar">🗑️</button>
+                </div>
             </div>
         </div>
     `).join('');
 }
 
-function addBookmark() {
-    const name = (document.getElementById('bm-name')?.value || '').trim();
-    const url = normalizeExternalUrl(document.getElementById('bm-url')?.value || '');
-    if (!name || !url) {
-        showToast('Introduce un nombre y URL válidos', 'error');
+function exportStudyHubMarkdown() {
+    const md = [
+        '# Study Hub Export',
+        '## Flashcards',
+        ...appState.flashcards.map(f => `- **${f.subject}**: ${f.question} -> *${f.answer}*`),
+        '\n## Bug Log',
+        ...appState.bugLogs.map(b => `- [${b.subject}] **${b.error}** -> ${b.fix}`)
+    ].join('\n');
+    copyTextToClipboard(md, 'Study Hub copiado en Markdown');
+}
+
+/* Planificador hasta Examen y Proyectos */
+function calculateStudyPlan() {
+    const examDateStr = document.getElementById('planner-exam-date')?.value;
+    const topics = Number(document.getElementById('planner-topics-count')?.value || 1);
+    const minsPerTopic = Number(document.getElementById('planner-mins-topic')?.value || 45);
+    const out = document.getElementById('study-planner-result');
+    if (!examDateStr || !out) return showToast('Selecciona la fecha del examen', 'error');
+
+    const diffDays = Math.max(1, Math.ceil((new Date(examDateStr) - Date.now()) / 86400000));
+    const totalMins = topics * minsPerTopic;
+    const minsPerDay = Math.ceil(totalMins / diffDays);
+    const pomosPerDay = Math.ceil(minsPerDay / 25);
+
+    out.textContent = `📅 Quedan ${diffDays} días · Total: ${(totalMins / 60).toFixed(1)}h · Ritmo recomendado: ${minsPerDay} min/día (~${pomosPerDay} pomodoros/día).`;
+}
+
+function addTeamProject() {
+    const name = document.getElementById('proj-new-name')?.value.trim();
+    const rawRepo = document.getElementById('proj-new-repo')?.value.trim() || '';
+    const repo = rawRepo ? normalizeExternalUrl(rawRepo) : '';
+    const working = document.getElementById('proj-new-working')?.value.trim() || '-';
+    const pending = document.getElementById('proj-new-pending')?.value.trim() || '-';
+
+    if (!name) return showToast('Escribe el nombre del proyecto', 'error');
+    if (rawRepo && !repo) return showToast('URL de repositorio inválida', 'error');
+
+    appState.teamProjects.unshift({ id: generateId('prj'), name, repo, working, pending });
+    document.getElementById('proj-new-name').value = '';
+    document.getElementById('proj-new-repo').value = '';
+    document.getElementById('proj-new-working').value = '';
+    document.getElementById('proj-new-pending').value = '';
+    saveState();
+    renderTeamProjects();
+}
+
+function deleteTeamProject(id) {
+    const index = appState.teamProjects.findIndex(p => p.id === id);
+    if (index === -1) return;
+    const [removed] = appState.teamProjects.splice(index, 1);
+    saveState();
+    renderTeamProjects();
+    registerUndo(`Proyecto "${removed.name}" eliminado`, () => {
+        appState.teamProjects.splice(index, 0, removed);
+    });
+}
+
+function renderTeamProjects() {
+    const container = document.getElementById('team-projects-list');
+    if (!container) return;
+    if (!appState.teamProjects.length) {
+        container.innerHTML = `<div class="mono-muted">Sin proyectos registrados.</div>`;
         return;
     }
-    state.bookmarks.push({ id: `bm-${Date.now()}`, name, url });
+    container.innerHTML = appState.teamProjects.map(p => {
+        const safeRepo = normalizeExternalUrl(p.repo);
+        return `
+            <div class="hub-item-card">
+                <div class="deadline-card-top">
+                    <strong>${escapeHtml(p.name)}</strong>
+                    <div class="filter-pills-row">
+                        ${safeRepo ? `<a href="${escapeHtml(safeRepo)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">Repo ↗</a>` : ''}
+                        <button type="button" class="btn-icon" onclick="deleteTeamProject('${p.id}')">🗑️</button>
+                    </div>
+                </div>
+                <div class="mono-muted">✅ Funciona: ${escapeHtml(p.working)}</div>
+                <div class="mono-muted">🚧 Pendiente: ${escapeHtml(p.pending)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+/* --------------------------------------------------------------------------
+   WORKSPACE 4: DEV & SYSADMIN TOOLBOX + SERVIDORES + SNIPPETS
+   -------------------------------------------------------------------------- */
+function setToolboxTab(tab) {
+    ['format', 'encode', 'regex', 'net', 'sys', 'gen'].forEach(t => {
+        document.getElementById(`tb-tab-${t}`)?.classList.toggle('active', t === tab);
+        document.getElementById(`tb-view-${t}`)?.classList.toggle('is-hidden', t !== tab);
+    });
+}
+
+function tbFormatJson(minify) {
+    const input = document.getElementById('tb-json-input');
+    const status = document.getElementById('tb-json-status');
+    try {
+        const parsed = JSON.parse(input.value);
+        input.value = JSON.stringify(parsed, null, minify ? 0 : 2);
+        status.textContent = minify ? '✅ JSON minificado correctamente' : '✅ JSON válido formateado';
+    } catch (err) {
+        status.textContent = `❌ Error JSON: ${err.message}`;
+    }
+}
+
+function tbJsonToCsv() {
+    const input = document.getElementById('tb-json-input');
+    const status = document.getElementById('tb-json-status');
+    try {
+        const arr = JSON.parse(input.value);
+        if (!Array.isArray(arr) || !arr.length) throw new Error('Se requiere un array de objetos JSON');
+        const headers = Object.keys(arr[0]);
+        const rows = arr.map(obj => headers.map(h => JSON.stringify(obj[h] ?? '')).join(','));
+        input.value = [headers.join(','), ...rows].join('\n');
+        status.textContent = '✅ Convertido a CSV';
+    } catch (err) {
+        status.textContent = `❌ ${err.message}`;
+    }
+}
+
+function tbCsvToJson() {
+    const input = document.getElementById('tb-json-input');
+    const status = document.getElementById('tb-json-status');
+    try {
+        const lines = input.value.trim().split('\n');
+        if (lines.length < 2) throw new Error('CSV insuficiente');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const result = lines.slice(1).map(line => {
+            const cols = line.split(',');
+            return Object.fromEntries(headers.map((h, i) => [h, (cols[i] || '').trim().replace(/^"|"$/g, '')]));
+        });
+        input.value = JSON.stringify(result, null, 2);
+        status.textContent = '✅ Convertido a JSON';
+    } catch (err) {
+        status.textContent = `❌ ${err.message}`;
+    }
+}
+
+function tbFormatSql() {
+    const input = document.getElementById('tb-json-input');
+    const keywords = ['SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'GROUP BY', 'ORDER BY', 'LIMIT', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE FROM'];
+    let sql = input.value.replace(/\s+/g, ' ').trim();
+    keywords.forEach(kw => {
+        const rx = new RegExp(`\\b${kw}\\b`, 'gi');
+        sql = sql.replace(rx, `\n${kw}`);
+    });
+    input.value = sql.trim();
+    document.getElementById('tb-json-status').textContent = '✅ SQL formateado';
+}
+
+function tbEncodeAction(action) {
+    const val = document.getElementById('tb-encode-input')?.value || '';
+    const out = document.getElementById('tb-encode-output');
+    try {
+        if (action === 'b64e') out.textContent = utf8ToBase64(val);
+        if (action === 'b64d') out.textContent = base64ToUtf8(val);
+        if (action === 'urle') out.textContent = encodeURIComponent(val);
+        if (action === 'urld') out.textContent = decodeURIComponent(val);
+    } catch (err) {
+        out.textContent = `Error: ${err.message}`;
+    }
+}
+
+function tbDecodeJwt() {
+    const token = (document.getElementById('tb-encode-input')?.value || '').trim();
+    const out = document.getElementById('tb-encode-output');
+    try {
+        const parts = token.split('.');
+        if (parts.length < 2) throw new Error('Token JWT inválido');
+        const decodePart = p => JSON.parse(base64ToUtf8(p.replace(/-/g, '+').replace(/_/g, '/')));
+        out.textContent = JSON.stringify({ header: decodePart(parts[0]), payload: decodePart(parts[1]) }, null, 2);
+    } catch (err) {
+        out.textContent = `❌ JWT inválido: ${err.message}`;
+    }
+}
+
+async function tbComputeHashes() {
+    const text = document.getElementById('tb-encode-input')?.value || '';
+    const out = document.getElementById('tb-encode-output');
+    if (!crypto?.subtle) {
+        out.textContent = '❌ Web Crypto API no disponible';
+        return;
+    }
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    out.textContent = `SHA-256:\n${hex}`;
+}
+
+function runRegexTester() {
+    const pattern = document.getElementById('tb-regex-pattern')?.value || '';
+    const flags = document.getElementById('tb-regex-flags')?.value || 'g';
+    const text = document.getElementById('tb-regex-text')?.value || '';
+    const resEl = document.getElementById('tb-regex-result');
+    try {
+        const rx = new RegExp(pattern, flags);
+        const matches = [...text.matchAll(rx)].map(m => m[0]);
+        resEl.textContent = matches.length ? `✅ ${matches.length} coincidencias: ${matches.join(' | ')}` : '⚠️ 0 coincidencias';
+    } catch (err) {
+        resEl.textContent = `❌ Regex inválida: ${err.message}`;
+    }
+}
+
+function runSimpleDiff() {
+    const a = (document.getElementById('tb-regex-text')?.value || '').split('\n');
+    const b = (document.getElementById('tb-diff-b')?.value || '').split('\n');
+    const out = document.getElementById('tb-diff-output');
+    const max = Math.max(a.length, b.length);
+    const diffs = [];
+    for (let i = 0; i < max; i++) {
+        if ((a[i] || '') !== (b[i] || '')) {
+            diffs.push(`@@ Línea ${i + 1} @@\n- ${a[i] ?? '(vacío)'}\n+ ${b[i] ?? '(vacío)'}`);
+        }
+    }
+    out.textContent = diffs.length ? diffs.join('\n\n') : '✅ Ambos bloques son idénticos';
+}
+
+function calculateSubnet() {
+    const raw = (document.getElementById('tb-ip-input')?.value || '').trim();
+    const out = document.getElementById('tb-subnet-output');
+    if (!out) return;
+    try {
+        const info = computeSubnetInfo(raw);
+        out.textContent = [
+            `Red:        ${info.network}/${info.cidr}`,
+            `Máscara:    ${info.mask}`,
+            `Broadcast:  ${info.broadcast}`,
+            `Rango Host: ${info.firstHost} - ${info.lastHost}`,
+            `Hosts Út.:  ${info.hosts}`
+        ].join('\n');
+    } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        out.textContent = error.message;
+    }
+}
+
+function convertNumberBase(fromBase, rawVal) {
+    const parsed = parseBaseValue(fromBase, rawVal);
+    const ids = ['dec', 'bin', 'hex', 'oct'];
+    if (!parsed.valid || parsed.value === null) {
+        ids.filter(b => b !== fromBase).forEach(b => {
+            const el = document.getElementById(`base-${b}`);
+            if (el) el.value = '';
+        });
+        return;
+    }
+    const num = parsed.value;
+    document.getElementById('base-dec').value = num.toString(10);
+    document.getElementById('base-bin').value = num.toString(2);
+    document.getElementById('base-hex').value = num.toString(16).toUpperCase();
+    document.getElementById('base-oct').value = num.toString(8);
+}
+
+function updateChmodCalc() {
+    const calc = p => (document.getElementById(`ch-${p}r`)?.checked ? 4 : 0) +
+        (document.getElementById(`ch-${p}w`)?.checked ? 2 : 0) +
+        (document.getElementById(`ch-${p}x`)?.checked ? 1 : 0);
+    const sym = p => (document.getElementById(`ch-${p}r`)?.checked ? 'r' : '-') +
+        (document.getElementById(`ch-${p}w`)?.checked ? 'w' : '-') +
+        (document.getElementById(`ch-${p}x`)?.checked ? 'x' : '-');
+
+    const oct = `${calc('u')}${calc('g')}${calc('o')}`;
+    document.getElementById('chmod-octal').textContent = oct;
+    document.getElementById('chmod-symbolic').textContent = `${sym('u')}${sym('g')}${sym('o')}`;
+}
+
+function copyChmodCmd() {
+    const oct = document.getElementById('chmod-octal')?.textContent || '755';
+    copyTextToClipboard(`chmod ${oct} archivo`, `Copiado: chmod ${oct} archivo`);
+}
+
+function explainCronExpr() {
+    const raw = (document.getElementById('cron-expr-input')?.value || '').trim();
+    const out = document.getElementById('cron-explanation');
+    const presets = {
+        '@yearly': 'Una vez al año (1 de enero a las 00:00)',
+        '@monthly': 'El día 1 de cada mes a las 00:00',
+        '@weekly': 'Cada domingo a las 00:00',
+        '@daily': 'Todos los días a las 00:00',
+        '@hourly': 'Al minuto 0 de cada hora'
+    };
+    if (presets[raw]) {
+        out.textContent = `⏱️ ${presets[raw]}`;
+        return;
+    }
+    const parts = raw.split(/\s+/);
+    if (parts.length !== 5) {
+        out.textContent = '⚠️ Formato cron estándar: minuto hora día_mes mes día_semana';
+        return;
+    }
+    const describeField = (val, unit) => {
+        if (val === '*') return `cada ${unit}`;
+        if (val.startsWith('*/')) return `cada ${val.slice(2)} ${unit}s`;
+        return `${unit} ${val}`;
+    };
+    out.textContent = `⏱️ Ejecutar en ${describeField(parts[0], 'minuto')}, ${describeField(parts[1], 'hora')}, día del mes (${parts[2]}), mes (${parts[3]}), día semana (${parts[4]}).`;
+}
+
+function generateMockUsers(count) {
+    const names = ['Marcos', 'Elena', 'Carlos', 'Lucía', 'Javier', 'Sofía', 'Diego'];
+    const users = Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        username: `${names[i % names.length].toLowerCase()}_${100 + i}`,
+        email: `user${i + 1}@devworkspace.local`,
+        role: i === 0 ? 'admin' : 'developer',
+        active: true
+    }));
+    document.getElementById('tb-gen-output').value = JSON.stringify(users, null, 2);
+}
+
+function generateUuidsAndDni() {
+    const uuid = crypto.randomUUID ? crypto.randomUUID() : generateId('uuid');
+    const num = Math.floor(10000000 + Math.random() * 89999999);
+    const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+    const dni = `${num}${letters[num % 23]}`;
+    document.getElementById('tb-gen-output').value = `UUID v4: ${uuid}\nDNI Prueba: ${dni}`;
+}
+
+function generateSecurePassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-';
+    const array = new Uint32Array(16);
+    crypto.getRandomValues(array);
+    const pwd = [...array].map(n => chars[n % chars.length]).join('');
+    document.getElementById('tb-gen-output').value = pwd;
+}
+
+function loadBoilerplate(type) {
+    const files = {
+        dockerfile: `FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --only=production\nCOPY . .\nEXPOSE 3000\nCMD ["node", "server.js"]`,
+        compose: `services:\n  app:\n    build: .\n    ports:\n      - "3000:3000"\n    restart: unless-stopped`
+    };
+    document.getElementById('tb-gen-output').value = files[type] || '';
+}
+
+/* Servidores & Homelab */
+function addServer() {
+    const name = document.getElementById('srv-name')?.value.trim();
+    const ip = document.getElementById('srv-ip')?.value.trim();
+    const port = document.getElementById('srv-port')?.value.trim() || '22';
+    const creds = document.getElementById('srv-creds')?.value.trim() || 'root';
+    const logs = document.getElementById('srv-logs')?.value.trim() || '/var/log';
+
+    if (!name || !ip) return showToast('Nombre e IP son obligatorios', 'error');
+
+    appState.servers.push({ id: generateId('srv'), name, ip, port, creds, logs });
+    document.getElementById('srv-name').value = '';
+    document.getElementById('srv-ip').value = '';
+    saveState();
+    renderServers();
+}
+
+function deleteServer(id) {
+    const index = appState.servers.findIndex(s => s.id === id);
+    if (index === -1) return;
+    const [removed] = appState.servers.splice(index, 1);
+    saveState();
+    renderServers();
+    registerUndo(`Servidor "${removed.name}" eliminado`, () => {
+        appState.servers.splice(index, 0, removed);
+    });
+}
+
+function exportServersJson() {
+    copyTextToClipboard(JSON.stringify(appState.servers, null, 2), 'Inventario de servidores copiado en JSON');
+}
+
+function renderServers() {
+    const list = document.getElementById('servers-list');
+    if (!list) return;
+    const q = (document.getElementById('srv-search-filter')?.value || '').toLowerCase();
+    const filtered = appState.servers.filter(s =>
+        s.name.toLowerCase().includes(q) || s.ip.toLowerCase().includes(q) || s.logs.toLowerCase().includes(q)
+    );
+    if (!filtered.length) {
+        list.innerHTML = `<li class="mono-muted">Sin hosts registrados.</li>`;
+        return;
+    }
+    list.innerHTML = filtered.map(s => {
+        const sshCmd = `ssh ${s.creds}@${s.ip} -p ${s.port}`;
+        return `
+            <li>
+                <div>
+                    <strong>${escapeHtml(s.name)}</strong> · <span class="snippet-cmd-text">${escapeHtml(s.creds)}@${escapeHtml(s.ip)}:${escapeHtml(s.port)}</span>
+                    <div class="mono-muted">Logs: ${escapeHtml(s.logs)}</div>
+                </div>
+                <div class="filter-pills-row">
+                    <button type="button" class="btn-cyan btn-sm" onclick="copyTextToClipboard('${escapeHtml(sshCmd)}', 'SSH copiado')" title="Copiar comando SSH">SSH</button>
+                    <button type="button" class="btn-ghost btn-sm" onclick="copyTextToClipboard('${escapeHtml(s.logs)}', 'Ruta de logs copiada')" title="Copiar ruta logs">📂</button>
+                    <button type="button" class="btn-icon" onclick="deleteServer('${s.id}')" title="Eliminar">🗑️</button>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+function addInfraChangelog() {
+    const input = document.getElementById('infra-changelog-input');
+    const text = input?.value.trim();
+    if (!text) return;
+    appState.infraChangelog.unshift({ id: generateId('chg'), date: getMadridDateKey(), text });
+    input.value = '';
+    saveState();
+    renderInfraChangelog();
+}
+
+function renderInfraChangelog() {
+    const list = document.getElementById('infra-changelog-list');
+    if (!list) return;
+    list.innerHTML = appState.infraChangelog.map(item => `
+        <div class="mono-muted">[${escapeHtml(item.date)}] ${escapeHtml(item.text)}</div>
+    `).join('');
+}
+
+/* Snippets & Bookmarks */
+const BUILTIN_SNIPPETS = [
+    { title: 'Conectar por SSH', cat: 'Linux', cmd: 'ssh {{USER}}@{{IP}} -p {{PORT}}' },
+    { title: 'Copiar archivo vía SCP', cat: 'Linux', cmd: 'scp -P {{PORT}} archivo.tar.gz {{USER}}@{{IP}}:/tmp/' },
+    { title: 'Ver contenedores activos', cat: 'Docker', cmd: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
+    { title: 'Logs en vivo de contenedor', cat: 'Docker', cmd: 'docker logs -f --tail 100 nombre_contenedor' },
+    { title: 'Actualizar y levantar Compose', cat: 'Docker', cmd: 'docker compose pull && docker compose up -d' },
+    { title: 'Comprobar puertos abiertos', cat: 'Redes', cmd: 'ss -tulpn' }
+];
+
+function addCustomSnippet() {
+    const title = document.getElementById('snip-new-title')?.value.trim();
+    const cat = document.getElementById('snip-new-cat')?.value.trim() || 'Custom';
+    const cmd = document.getElementById('snip-new-cmd')?.value.trim();
+    if (!title || !cmd) return showToast('Completa descripción y comando', 'error');
+
+    appState.customSnippets.unshift({ id: generateId('snip'), title, cat, cmd });
+    document.getElementById('snip-new-title').value = '';
+    document.getElementById('snip-new-cmd').value = '';
+    saveState();
+    renderSnippets();
+}
+
+function deleteCustomSnippet(id) {
+    const index = appState.customSnippets.findIndex(s => s.id === id);
+    if (index === -1) return;
+    const [removed] = appState.customSnippets.splice(index, 1);
+    saveState();
+    renderSnippets();
+    registerUndo(`Snippet "${removed.title}" eliminado`, () => {
+        appState.customSnippets.splice(index, 0, removed);
+    });
+}
+
+function renderSnippets() {
+    const container = document.getElementById('snippet-list-container');
+    if (!container) return;
+    const user = document.getElementById('cli-var-user')?.value || 'root';
+    const ip = document.getElementById('cli-var-ip')?.value || '192.168.1.10';
+    const port = document.getElementById('cli-var-port')?.value || '22';
+    const query = (document.getElementById('snippet-search')?.value || '').toLowerCase();
+
+    const all = [...appState.customSnippets, ...BUILTIN_SNIPPETS].filter(s =>
+        s.title.toLowerCase().includes(query) || s.cat.toLowerCase().includes(query) || s.cmd.toLowerCase().includes(query)
+    );
+
+    container.innerHTML = all.map(s => {
+        const resolved = s.cmd
+            .replace(/\{\{USER\}\}/g, user)
+            .replace(/\{\{IP\}\}/g, ip)
+            .replace(/\{\{PORT\}\}/g, port);
+        return `
+            <div class="snippet-box">
+                <div>
+                    <div class="mono-muted">[${escapeHtml(s.cat)}] ${escapeHtml(s.title)}</div>
+                    <div class="snippet-cmd-text">${escapeHtml(resolved)}</div>
+                </div>
+                <div class="filter-pills-row">
+                    <button type="button" class="btn-cyan btn-sm" onclick="copyTextToClipboard('${escapeHtml(resolved)}', 'Comando copiado')">Copiar</button>
+                    ${s.id ? `<button type="button" class="btn-icon" onclick="deleteCustomSnippet('${s.id}')" title="Eliminar snippet">🗑️</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function addBookmark() {
+    const name = document.getElementById('bm-name')?.value.trim();
+    const rawUrl = document.getElementById('bm-url')?.value.trim();
+    const url = normalizeExternalUrl(rawUrl);
+    if (!name || !url) return showToast('Introduce nombre y URL válida (http/https)', 'error');
+
+    appState.bookmarks.push({ id: generateId('bm'), name, url });
     document.getElementById('bm-name').value = '';
     document.getElementById('bm-url').value = '';
-    toggleForm('form-add-bookmark');
     saveState();
     renderBookmarks();
 }
 
 function deleteBookmark(id) {
-    state.bookmarks = state.bookmarks.filter(b => b.id !== id);
+    appState.bookmarks = appState.bookmarks.filter(b => b.id !== id);
     saveState();
     renderBookmarks();
 }
 
 function renderBookmarks() {
-    const box = document.getElementById('bookmarks-list');
-    if (!box) return;
-    box.innerHTML = (state.bookmarks || []).map(b => `
-        <span class="pill-btn">
-            <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">${escapeHtml(b.name)}</a>
-            <button type="button" class="btn-icon" onclick="deleteBookmark(${JSON.stringify(b.id)})">×</button>
-        </span>
-    `).join('');
+    const list = document.getElementById('bookmarks-list');
+    if (!list) return;
+    list.innerHTML = appState.bookmarks.map(b => {
+        const safeUrl = normalizeExternalUrl(b.url);
+        if (!safeUrl) return '';
+        return `
+            <li>
+                <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="footer-link-cyan">🔗 ${escapeHtml(b.name)}</a>
+                <button type="button" class="btn-icon" onclick="deleteBookmark('${b.id}')">🗑️</button>
+            </li>
+        `;
+    }).join('');
 }
 
-function renderDevLabWorkspace() {
-    renderServers();
-    renderSnippets();
-    renderBookmarks();
-}
-
-/* ==========================================================
-   BUSCADOR GLOBAL, ATAJOS Y PWA
-   ========================================================== */
+/* --------------------------------------------------------------------------
+   MODALES: BUSCADOR GLOBAL, EDICIÓN RÁPIDA, SNAPSHOTS, RESUMEN Y ATAJOS
+   -------------------------------------------------------------------------- */
 function openGlobalSearch() {
     const modal = document.getElementById('global-search-modal');
+    modal.style.display = 'flex';
     const input = document.getElementById('global-search-input');
-    if (modal) modal.style.display = 'flex';
-    if (input) {
-        input.value = '';
-        input.focus();
-    }
-    handleGlobalSearchInput();
+    input.value = '';
+    input.focus();
+    filterGlobalSearch();
 }
 
 function closeGlobalSearch() {
-    const modal = document.getElementById('global-search-modal');
-    if (modal) modal.style.display = 'none';
+    document.getElementById('global-search-modal').style.display = 'none';
 }
 
-function handleGlobalSearchInput() {
-    const q = (document.getElementById('global-search-input')?.value || '').trim().toLowerCase();
-    const box = document.getElementById('global-search-results');
-    if (!box) return;
+function filterGlobalSearch() {
+    const q = (document.getElementById('global-search-input')?.value || '').toLowerCase();
+    const resultsEl = document.getElementById('global-search-results');
+    if (!resultsEl) return;
 
-    const results = [];
-    (state.tasks || []).forEach(t => {
-        if (!q || t.text.toLowerCase().includes(q)) {
-            results.push({ label: `✅ Tarea: ${t.text}`, ws: 'cockpit' });
-        }
-    });
-    (state.deliveries || []).forEach(d => {
-        if (!q || d.title.toLowerCase().includes(q) || (d.subject || '').toLowerCase().includes(q)) {
-            results.push({ label: `⏳ Entrega: ${d.title} (${d.subject || 'DAM'})`, ws: 'cockpit' });
-        }
-    });
-    (state.snippets || []).forEach(s => {
-        if (!q || s.title.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) {
-            results.push({ label: `⚡ Snippet: ${s.title} — ${s.code}`, ws: 'devlab' });
-        }
-    });
-    (state.flashcards || []).forEach(fc => {
-        if (!q || fc.front.toLowerCase().includes(q) || fc.back.toLowerCase().includes(q)) {
-            results.push({ label: `🧠 Flashcard [${fc.subject}]: ${fc.front}`, ws: 'academy' });
-        }
-    });
+    const items = [];
+    appState.tasks.forEach(t => items.push({ type: 'Tarea', title: t.text, ws: 'cockpit' }));
+    appState.deliveries.forEach(d => items.push({ type: 'Entrega', title: `${d.title} (${d.subject})`, ws: 'cockpit' }));
+    appState.kanban.forEach(k => items.push({ type: 'Kanban', title: `${k.title} (${k.subject})`, ws: 'academy' }));
+    appState.flashcards.forEach(f => items.push({ type: 'Flashcard', title: f.question, ws: 'academy' }));
+    appState.studioProjects.forEach(p => items.push({ type: 'Studio', title: p.title, ws: 'studio' }));
+    appState.servers.forEach(s => items.push({ type: 'Servidor', title: `${s.name} (${s.ip})`, ws: 'devlab' }));
 
-    box.innerHTML = results.slice(0, 20).map(r => `
-        <div class="grade-item-row" style="cursor:pointer" onclick="switchWorkspace(${JSON.stringify(r.ws)}); closeGlobalSearch();">
-            <span>${escapeHtml(r.label)}</span>
-            <span class="badge-version">${escapeHtml(r.ws)}</span>
-        </div>
-    `).join('') || '<div class="mono-muted">Sin resultados.</div>';
+    const matches = items.filter(it => it.title.toLowerCase().includes(q) || it.type.toLowerCase().includes(q)).slice(0, 15);
+    resultsEl.innerHTML = matches.map((m, idx) => `
+        <li class="search-result-item ${idx === 0 ? 'selected' : ''}" onclick="switchWorkspace('${m.ws}'); closeGlobalSearch();">
+            <span><strong>[${m.type}]</strong> ${escapeHtml(m.title)}</span>
+            <span class="badge-version">${m.ws.toUpperCase()}</span>
+        </li>
+    `).join('');
 }
 
-function handleGlobalSearchKey(event) {
+function handleGlobalSearchKeydown(event) {
     if (event.key === 'Escape') closeGlobalSearch();
+    if (event.key === 'Enter') {
+        document.querySelector('#global-search-results .search-result-item')?.click();
+    }
+}
+
+/* Modal genérico de edición */
+function openEditItemModal(title, fields, onSave) {
+    activeEditContext = { fields, onSave };
+    document.getElementById('edit-item-title').textContent = `✏️ ${title}`;
+    const container = document.getElementById('edit-item-fields');
+    container.innerHTML = fields.map(f => {
+        if (f.type === 'select') {
+            return `
+                <label class="mono-muted" style="text-align:left">${escapeHtml(f.label)}
+                    <select id="edit-field-${f.key}" class="w-full mt-4">
+                        ${f.options.map(opt => `<option value="${escapeHtml(opt.value)}" ${opt.value === f.value ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`).join('')}
+                    </select>
+                </label>
+            `;
+        }
+        return `
+            <label class="mono-muted" style="text-align:left">${escapeHtml(f.label)}
+                <input type="${escapeHtml(f.type || 'text')}" id="edit-field-${f.key}" value="${escapeHtml(f.value || '')}" class="w-full mt-4">
+            </label>
+        `;
+    }).join('');
+    document.getElementById('edit-item-modal').style.display = 'flex';
+}
+
+function closeEditItemModal() {
+    document.getElementById('edit-item-modal').style.display = 'none';
+    activeEditContext = null;
+}
+
+function saveEditItemModal() {
+    if (!activeEditContext) return;
+    const values = {};
+    activeEditContext.fields.forEach(f => {
+        values[f.key] = document.getElementById(`edit-field-${f.key}`)?.value ?? '';
+    });
+    const ok = activeEditContext.onSave(values);
+    if (ok === false) return;
+    saveState();
+    renderAll();
+    closeEditItemModal();
+    showToast('Cambios guardados', 'success');
+}
+
+function openSnapshotsModal() {
+    document.getElementById('snapshots-modal').style.display = 'flex';
+    renderSnapshotsList();
+}
+
+function closeSnapshotsModal() {
+    document.getElementById('snapshots-modal').style.display = 'none';
+}
+
+function createManualSnapshot(labelPrefix = 'Snapshot') {
+    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    snaps.unshift({
+        id: generateId('snap'),
+        date: `${labelPrefix} · ${new Date().toLocaleString('es-ES')}`,
+        data: JSON.stringify(appState)
+    });
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps.slice(0, 12)));
+    renderSnapshotsList();
+    showToast('Snapshot local creado', 'success');
+}
+
+function restoreSnapshot(id) {
+    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    const found = snaps.find(s => s.id === id);
+    if (!found) return;
+    createManualSnapshot('Auto antes de restaurar');
+    appState = mergeState(cloneState(defaultState), JSON.parse(found.data));
+    saveState();
+    renderAll();
+    closeSnapshotsModal();
+    showToast('Snapshot restaurado', 'success');
+}
+
+function renderSnapshotsList() {
+    const container = document.getElementById('snapshots-list-container');
+    const snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    if (!snaps.length) {
+        container.innerHTML = `<div class="mono-muted">No hay snapshots guardados aún.</div>`;
+        return;
+    }
+    container.innerHTML = snaps.map(s => `
+        <div class="deadline-card-item">
+            <div class="deadline-card-top">
+                <span>📸 ${escapeHtml(s.date)}</span>
+                <button type="button" class="btn-cyan btn-sm" onclick="restoreSnapshot('${s.id}')">Restaurar</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function generateDailySummaryModal() {
+    const todayKey = getMadridDateKey(new Date(Date.now() + clockOffsetMs));
+    const focusMins = appState.studyStats.dailyLog[todayKey] || 0;
+    const doneTasks = appState.tasks.filter(t => t.done).map(t => `- [x] ${t.text}`);
+    const pendingTasks = appState.tasks.filter(t => !t.done).map(t => `- [ ] ${t.text}`);
+
+    const summary = [
+        `# Resumen de Jornada — ${todayKey}`,
+        `- **Tiempo de foco hoy:** ${focusMins} min`,
+        `- **Tareas completadas:** ${doneTasks.length}`,
+        `- **Tareas pendientes:** ${pendingTasks.length}`,
+        `\n## Completadas`,
+        ...(doneTasks.length ? doneTasks : ['- Ninguna todavía']),
+        `\n## Pendientes`,
+        ...(pendingTasks.length ? pendingTasks : ['- ¡Todo al día!'])
+    ].join('\n');
+
+    document.getElementById('daily-summary-output').value = summary;
+    document.getElementById('daily-summary-modal').style.display = 'flex';
+}
+
+function closeDailySummaryModal() {
+    document.getElementById('daily-summary-modal').style.display = 'none';
 }
 
 function openShortcutsModal() {
-    const modal = document.getElementById('shortcuts-modal');
-    if (modal) modal.style.display = 'flex';
+    document.getElementById('shortcuts-modal').style.display = 'flex';
 }
 
 function closeShortcutsModal() {
-    const modal = document.getElementById('shortcuts-modal');
-    if (modal) modal.style.display = 'none';
+    document.getElementById('shortcuts-modal').style.display = 'none';
 }
 
-function triggerPwaInstall() {
-    if (!deferredPwaPrompt) return;
-    deferredPwaPrompt.prompt();
-    deferredPwaPrompt.userChoice.finally(() => {
-        deferredPwaPrompt = null;
-        document.getElementById('btn-pwa-install')?.classList.add('is-hidden');
+function closeAllOpenModals() {
+    [
+        'global-search-modal',
+        'schedule-modal',
+        'auth-modal',
+        'snapshots-modal',
+        'note-history-modal',
+        'edit-item-modal',
+        'daily-summary-modal',
+        'shortcuts-modal'
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
     });
+}
+
+/* Exportar / Importar / Vaciar */
+function exportData() {
+    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `devworkspace-backup-${getMadridDateKey()}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importData(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const parsed = JSON.parse(String(e.target?.result || '{}'));
+            createManualSnapshot('Auto antes de importar');
+            appState = mergeState(cloneState(defaultState), parsed);
+            saveState();
+            renderAll();
+            showToast('Backup importado correctamente', 'success');
+        } catch (_) {
+            showToast('Archivo JSON inválido', 'error');
+        } finally {
+            event.target.value = '';
+        }
+    };
+    reader.readAsText(file);
+}
+
+function resetWorkspacePrompt() {
+    if (!confirm('¿Seguro que quieres vaciar todo el workspace local?')) return;
+    createManualSnapshot('Auto antes de vaciar');
+    appState = cloneState(defaultState);
+    saveState();
+    renderAll();
+    showToast('Workspace restaurado a valores iniciales', 'info');
+}
+
+/* --------------------------------------------------------------------------
+   FIREBASE CLOUD SYNC OPCIONAL (INICIALIZACIÓN ÚNICA Y TIMESTAMPS)
+   -------------------------------------------------------------------------- */
+async function getFirebaseModules() {
+    if (!firebaseModulesPromise) {
+        firebaseModulesPromise = Promise.all([
+            import(`${FIREBASE_SDK_BASE}/firebase-app.js`),
+            import(`${FIREBASE_SDK_BASE}/firebase-auth.js`),
+            import(`${FIREBASE_SDK_BASE}/firebase-firestore.js`)
+        ]).then(([appMod, authMod, fsMod]) => ({
+            ...appMod,
+            ...authMod,
+            ...fsMod
+        }));
+    }
+    return firebaseModulesPromise;
+}
+
+async function initFirebaseIfConfigured() {
+    const cfg = window.DEVWORKSPACE_FIREBASE_CONFIG;
+    if (!cfg || !cfg.apiKey || cfg.apiKey.includes('TU_API_KEY')) return;
+    try {
+        const fb = await getFirebaseModules();
+        firebaseApp = fb.initializeApp(cfg);
+        firebaseAuth = fb.getAuth(firebaseApp);
+        firebaseDb = fb.getFirestore(firebaseApp);
+
+        fb.onAuthStateChanged(firebaseAuth, async user => {
+            currentCloudUser = user;
+            const loginBtn = document.getElementById('btn-cloud-login');
+            const widget = document.getElementById('user-profile-widget');
+
+            if (user) {
+                loginBtn?.classList.add('is-hidden');
+                widget?.classList.remove('is-hidden');
+                document.getElementById('user-name').textContent = user.email.split('@')[0];
+                await pullCloudState(user.uid);
+            } else {
+                loginBtn?.classList.remove('is-hidden');
+                widget?.classList.add('is-hidden');
+                pendingCloudUpload = false;
+            }
+        });
+    } catch (_) {
+        updateSyncStatus('error');
+    }
+}
+
+const scheduleCloudSync = createDebouncer(() => {
+    if (currentCloudUser) pushCloudState(currentCloudUser.uid);
+}, SYNC_DEBOUNCE_MS);
+
+function forceCloudSyncNow() {
+    if (!currentCloudUser) {
+        openAuthModal();
+        return;
+    }
+    scheduleCloudSync.cancel();
+    pushCloudState(currentCloudUser.uid);
+}
+
+async function pushCloudState(uid) {
+    if (!firebaseDb) return;
+    updateSyncStatus('saving');
+    try {
+        const { doc, setDoc } = await getFirebaseModules();
+        appState.meta = appState.meta || {};
+        if (!appState.meta.updatedAt) appState.meta.updatedAt = Date.now();
+        await setDoc(doc(firebaseDb, 'workspaces', uid), {
+            state: appState,
+            updatedAt: appState.meta.updatedAt
+        });
+        pendingCloudUpload = false;
+        lastCloudSyncTimestamp = Date.now();
+        updateSyncStatus('ok');
+    } catch (_) {
+        updateSyncStatus('error');
+    }
+}
+
+async function pullCloudState(uid) {
+    if (!firebaseDb) return;
+    updateSyncStatus('saving');
+    try {
+        const { doc, getDoc } = await getFirebaseModules();
+        const snap = await getDoc(doc(firebaseDb, 'workspaces', uid));
+        if (snap.exists() && snap.data().state) {
+            const remoteData = snap.data();
+            const remoteUpdatedAt = Number(remoteData.updatedAt || remoteData.state?.meta?.updatedAt || 0);
+            const localUpdatedAt = Number(appState.meta?.updatedAt || 0);
+
+            if (remoteUpdatedAt >= localUpdatedAt) {
+                isApplyingRemoteState = true;
+                try {
+                    appState = mergeState(cloneState(defaultState), remoteData.state);
+                    saveState({ skipTimestamp: true, skipCloud: true });
+                    renderAll();
+                } finally {
+                    isApplyingRemoteState = false;
+                }
+            } else {
+                await pushCloudState(uid);
+                return;
+            }
+        } else {
+            await pushCloudState(uid);
+            return;
+        }
+        pendingCloudUpload = false;
+        lastCloudSyncTimestamp = Date.now();
+        updateSyncStatus('ok');
+    } catch (_) {
+        updateSyncStatus('error');
+    }
+}
+
+function updateSyncStatus(status) {
+    const badge = document.getElementById('cloud-sync-indicator');
+    const lastEl = document.getElementById('cloud-last-sync');
+    if (badge) {
+        badge.className = 'sync-badge';
+        if (status === 'saving') {
+            badge.classList.add('sync-saving');
+            badge.textContent = 'Sincronizando...';
+        } else if (status === 'error') {
+            badge.classList.add('sync-error');
+            badge.textContent = 'Error Sync';
+        } else {
+            badge.textContent = 'Cloud OK';
+        }
+    }
+    if (lastEl) {
+        if (!navigator.onLine) {
+            lastEl.textContent = 'Sin conexión (cola local)';
+        } else if (status === 'saving' || pendingCloudUpload) {
+            lastEl.textContent = 'Pendiente de subir...';
+        } else if (lastCloudSyncTimestamp > 0) {
+            const timeStr = new Date(lastCloudSyncTimestamp).toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            lastEl.textContent = `Sync ${timeStr}`;
+        }
+    }
+}
+
+function openAuthModal() {
+    document.getElementById('auth-modal').style.display = 'flex';
+}
+
+function closeAuthModal() {
+    document.getElementById('auth-modal').style.display = 'none';
+}
+
+function continueAsGuest() {
+    closeAuthModal();
+    showToast('Trabajando en modo local', 'info');
+}
+
+function toggleAuthMode() {
+    isRegisterMode = !isRegisterMode;
+    document.getElementById('auth-main-btn').textContent = isRegisterMode ? '📝 Crear Cuenta' : '🔑 Iniciar Sesión';
+}
+
+async function handleEmailAuth() {
+    if (!firebaseAuth) return showToast('Configura tu firebaseConfig primero', 'error');
+    const email = document.getElementById('auth-email')?.value.trim();
+    const pass = document.getElementById('auth-password')?.value;
+    if (!email || !pass) return showToast('Introduce correo y contraseña', 'error');
+    try {
+        const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = await getFirebaseModules();
+        if (isRegisterMode) {
+            await createUserWithEmailAndPassword(firebaseAuth, email, pass);
+            showToast('Cuenta creada y conectada', 'success');
+        } else {
+            await signInWithEmailAndPassword(firebaseAuth, email, pass);
+            showToast('Sesión iniciada', 'success');
+        }
+        closeAuthModal();
+    } catch (err) {
+        showToast(`Error Auth: ${err.message}`, 'error');
+    }
+}
+
+async function sendPasswordReset() {
+    if (!firebaseAuth) return showToast('Firebase no configurado', 'error');
+    const email = document.getElementById('auth-email')?.value.trim();
+    if (!email) return showToast('Escribe tu correo electrónico arriba primero', 'error');
+    try {
+        const { sendPasswordResetEmail } = await getFirebaseModules();
+        await sendPasswordResetEmail(firebaseAuth, email);
+        showToast('Enlace de restablecimiento enviado a tu correo', 'success');
+    } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+    }
+}
+
+async function logoutUser() {
+    if (!firebaseAuth) return;
+    const { signOut } = await getFirebaseModules();
+    await signOut(firebaseAuth);
+    showToast('Sesión cerrada', 'info');
+}
+
+/* PWA Install Prompt & Service Worker Update */
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    document.getElementById('app-install-button')?.classList.remove('is-hidden');
+});
+
+async function installApp() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    document.getElementById('app-install-button')?.classList.add('is-hidden');
 }
 
 function applyServiceWorkerUpdate() {
@@ -3321,292 +3597,374 @@ function applyServiceWorkerUpdate() {
     }
 }
 
-function initServiceWorker() {
-    if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('./service-worker.js').then(reg => {
-        if (reg.waiting) {
-            waitingServiceWorker = reg.waiting;
-            document.getElementById('pwa-update-banner')?.classList.remove('is-hidden');
-        }
-        reg.addEventListener('updatefound', () => {
-            const worker = reg.installing;
-            worker?.addEventListener('statechange', () => {
-                if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                    waitingServiceWorker = worker;
-                    document.getElementById('pwa-update-banner')?.classList.remove('is-hidden');
-                }
-            });
-        });
-    }).catch(() => {});
-
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        window.location.reload();
-    });
-}
-
-/* ==========================================================
-   RENDER COMPLETO E INICIALIZACIÓN
-   ========================================================== */
+/* --------------------------------------------------------------------------
+   RENDERIZADO GLOBAL E INICIALIZACIÓN
+   -------------------------------------------------------------------------- */
 function renderAll() {
-    renderDriveProfileUI();
-    renderThemeSelectOptions();
-    applyTheme(state.theme);
-    document.documentElement.style.setProperty('--ui-scale', String(state.uiScale || 1));
-    const scaleSel = document.getElementById('ui-scale-select');
-    if (scaleSel) scaleSel.value = String(state.uiScale || 1);
-
-    applyDensity();
-    document.body.classList.toggle('zen-mode-active', Boolean(state.zenMode));
-    document.body.classList.toggle('presentation-mode-active', Boolean(state.presentationMode));
-
-    const presetSel = document.getElementById('workspace-preset-select');
-    if (presetSel) presetSel.value = state.workspacePreset || 'default';
-
-    renderSubjectSelectTargets();
+    applyTheme(appState.theme);
+    applyDensityMode();
+    applyAllAppearance();
     renderScheduleWidget();
     renderDeliveries();
     renderTasks();
-    renderPomodoroLinkedTasks();
-    renderPomodoro();
+    renderPomodoroTaskSelect();
+    updateStudyStats();
+    setNotesTab(currentNotesTab);
 
-    const focusIn = document.getElementById('pomo-focus-mins');
-    const breakIn = document.getElementById('pomo-break-mins');
-    if (focusIn) focusIn.value = state.pomodoro.focusMinutes || 25;
-    if (breakIn) breakIn.value = state.pomodoro.breakMinutes || 5;
+    const stickyEl = document.getElementById('sticky-note-input');
+    if (stickyEl && document.activeElement !== stickyEl) {
+        stickyEl.value = appState.stickyNote || '';
+    }
 
-    switchNoteTab(state.notes.activeTab || 'general');
-    const stickyArea = document.getElementById('sticky-note-area');
-    if (stickyArea) stickyArea.value = state.notes.sticky || '';
-    document.getElementById('sticky-drawer')?.classList.toggle('is-hidden', !state.notes.stickyOpen);
+    const titleEl = document.getElementById('studio-project-title');
+    const htmlEl = document.getElementById('code-html');
+    const cssEl = document.getElementById('code-css');
+    const jsEl = document.getElementById('code-js');
 
-    const stTitle = document.getElementById('studio-project-title');
-    if (stTitle) stTitle.value = state.studio.title || '';
-    ['html', 'css', 'js', 'python', 'java'].forEach(k => {
-        const el = document.getElementById(`studio-editor-${k}`);
-        if (el) el.value = state.studio[k] || '';
-    });
-    const liveToggle = document.getElementById('studio-live-toggle');
-    if (liveToggle) liveToggle.checked = state.studio.autoRun !== false;
-    renderStudioFontSelect();
-    switchStudioTab(state.studio.activeTab || 'html');
-    setStudioViewport(state.studio.viewport || '100%');
+    if (titleEl && document.activeElement !== titleEl) titleEl.value = appState.studioCurrent.title || 'Mi Proyecto Web';
+    if (htmlEl && document.activeElement !== htmlEl) htmlEl.value = appState.studioCurrent.html || '';
+    if (cssEl && document.activeElement !== cssEl) cssEl.value = appState.studioCurrent.css || '';
+    if (jsEl && document.activeElement !== jsEl) jsEl.value = appState.studioCurrent.js || '';
 
-    renderDatabaseWorkspace();
-    renderAcademyWorkspace();
-    renderDevLabWorkspace();
-    renderFontsAndThemesWorkspace();
-    switchWorkspace(state.activeWorkspace || 'cockpit');
-    updateStorageQuotaBadge();
+    renderStudioSavedProjects();
+    renderKanban();
+    renderGrades();
+    renderFlashcards();
+    renderBugLogs();
+    renderDoubts();
+    renderTeamProjects();
+    renderServers();
+    renderInfraChangelog();
+    renderSnippets();
+    renderBookmarks();
+    updateChmodCalc();
+    explainCronExpr();
+    fetchLocalWeather();
+    switchWorkspace(appState.activeWorkspace || 'cockpit');
 }
 
-window.addEventListener('message', event => {
-    if (event.data && event.data.source === 'dw-studio-console') {
-        appendStudioConsole(event.data.text, event.data.level);
+function updateConnectionStatus() {
+    const badge = document.getElementById('connection-status');
+    if (!badge) return;
+    const online = navigator.onLine;
+    badge.textContent = online ? '🟢 En línea' : '🟡 Sin conexión (Offline)';
+    badge.classList.toggle('connection-online', online);
+    badge.classList.toggle('connection-offline', !online);
+    if (online && currentCloudUser && pendingCloudUpload) {
+        pushCloudState(currentCloudUser.uid);
+    } else if (!online && currentCloudUser) {
+        updateSyncStatus('ok');
     }
-});
+}
 
-window.addEventListener('beforeinstallprompt', event => {
-    event.preventDefault();
-    deferredPwaPrompt = event;
-    document.getElementById('btn-pwa-install')?.classList.remove('is-hidden');
-});
+/* --------------------------------------------------------------------------
+   EVENT LISTENERS GLOBALES
+   -------------------------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+    loadLocalState();
+    renderAll();
+    initKanbanDragAndDrop();
 
-window.addEventListener('online', () => {
-    const el = document.getElementById('connection-status');
-    if (el) {
-        el.textContent = 'Listo';
-        el.className = 'badge-version connection-online';
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./service-worker.js')
+            .then(reg => {
+                if (reg.waiting) {
+                    waitingServiceWorker = reg.waiting;
+                    document.getElementById('sw-update-banner')?.classList.remove('is-hidden');
+                }
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (!newWorker) return;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            waitingServiceWorker = newWorker;
+                            document.getElementById('sw-update-banner')?.classList.remove('is-hidden');
+                        }
+                    });
+                });
+            })
+            .catch(() => {});
+
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
     }
+
+    syncRealTimeNetwork();
+    setInterval(() => {
+        updateClockDisplay();
+        renderScheduleWidget();
+        checkDueDeliveryNotifications();
+    }, 1000);
+
+    /* Listeners en vivo de Scratchpad & Sticky */
+    document.getElementById('scratchpad')?.addEventListener('input', e => {
+        appState.notes[currentNotesTab] = e.target.value;
+        updateScratchpadMetrics();
+        saveState();
+    });
+
+    document.getElementById('sticky-note-input')?.addEventListener('input', e => {
+        appState.stickyNote = e.target.value;
+        saveState();
+    });
+
+    /* Listeners en vivo de Live Code Studio */
+    const scheduleStudioAutoRun = createDebouncer(() => {
+        if (document.getElementById('studio-autorun')?.checked) {
+            runStudioPreview();
+        }
+    }, 350);
+
+    ['code-html', 'code-css', 'code-js', 'studio-project-title'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', () => {
+            syncStudioStateFromInputs();
+            updateStudioEditorMetrics();
+            saveState();
+            scheduleStudioAutoRun();
+        });
+    });
+
+    /* Soporte de tecla Tab en editores de código */
+    ['code-html', 'code-css', 'code-js'].forEach(id => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const el = e.target;
+                const start = el.selectionStart;
+                const end = el.selectionEnd;
+                el.value = el.value.substring(0, start) + '  ' + el.value.substring(end);
+                el.selectionStart = el.selectionEnd = start + 2;
+                syncStudioStateFromInputs();
+                saveState();
+            }
+        });
+    });
+
+    /* Mensajes de consola desde el iframe del Studio */
+    window.addEventListener('message', event => {
+        const iframe = document.getElementById('studio-preview-iframe');
+        if (!iframe || event.source !== iframe.contentWindow) return;
+        if (event.origin !== STUDIO_IFRAME_ORIGIN && event.origin !== window.location.origin) return;
+        if (event.data && event.data.source === 'devworkspace-studio') {
+            const level = ['log', 'warn', 'error'].includes(event.data.level) ? event.data.level : 'log';
+            const time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            studioConsoleLogs.push({ level, msg: event.data.msg, time });
+            renderStudioConsole();
+        }
+    });
+
+    /* Selector de tema */
+    document.getElementById('theme-select')?.addEventListener('change', e => applyTheme(e.target.value));
+
+    /* Atajos de teclado globales */
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            closeAllOpenModals();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            openGlobalSearch();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            switchWorkspace('cockpit');
+            document.getElementById('task-text')?.focus();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+            e.preventDefault();
+            if (pomoInterval) stopPomodoro();
+            else startCustomPomodoro('focus');
+        } else if (e.altKey && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            toggleZenMode();
+        } else if (e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
+            e.preventDefault();
+            const map = { '1': 'cockpit', '2': 'studio', '3': 'academy', '4': 'devlab', '5': 'fonts' };
+            switchWorkspace(map[e.key]);
+        } else if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+            openShortcutsModal();
+        }
+    });
+
+    window.addEventListener('online', updateConnectionStatus);
+    window.addEventListener('offline', updateConnectionStatus);
+    updateConnectionStatus();
+
+    initFirebaseIfConfigured();
 });
 
-window.addEventListener('offline', () => {
-    const el = document.getElementById('connection-status');
-    if (el) {
-        el.textContent = 'Offline';
-        el.className = 'badge-version connection-offline';
-    }
-});
-
-document.addEventListener('keydown', event => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        openGlobalSearch();
-    } else if (event.altKey && event.key.toLowerCase() === 'z') {
-        event.preventDefault();
-        toggleZenMode();
-    } else if (event.altKey && ['1', '2', '3', '4', '5', '6'].includes(event.key)) {
-        event.preventDefault();
-        const map = ['cockpit', 'studio', 'database', 'academy', 'devlab', 'fonts'];
-        switchWorkspace(map[Number(event.key) - 1]);
-    } else if (event.key === 'Escape') {
-        closeGlobalSearch();
-        closeClockModal();
-        closeScheduleModal();
-        closeDriveModal();
-        closeSnapshotsModal();
-        closeNoteHistoryModal();
-        closeShortcutsModal();
-    }
-});
-
-/* Exposición global para handlers inline en index.html */
+/* Exponer API pública para manejadores inline del HTML */
 Object.assign(window, {
-    toggleForm,
-    openDriveModal,
-    closeDriveModal,
-    connectGoogleDrive,
-    forceDriveSyncNow,
-    pullFromGoogleDrive,
-    logoutDriveUser,
-    exportProtectedVaultFile,
-    importProtectedVaultFile,
     switchWorkspace,
     applyWorkspacePreset,
     toggleZenMode,
     togglePresentationMode,
     toggleDensityMode,
-    handleThemeSelectChange,
-    previewCustomThemeColors,
-    activateCustomTheme,
-    saveNewCustomThemePreset,
-    deleteCustomThemePreset,
-    exportCustomThemeJson,
-    importCustomThemeJson,
-    resetAppearanceDefaults,
-    updateAppearanceSettings,
-    loadGoogleFontByName,
-    saveGoogleFontFavorite,
-    updateFontPlaygroundStyle,
-    applyLoadedFontToUi,
-    applyLoadedFontToStudio,
-    applyFontToStudioPreview,
-    openClockModal,
-    closeClockModal,
-    applyManualClock,
-    resetManualClockToAuto,
-    toggleWeatherBadge,
+    toggleWeatherWidget,
+    generateDailySummaryModal,
+    closeDailySummaryModal,
+    openGlobalSearch,
+    closeGlobalSearch,
+    filterGlobalSearch,
+    handleGlobalSearchKeydown,
+    openShortcutsModal,
+    closeShortcutsModal,
     openSnapshotsModal,
     closeSnapshotsModal,
-    createBackupSnapshot,
+    createManualSnapshot,
     restoreSnapshot,
-    deleteSnapshot,
+    syncRealTimeNetwork,
     toggleScheduleViewMode,
     openScheduleModal,
     closeScheduleModal,
-    autofillScheduleFromCatalog,
     addScheduleClass,
     deleteScheduleClass,
     clearSchedule,
-    importScheduleFromText,
-    setDeliveryFilter,
-    toggleExamCramMode,
-    requestDesktopNotifications,
+    exportScheduleJson,
+    importScheduleJson,
+    toggleForm,
+    enableDeadlineNotifications,
+    setDeliveriesFilter,
     addDelivery,
     toggleDeliveryDone,
     deleteDelivery,
+    editDeliveryPrompt,
+    exportTasksMarkdown,
     setTaskFilter,
     setTaskBlockFilter,
     setTaskSort,
     addTask,
     toggleTaskDone,
     deleteTask,
-    clearCompletedTasks,
-    addSubtaskPrompt,
-    toggleSubtaskDone,
+    editTaskPrompt,
+    addTaskSubtask,
+    toggleTaskSubtask,
+    deleteTaskSubtask,
     setPomodoroLinkedTask,
-    setPomodoroMode,
-    updatePomodoroConfig,
-    startPomodoro,
-    pausePomodoro,
-    resetPomodoro,
-    toggleFocusAudio,
-    updateFocusAudioVolume,
-    switchNoteTab,
-    handleNoteInput,
-    toggleNoteMarkdownPreview,
-    saveNoteRevision,
+    startCustomPomodoro,
+    stopPomodoro,
+    toggleNoiseGenerator,
+    handleAudioTypeChange,
+    updateAudioVolume,
+    toggleScratchpadPreview,
+    toggleScratchpadFind,
     openNoteHistoryModal,
     closeNoteHistoryModal,
+    saveNoteRevisionManual,
     restoreNoteRevision,
-    exportCurrentNoteMd,
-    toggleStickyNote,
-    saveStickyNote,
-    switchStudioTab,
-    handleStudioTitleChange,
-    handleStudioEditorInput,
-    clearStudioConsole,
-    runStudioCode,
+    setNotesTab,
+    wrapScratchpadSelection,
+    insertNoteTemplate,
+    insertNoteTimestamp,
+    insertNoteCodeBlock,
+    toolCopy,
+    toolDownload,
+    replaceInScratchpad,
+    copyStickyNote,
+    clearStickyNote,
     loadStudioTemplate,
-    injectCdnIntoStudio,
+    injectStudioCdn,
+    applyFontToStudioPreview,
+    runStudioPreview,
     formatStudioCode,
+    saveStudioProject,
+    exportStudioSingleHtml,
+    importStudioHtmlFile,
+    toggleStudioFullscreen,
+    switchStudioEditorTab,
+    inspectStudioDomStructure,
     setStudioViewport,
-    saveStudioProjectToLibrary,
+    clearStudioConsole,
+    renderStudioConsole,
     loadSavedStudioProject,
     deleteSavedStudioProject,
-    exportStudioSingleHtml,
-    exportStudioMultiFiles,
-    selectDbTable,
-    createDbTable,
-    addDbRowPrompt,
-    deleteDbRow,
-    deleteCurrentDbTable,
-    exportDbJson,
-    insertSqlTemplate,
-    executeLocalSql,
-    addCatalogSubject,
-    deleteCatalogSubject,
+    toggleExamCramFilter,
     addKanbanTask,
     moveKanbanTask,
     deleteKanbanTask,
-    addGrade,
-    deleteGrade,
-    switchStudyHubTab,
+    handleKanbanDragStart,
+    handleKanbanDragEnd,
+    addGradeSubject,
+    addGradeItem,
+    deleteGradeItem,
+    deleteGradeSubject,
+    exportStudyHubMarkdown,
+    setStudyHubTab,
+    renderFlashcards,
     addFlashcard,
-    flipFlashcard,
-    prevFlashcard,
+    flipCurrentFlashcard,
     nextFlashcard,
+    markFlashcardStatus,
     deleteCurrentFlashcard,
+    renderBugLogs,
     addBugLog,
     deleteBugLog,
     addClassDoubt,
+    toggleDoubtResolved,
     deleteClassDoubt,
-    addProject,
-    deleteProject,
-    switchToolboxTab,
-    formatJsonTool,
-    minifyJsonTool,
-    encodeBase64Tool,
-    decodeBase64Tool,
-    encodeUrlTool,
-    decodeUrlTool,
-    decodeJwtTool,
-    calculateSubnet: runSubnetTool,
-    convertNumberBases,
-    testRegexTool,
-    generateUuidTool,
+    calculateStudyPlan,
+    addTeamProject,
+    deleteTeamProject,
+    setToolboxTab,
+    tbFormatJson,
+    tbJsonToCsv,
+    tbCsvToJson,
+    tbFormatSql,
+    copyElementValue,
+    tbEncodeAction,
+    tbDecodeJwt,
+    tbComputeHashes,
+    runRegexTester,
+    runSimpleDiff,
+    calculateSubnet,
+    convertNumberBase,
+    updateChmodCalc,
+    copyChmodCmd,
+    explainCronExpr,
+    generateMockUsers,
+    generateUuidsAndDni,
     generateSecurePassword,
-    copyBoilerplate,
-    generateSha256Tool,
+    loadBoilerplate,
+    renderServers,
     addServer,
     deleteServer,
-    addSnippet,
-    copySnippet,
-    deleteSnippet,
+    exportServersJson,
+    copyTextToClipboard,
+    addInfraChangelog,
+    renderSnippets,
+    addCustomSnippet,
+    deleteCustomSnippet,
     addBookmark,
     deleteBookmark,
-    openGlobalSearch,
-    closeGlobalSearch,
-    handleGlobalSearchInput,
-    handleGlobalSearchKey,
-    openShortcutsModal,
-    closeShortcutsModal,
-    triggerPwaInstall,
+    loadGoogleFontByName,
+    saveGoogleFontFavorite,
+    quickLoadGoogleFont,
+    removeGoogleFontFavorite,
+    updateFontPlaygroundStyle,
+    applyLoadedFontToUi,
+    applyLoadedFontToStudio,
+    updateAppearanceSettings,
+    previewCustomThemeColors,
+    activateCustomTheme,
+    exportCustomThemeJson,
+    importCustomThemeJson,
+    resetAppearanceDefaults,
+    openAuthModal,
+    closeAuthModal,
+    handleEmailAuth,
+    toggleAuthMode,
+    sendPasswordReset,
+    continueAsGuest,
+    logoutUser,
+    forceCloudSyncNow,
+    closeEditItemModal,
+    saveEditItemModal,
+    resetWorkspacePrompt,
+    exportData,
+    importData,
+    installApp,
     applyServiceWorkerUpdate
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    renderAll();
-    updateClock();
-    setInterval(updateClock, 1000);
-    initServiceWorker();
 });
